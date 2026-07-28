@@ -87,6 +87,14 @@ function rebuild() {
   save();
 }
 
+/** CSS background-size for a plate mode. 'camera' locks the photo to the
+ *  viewport height, which is the only mode that tracks the cameras exactly. */
+function plateBackgroundSize(mode) {
+  if (mode === 'cover') return 'cover';
+  if (mode === 'stretch' || mode === '100% 100%') return '100% 100%';
+  return 'auto 100%';
+}
+
 function updateSitePhotoPlate() {
   const bg = $('sitePhotoBg');
   if (!bg) return;
@@ -99,12 +107,19 @@ function updateSitePhotoPlate() {
   bg.style.display = 'block';
   bg.style.backgroundImage = `url("${sp.src}")`;
   bg.style.opacity = sp.opacity ?? 0.85;
-  bg.style.backgroundSize = sp.fitMode || 'contain';
+  // Both cameras keep a fixed VERTICAL extent — a perspective camera holds its
+  // vertical fov, and reframeOrtho() holds its half-height — so the model always
+  // occupies the same fraction of the viewport's height and a width change only
+  // reveals more scene at the sides. The plate has to obey the same rule or the
+  // two drift apart on every resize, so it is sized from the height alone and
+  // panned in pixels derived from the height, never from the width.
+  bg.style.backgroundSize = plateBackgroundSize(sp.fitMode);
   const scale = sp.scale ?? 1.0;
-  const panX = sp.panX ?? 0;
-  const panY = sp.panY ?? 0;
   const rot = sp.rotation ?? 0;
-  bg.style.transform = `translate(${panX}%, ${panY}%) scale(${scale}) rotate(${rot}deg)`;
+  const h = canvas.clientHeight || 1;
+  const tx = ((sp.panX ?? 0) / 100) * h;
+  const ty = ((sp.panY ?? 0) / 100) * h;
+  bg.style.transform = `translate(${tx}px, ${ty}px) scale(${scale}) rotate(${rot}deg)`;
   stage.scene.background = null;
 }
 
@@ -131,6 +146,10 @@ function clearSelection() {
  * throwing away a group the row already belongs to).
  */
 function select(id, mode = 'replace') {
+  if (id && id === selectedId && selectedIds.size === 1 && (mode === 'anchor' || mode === 'replace')) {
+    return;
+  }
+
   if (mode === 'toggle') {
     if (selectedIds.has(id) && selectedIds.size > 1) {
       selectedIds.delete(id);
@@ -424,7 +443,7 @@ function syncForm() {
   $('p_op').value = state.home.plan.opacity;
   $('p_show').checked = state.home.plan.show;
   const sp = state.home.sitePhoto || {};
-  if ($('sp_fitMode')) $('sp_fitMode').value = sp.fitMode || 'contain';
+  if ($('sp_fitMode')) $('sp_fitMode').value = sp.fitMode || 'camera';
   for (const [id, key] of photoFields) {
     if ($(id)) $(id).value = sp[key] ?? 0;
   }
@@ -480,6 +499,7 @@ function bind() {
     setTimeout(() => {
       const c = $('view');
       if (c) stage.resize(c.clientWidth, c.clientHeight);
+      updateSitePhotoPlate();
     }, 210);
   };
 
@@ -743,7 +763,7 @@ function bind() {
     $('btnResetPhoto').addEventListener('click', () => {
       state.home.sitePhoto = {
         ...state.home.sitePhoto,
-        fitMode: 'contain', scale: 1.0, panX: 0, panY: 0, rotation: 0, baselineY: 0, camDist: 60, posX: 0, posZ: 0, rotY: 0, show: true
+        fitMode: 'camera', scale: 1.0, panX: 0, panY: 0, rotation: 0, baselineY: 0, camDist: 60, posX: 0, posZ: 0, rotY: 0, show: true
       };
       syncForm();
       rebuild();
@@ -1162,8 +1182,8 @@ function onMove(ev) {
     const sp = state.home.sitePhoto;
 
     if (photoDrag.button === 0 && !ev.altKey) {
-      const percentX = (dx / r.width) * 100 * (sp.scale || 1);
-      const percentY = (dy / r.height) * 100 * (sp.scale || 1);
+      const percentX = (dx / r.height) * 100;
+      const percentY = (dy / r.height) * 100;
       sp.panX = Math.round((photoDrag.startPanX + percentX) * 10) / 10;
       sp.panY = Math.round((photoDrag.startPanY + percentY) * 10) / 10;
       if ($('sp_panX')) $('sp_panX').value = sp.panX;
@@ -1330,6 +1350,23 @@ function load() {
 // Boot
 // ---------------------------------------------------------------------------
 
+/**
+ * Pan X used to be a percentage of the stage WIDTH; it is now a percentage of
+ * the HEIGHT, like pan Y, so a width-only resize cannot slide the photo out of
+ * register with the model. Convert a project saved under the old rule once,
+ * using the current stage size, which keeps the alignment the user last saw.
+ */
+function convertPhotoPanBasis() {
+  const sp = state.home.sitePhoto;
+  if (!sp || sp.panBasis === 'height') return;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (w > 0 && h > 0 && sp.panX) sp.panX = Math.round(sp.panX * (w / h) * 10) / 10;
+  sp.panBasis = 'height';
+  if ($('sp_panX')) $('sp_panX').value = sp.panX ?? 0;
+  updateSitePhotoPlate();
+  save();
+}
+
 function fit() {
   const p = canvas.parentElement;
   if (!p) return;
@@ -1337,6 +1374,7 @@ function fit() {
   if (r.width > 0 && r.height > 0) {
     stage.resize(Math.floor(r.width), Math.floor(r.height));
   }
+  updateSitePhotoPlate();
 }
 
 syncForm();
@@ -1344,6 +1382,7 @@ bind();
 rebuild();
 refreshList();
 fit();
+convertPhotoPanBasis();
 updatePlanPlate(stage, state.home.plan);
 stage.setView('hero-left', state.home.dimensions, state.scene);
 

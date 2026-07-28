@@ -199,15 +199,25 @@ export class Stage {
   }
 
   /**
-   * Re-derive the ortho frustum from the stored fit box and the current aspect.
-   * Storing the box rather than a half-height is what keeps the exported PNG
-   * framed the same as the viewport when their aspect ratios differ.
+   * Re-derive the ortho frustum for the current aspect.
+   *
+   * `refit: true` (applying a view preset) sizes the frustum from the stored fit
+   * box so the whole subject lands in frame at that moment. Every later call —
+   * a window resize, a sidebar toggle, an export at another aspect — keeps that
+   * half-height and only widens or narrows the frustum. That matches the
+   * perspective camera, which holds its vertical fov, so BOTH cameras keep the
+   * model at a fixed fraction of the viewport height and a width change only
+   * reveals more scene at the sides. Rescaling on width here is what used to
+   * make the model drift against the site photo when the window was resized.
    */
-  reframeOrtho() {
+  reframeOrtho({ refit = false } = {}) {
     const fit = this._orthoFit;
     if (!fit) return;
     const a = this._aspect || 1;
-    const hh = Math.max(fit.h / 2, (fit.w / 2) / a) * fit.pad;
+    if (refit || !this._orthoHalfH) {
+      this._orthoHalfH = Math.max(fit.h / 2, (fit.w / 2) / a) * fit.pad;
+    }
+    const hh = this._orthoHalfH;
     this.ortho.top = hh; this.ortho.bottom = -hh;
     this.ortho.left = -hh * a; this.ortho.right = hh * a;
     this.ortho.updateProjectionMatrix();
@@ -243,7 +253,8 @@ export class Stage {
     const ortho = (dir, fitW, fitH) => {
       this.useOrtho(true);
       this._orthoFit = { w: fitW, h: fitH, pad };
-      this.reframeOrtho();
+      this._orthoHalfH = null;
+      this.reframeOrtho({ refit: true });
       const dist = Math.max(L, W) * 3 + 100;
       this.ortho.position.copy(target).addScaledVector(dir, dist);
       this.orthoControls.target.copy(target);
@@ -304,7 +315,8 @@ export class Stage {
       case 'plan':
         this.useOrtho(true);
         this._orthoFit = { w: L, h: W, pad: 1.15 };
-        this.reframeOrtho();
+        this._orthoHalfH = null;
+        this.reframeOrtho({ refit: true });
         this.ortho.up.set(0, 0, -1);
         this.ortho.position.set(0, 500, 0);
         this.orthoControls.target.set(0, 0, 0);

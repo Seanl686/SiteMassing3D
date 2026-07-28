@@ -77,7 +77,7 @@ export function defaultHome() {
       { id: nextId('w'), type: 'window', wall: 'right', offsetFt: 9,  widthFt: 3, heightFt: 3.5, sillFt: 3.5, label: 'Bedroom 3' },
     ],
     plan: { src: null, widthFt: 56, offsetX: 0, offsetZ: 0, rotation: 0, opacity: 0.65, show: true },
-    sitePhoto: { src: null, show: true, fitMode: 'contain', opacity: 0.85, scale: 1.0, panX: 0, panY: 0, rotation: 0, baselineY: 0, camDist: 60, posX: 0, posZ: 0, rotY: 0 },
+    sitePhoto: { src: null, show: true, fitMode: 'camera', opacity: 0.85, scale: 1.0, panX: 0, panY: 0, rotation: 0, baselineY: 0, camDist: 60, posX: 0, posZ: 0, rotY: 0 },
   };
 }
 
@@ -138,6 +138,13 @@ export function migrate(home) {
   if (!home.colors?.belowDormerSiding) colors.belowDormerSiding = colors.siding;
   if (!home.colors?.dormerSiding) colors.dormerSiding = colors.siding;
   if (!home.colors?.gableSiding) colors.gableSiding = colors.siding;
+  // Plate modes were renamed when the plate was locked to the camera:
+  // 'contain' scaled off whichever axis bound first, which is what made the
+  // photo drift against the model on a resize.
+  const sitePhoto = { ...base.sitePhoto, ...(home.sitePhoto || {}) };
+  if (sitePhoto.fitMode === 'contain') sitePhoto.fitMode = 'camera';
+  if (sitePhoto.fitMode === '100% 100%') sitePhoto.fitMode = 'stretch';
+
   const out = {
     name: home.name || base.name,
     dimensions,
@@ -159,7 +166,7 @@ export function migrate(home) {
       balusterStyle: o.balusterStyle,
     })),
     plan: { ...base.plan, ...(home.plan || {}) },
-    sitePhoto: { ...base.sitePhoto, ...(home.sitePhoto || {}) },
+    sitePhoto,
   };
   return out;
 }

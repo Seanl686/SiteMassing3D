@@ -96,7 +96,9 @@ export function renderToCanvas(stage, w, h, alpha, sceneOpts, home) {
       ctx.save();
       ctx.globalAlpha = sp.opacity ?? 0.85;
       const scale = sp.scale ?? 1.0;
-      const panX = ((sp.panX ?? 0) / 100) * w;
+      // Pan is a fraction of HEIGHT on both axes, exactly as the live plate
+      // applies it, so an export at another aspect keeps the same alignment.
+      const panX = ((sp.panX ?? 0) / 100) * h;
       const panY = ((sp.panY ?? 0) / 100) * h;
       const rot = THREE.MathUtils.degToRad(sp.rotation ?? 0);
 
@@ -104,16 +106,17 @@ export function renderToCanvas(stage, w, h, alpha, sceneOpts, home) {
       ctx.rotate(rot);
       ctx.scale(scale, scale);
 
-      const fitMode = sp.fitMode || 'contain';
+      const fitMode = sp.fitMode || 'camera';
       const imgAspect = (img.naturalWidth || img.width) / (img.naturalHeight || img.height || 1);
       const canvasAspect = w / h;
       let drawW = w, drawH = h;
       if (fitMode === 'cover') {
         if (imgAspect > canvasAspect) { drawW = h * imgAspect; }
         else { drawH = w / imgAspect; }
-      } else if (fitMode === 'contain') {
-        if (imgAspect > canvasAspect) { drawH = w / imgAspect; }
-        else { drawW = h * imgAspect; }
+      } else if (fitMode !== 'stretch' && fitMode !== '100% 100%') {
+        // 'camera': height-locked, the CSS equivalent of background-size: auto 100%.
+        drawH = h;
+        drawW = h * imgAspect;
       }
 
       ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
