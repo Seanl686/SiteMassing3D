@@ -260,39 +260,148 @@ function buildSkirting(dim, materials) {
   return m;
 }
 
-function buildSteps(home, materials) {
+function buildSteps(home, materials, sceneOpts = {}) {
   const dim = home.dimensions;
   const g = new THREE.Group();
   g.name = 'steps';
   const frames = wallFrames(dim);
   const doors = home.openings.filter((o) => (o.type === 'door' || o.type === 'slider') && o.sillFt < 0.75);
 
+  const hasLanding = sceneOpts.stepLanding !== false;
+  const landingDepth = hasLanding ? Math.max(2.0, sceneOpts.landingDepthFt ?? 3.5) : 0;
+  const railings = sceneOpts.stepRailings ?? 'both'; // 'none', 'left', 'right', 'both'
+
+  const railH = 3.0; // 36" railing height
+  const postW = 0.12; // post thickness
+
   for (const o of doors) {
     const f = frames[o.wall];
     if (!f) continue;
     const top = dim.floorHeightFt + o.sillFt;
     if (top < 0.4) continue;
+
     const count = Math.max(1, Math.round(top / 0.62));
     const rise = top / count;
     const tread = 0.92;
-    const wide = o.widthFt + 0.9;
+    const wide = o.widthFt + 1.0;
+    const uCenter = o.offsetFt + o.widthFt / 2;
 
-    for (let i = 0; i < count; i++) {
-      const depth = tread * (count - i);
-      const step = new THREE.Mesh(new THREE.BoxGeometry(wide, rise, depth), materials.skirting);
-      // Place in wall-local space, then push it out along the wall normal.
-      const uCenter = o.offsetFt + o.widthFt / 2;
+    const stepGroup = new THREE.Group();
+
+    // 1. Top Landing Platform (if enabled)
+    if (hasLanding) {
+      const landing = new THREE.Mesh(
+        new THREE.BoxGeometry(wide, rise, landingDepth),
+        materials.skirting
+      );
       const p = f.origin.clone()
         .addScaledVector(f.right, uCenter)
-        .addScaledVector(f.normal, depth / 2);
+        .addScaledVector(f.normal, landingDepth / 2);
+      p.y = top - rise / 2;
+      landing.position.copy(p);
+      landing.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), f.right);
+      landing.castShadow = true;
+      landing.receiveShadow = true;
+      stepGroup.add(landing);
+    }
+
+    // 2. Descending Tiers
+    for (let i = 0; i < count; i++) {
+      const depthFromWall = landingDepth + tread * (count - i);
+      const step = new THREE.Mesh(
+        new THREE.BoxGeometry(wide, rise, depthFromWall),
+        materials.skirting
+      );
+      const p = f.origin.clone()
+        .addScaledVector(f.right, uCenter)
+        .addScaledVector(f.normal, depthFromWall / 2);
       p.y = i * rise + rise / 2;
       step.position.copy(p);
-      // Align the step's X with the wall's right vector.
       step.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), f.right);
       step.castShadow = true;
       step.receiveShadow = true;
-      g.add(step);
+      stepGroup.add(step);
     }
+
+    // 3. Railings (if enabled)
+    if (railings !== 'none') {
+      const activeSides = [];
+      if (railings === 'left' || railings === 'both') activeSides.push(-wide / 2 + postW / 2);
+      if (railings === 'right' || railings === 'both') activeSides.push(wide / 2 - postW / 2);
+
+      const maxZ = landingDepth + count * tread;
+
+      for (const sideX of activeSides) {
+        const railMat = materials.trim;
+
+        // Vertical corner post at wall
+        const pWall = new THREE.Mesh(new THREE.BoxGeometry(postW, railH, postW), railMat);
+        const pWallPos = f.origin.clone()
+          .addScaledVector(f.right, uCenter + sideX)
+          .addScaledVector(f.normal, postW / 2);
+        pWallPos.y = top + railH / 2;
+        pWall.position.copy(pWallPos);
+        pWall.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), f.right);
+        stepGroup.add(pWall);
+
+        if (hasLanding && landingDepth > 0.5) {
+          // Landing Top Rail
+          const landRail = new THREE.Mesh(new THREE.BoxGeometry(postW, 0.12, landingDepth), railMat);
+          const pLandRail = f.origin.clone()
+            .addScaledVector(f.right, uCenter + sideX)
+            .addScaledVector(f.normal, landingDepth / 2);
+          pLandRail.y = top + railH;
+          landRail.position.copy(pLandRail);
+          landRail.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), f.right);
+          stepGroup.add(landRail);
+
+          // Landing Corner Post at outer landing edge
+          const pLandCorner = new THREE.Mesh(new THREE.BoxGeometry(postW, railH, postW), railMat);
+          const pLandCornerPos = f.origin.clone()
+            .addScaledVector(f.right, uCenter + sideX)
+            .addScaledVector(f.normal, landingDepth - postW / 2);
+          pLandCornerPos.y = top + railH / 2;
+          pLandCorner.position.copy(pLandCornerPos);
+          pLandCorner.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), f.right);
+          stepGroup.add(pLandCorner);
+        }
+
+        // Bottom Stair Post at grade level
+        const pBottom = new THREE.Mesh(new THREE.BoxGeometry(postW, railH + rise, postW), railMat);
+        const pBottomPos = f.origin.clone()
+          .addScaledVector(f.right, uCenter + sideX)
+          .addScaledVector(f.normal, maxZ - postW / 2);
+        pBottomPos.y = (railH + rise) / 2;
+        pBottom.position.copy(pBottomPos);
+        pBottom.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), f.right);
+        stepGroup.add(pBottom);
+
+        // Sloped Handrail along steps
+        const startZ = hasLanding ? landingDepth : 0;
+        const startY = top + railH;
+        const endZ = maxZ;
+        const endY = rise + railH;
+        const runZ = endZ - startZ;
+        const dropY = startY - endY;
+        const slopeLen = Math.sqrt(runZ * runZ + dropY * dropY);
+
+        const handrail = new THREE.Mesh(new THREE.BoxGeometry(postW, 0.12, slopeLen), railMat);
+        const midP = f.origin.clone()
+          .addScaledVector(f.right, uCenter + sideX)
+          .addScaledVector(f.normal, (startZ + endZ) / 2);
+        midP.y = (startY + endY) / 2;
+        handrail.position.copy(midP);
+
+        const angle = Math.atan2(dropY, runZ);
+        const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), f.right);
+        const pitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), angle);
+        q.multiply(pitch);
+        handrail.quaternion.copy(q);
+        stepGroup.add(handrail);
+      }
+    }
+
+    g.add(stepGroup);
   }
   return g;
 }
@@ -419,7 +528,7 @@ export function buildHome(home, sceneOpts) {
   root.add(buildRoof(dim, materials));
   const skirt = buildSkirting(dim, materials);
   if (skirt) root.add(skirt);
-  if (sceneOpts.steps) root.add(buildSteps(home, materials));
+  if (sceneOpts.steps) root.add(buildSteps(home, materials, sceneOpts));
   if (sceneOpts.labels) root.add(buildCallouts(home));
   if (sceneOpts.dims) root.add(buildFootprintOutline(dim));
 

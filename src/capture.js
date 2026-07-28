@@ -18,11 +18,22 @@ function download(canvas, filename) {
   }, 'image/png');
 }
 
+const photoImgCache = new Map();
+
+function getCachedImage(src) {
+  if (!src) return null;
+  if (photoImgCache.has(src)) return photoImgCache.get(src);
+  const img = new Image();
+  img.src = src;
+  photoImgCache.set(src, img);
+  return img;
+}
+
 /**
  * Render the current camera at an arbitrary pixel size and return a 2D canvas.
  * The live viewport size is restored before returning.
  */
-export function renderToCanvas(stage, w, h, alpha, sceneOpts) {
+export function renderToCanvas(stage, w, h, alpha, sceneOpts, home) {
   const prevSize = new THREE.Vector2();
   stage.renderer.getSize(prevSize);
   const prevRatio = stage.renderer.getPixelRatio();
@@ -39,7 +50,10 @@ export function renderToCanvas(stage, w, h, alpha, sceneOpts) {
   // so re-solve it at the render aspect. Manual framing is left alone.
   stage.refit();
 
-  if (alpha) {
+  const sp = home?.sitePhoto;
+  const useBgPhoto = sp && sp.src && sp.show && !alpha;
+
+  if (alpha || useBgPhoto) {
     stage.scene.background = null;
     stage.renderer.setClearAlpha(0);
     stage.grid.visible = false;
@@ -54,7 +68,34 @@ export function renderToCanvas(stage, w, h, alpha, sceneOpts) {
 
   const out = document.createElement('canvas');
   out.width = w; out.height = h;
-  out.getContext('2d').drawImage(stage.renderer.domElement, 0, 0, w, h);
+  const ctx = out.getContext('2d');
+
+  if (useBgPhoto) {
+    const img = getCachedImage(sp.src);
+    if (img && (img.complete || img.naturalWidth)) {
+      ctx.save();
+      ctx.globalAlpha = sp.opacity ?? 0.85;
+      const scale = sp.scale ?? 1.0;
+      const panX = ((sp.panX ?? 0) / 100) * w;
+      const panY = ((sp.panY ?? 0) / 100) * h;
+      const rot = THREE.MathUtils.degToRad(sp.rotation ?? 0);
+
+      ctx.translate(w / 2 + panX, h / 2 + panY);
+      ctx.rotate(rot);
+      ctx.scale(scale, scale);
+
+      const imgAspect = (img.naturalWidth || img.width) / (img.naturalHeight || img.height || 1);
+      const canvasAspect = w / h;
+      let drawW = w, drawH = h;
+      if (imgAspect > canvasAspect) { drawW = h * imgAspect; }
+      else { drawH = w / imgAspect; }
+
+      ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+      ctx.restore();
+    }
+  }
+
+  ctx.drawImage(stage.renderer.domElement, 0, 0, w, h);
 
   // Restore the viewport exactly as it was.
   stage.scene.background = prevBg;
@@ -93,7 +134,7 @@ function burnCaption(canvas, text) {
 }
 
 export function shoot(stage, home, sceneOpts, exportOpts, viewName) {
-  const c = renderToCanvas(stage, exportOpts.w, exportOpts.h, exportOpts.alpha, sceneOpts);
+  const c = renderToCanvas(stage, exportOpts.w, exportOpts.h, exportOpts.alpha, sceneOpts, home);
   if (exportOpts.burn && !exportOpts.alpha) burnCaption(c, caption(home, viewName));
   download(c, `${slug(home.name)}-${slug(viewName)}-${exportOpts.w}x${exportOpts.h}.png`);
   return c;
@@ -121,7 +162,7 @@ export function contactSheet(stage, home, sceneOpts, exportOpts) {
 
   SHEET_VIEWS.forEach(([view, label], i) => {
     stage.setView(view, home.dimensions, sceneOpts);
-    const tile = renderToCanvas(stage, cw, ch, false, sceneOpts);
+    const tile = renderToCanvas(stage, cw, ch, false, sceneOpts, home);
     burnCaption(tile, label);
     ctx.drawImage(tile, (i % 2) * cw, Math.floor(i / 2) * ch);
   });

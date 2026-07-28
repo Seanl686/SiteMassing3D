@@ -37,10 +37,36 @@ function rebuild() {
     disposeTree(c);
   }
   stage.homeGroup.add(buildHome(state.home, state.scene));
+
+  const sp = state.home.sitePhoto || {};
+  stage.homeGroup.position.set(sp.posX || 0, 0, sp.posZ || 0);
+  stage.homeGroup.rotation.y = THREE.MathUtils.degToRad(sp.rotY || 0);
+
   stage.applySceneOpts(state.scene, state.home.dimensions);
   gizmo.show(state.home.openings.find((o) => o.id === selectedId), state.home.dimensions);
   updateHud();
+  updateSitePhotoPlate();
   save();
+}
+
+function updateSitePhotoPlate() {
+  const bg = $('sitePhotoBg');
+  if (!bg) return;
+  const sp = state.home.sitePhoto;
+  if (!sp || !sp.src || !sp.show) {
+    bg.style.display = 'none';
+    if (state.scene) stage.scene.background = state.scene.bgVisible === false ? null : new THREE.Color(state.scene.bg);
+    return;
+  }
+  bg.style.display = 'block';
+  bg.style.backgroundImage = `url("${sp.src}")`;
+  bg.style.opacity = sp.opacity ?? 0.85;
+  const scale = sp.scale ?? 1.0;
+  const panX = sp.panX ?? 0;
+  const panY = sp.panY ?? 0;
+  const rot = sp.rotation ?? 0;
+  bg.style.transform = `translate(${panX}%, ${panY}%) scale(${scale}) rotate(${rot}deg)`;
+  stage.scene.background = null;
 }
 
 function select(id) {
@@ -113,9 +139,14 @@ const colorFields = [
   ['c_skirting', 'skirting'], ['c_door', 'door'], ['c_glass', 'glass'],
 ];
 const planFields = [['p_width', 'widthFt'], ['p_rot', 'rotation'], ['p_x', 'offsetX'], ['p_z', 'offsetZ']];
-const sceneNums = [['s_focal', 'focal'], ['s_eye', 'eye']];
+const photoFields = [
+  ['sp_op', 'opacity'], ['sp_scale', 'scale'], ['sp_panX', 'panX'],
+  ['sp_panY', 'panY'], ['sp_rot', 'rotation'], ['sp_posX', 'posX'],
+  ['sp_posZ', 'posZ'], ['sp_rotY', 'rotY'],
+];
+const sceneNums = [['s_focal', 'focal'], ['s_eye', 'eye'], ['s_landingDepth', 'landingDepthFt']];
 const sceneRanges = [['s_sunAz', 'sunAz'], ['s_sunEl', 'sunEl'], ['s_flat', 'flat']];
-const sceneChecks = [['s_grid', 'grid'], ['s_shadow', 'shadow'], ['s_steps', 'steps'], ['s_labels', 'labels'], ['s_dims', 'dims']];
+const sceneChecks = [['s_grid', 'grid'], ['s_shadow', 'shadow'], ['s_steps', 'steps'], ['s_stepLanding', 'stepLanding'], ['s_labels', 'labels'], ['s_dims', 'dims']];
 
 function syncForm() {
   $('f_name').value = state.home.name;
@@ -125,9 +156,21 @@ function syncForm() {
   for (const [id, key] of planFields) $(id).value = state.home.plan[key];
   $('p_op').value = state.home.plan.opacity;
   $('p_show').checked = state.home.plan.show;
-  for (const [id, key] of sceneNums) $(id).value = state.scene[key];
-  for (const [id, key] of sceneRanges) $(id).value = state.scene[key];
-  for (const [id, key] of sceneChecks) $(id).checked = state.scene[key];
+  const sp = state.home.sitePhoto || {};
+  for (const [id, key] of photoFields) {
+    if ($(id)) $(id).value = sp[key] ?? 0;
+  }
+  if ($('sp_show')) $('sp_show').checked = sp.show !== false;
+  for (const [id, key] of sceneNums) {
+    if ($(id)) $(id).value = state.scene[key] ?? 0;
+  }
+  for (const [id, key] of sceneRanges) {
+    if ($(id)) $(id).value = state.scene[key] ?? 0;
+  }
+  for (const [id, key] of sceneChecks) {
+    if ($(id)) $(id).checked = !!state.scene[key];
+  }
+  if ($('s_stepRailings')) $('s_stepRailings').value = state.scene.stepRailings || 'both';
   $('s_bg').value = state.scene.bg;
   $('x_w').value = state.export.w;
   $('x_h').value = state.export.h;
@@ -194,23 +237,71 @@ function bind() {
     r.readAsDataURL(f);
   });
 
-  for (const [id, key] of [...sceneNums, ...sceneRanges]) {
-    $(id).addEventListener('input', (e) => {
-      state.scene[key] = parseFloat(e.target.value);
-      stage.applySceneOpts(state.scene, state.home.dimensions);
-      // Focal and eye height change the framing, so re-fit the active preset.
-      if ((key === 'focal' || key === 'eye') && stage._lastView) {
-        stage.setView(stage._lastView, state.home.dimensions, state.scene);
-      }
-      save();
+  for (const [id, key] of photoFields) {
+    if ($(id)) {
+      $(id).addEventListener('input', (e) => {
+        state.home.sitePhoto[key] = parseFloat(e.target.value) || 0;
+        rebuild();
+      });
+    }
+  }
+  if ($('sp_show')) {
+    $('sp_show').addEventListener('change', (e) => {
+      state.home.sitePhoto.show = e.target.checked;
+      rebuild();
     });
   }
+  if ($('fileSitePhoto')) {
+    $('fileSitePhoto').addEventListener('change', (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      const r = new FileReader();
+      r.onload = () => {
+        state.home.sitePhoto.src = r.result;
+        state.home.sitePhoto.show = true;
+        if ($('sp_show')) $('sp_show').checked = true;
+        rebuild();
+      };
+      r.readAsDataURL(f);
+    });
+  }
+  if ($('btnResetPhoto')) {
+    $('btnResetPhoto').addEventListener('click', () => {
+      state.home.sitePhoto = {
+        ...state.home.sitePhoto,
+        scale: 1.0, panX: 0, panY: 0, rotation: 0, posX: 0, posZ: 0, rotY: 0, show: true
+      };
+      syncForm();
+      rebuild();
+    });
+  }
+
+  for (const [id, key] of [...sceneNums, ...sceneRanges]) {
+    if ($(id)) {
+      $(id).addEventListener('input', (e) => {
+        state.scene[key] = parseFloat(e.target.value);
+        if (key === 'landingDepthFt') rebuild();
+        else stage.applySceneOpts(state.scene, state.home.dimensions);
+        if ((key === 'focal' || key === 'eye') && stage._lastView) {
+          stage.setView(stage._lastView, state.home.dimensions, state.scene);
+        }
+        save();
+      });
+    }
+  }
   for (const [id, key] of sceneChecks) {
-    $(id).addEventListener('change', (e) => {
-      state.scene[key] = e.target.checked;
-      // steps/labels/dims are geometry; grid/shadow are lighting-only.
-      if (['steps', 'labels', 'dims'].includes(key)) rebuild();
-      else { stage.applySceneOpts(state.scene, state.home.dimensions); save(); }
+    if ($(id)) {
+      $(id).addEventListener('change', (e) => {
+        state.scene[key] = e.target.checked;
+        if (['steps', 'stepLanding', 'labels', 'dims'].includes(key)) rebuild();
+        else { stage.applySceneOpts(state.scene, state.home.dimensions); save(); }
+      });
+    }
+  }
+  if ($('s_stepRailings')) {
+    $('s_stepRailings').addEventListener('change', (e) => {
+      state.scene.stepRailings = e.target.value;
+      rebuild();
     });
   }
   $('s_bg').addEventListener('input', (e) => {
@@ -507,6 +598,7 @@ function migrate(home) {
       label: o.label || '',
     })),
     plan: { ...base.plan, ...(home.plan || {}) },
+    sitePhoto: { ...base.sitePhoto, ...(home.sitePhoto || {}) },
   };
   return out;
 }
@@ -517,7 +609,14 @@ function save() {
   } catch {
     // Plan plates are stored as data URLs and can blow the quota; drop it and retry.
     try {
-      const lean = { ...state, home: { ...state.home, plan: { ...state.home.plan, src: null } } };
+      const lean = {
+        ...state,
+        home: {
+          ...state.home,
+          plan: { ...state.home.plan, src: null },
+          sitePhoto: { ...state.home.sitePhoto, src: null },
+        },
+      };
       localStorage.setItem(STORE_KEY, JSON.stringify(lean));
     } catch { /* give up quietly; the JSON export is the real save path */ }
   }
