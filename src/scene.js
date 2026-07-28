@@ -269,6 +269,7 @@ export class Stage {
 
   setCameraDistance(distFt) {
     if (!isFinite(distFt) || distFt <= 0) return;
+    this.userMoved = true;
     const target = this.controls.target;
     const dir = this.persp.position.clone().sub(target);
     if (dir.lengthSq() < 1e-4) dir.set(0, 5, 20);
@@ -289,6 +290,7 @@ export class Stage {
   }
 
   rotateView(deg) {
+    this.userMoved = true;
     const cam = this.camera === this.ortho ? this.ortho : this.persp;
     const controls = this.camera === this.ortho ? this.orthoControls : this.controls;
     const target = controls.target;

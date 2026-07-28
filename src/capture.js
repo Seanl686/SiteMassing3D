@@ -39,16 +39,25 @@ export function renderToCanvas(stage, w, h, alpha, sceneOpts, home) {
   const prevRatio = stage.renderer.getPixelRatio();
   const prevBg = stage.scene.background;
 
+  // Save active camera transform, target, and orientation
+  const isOrtho = stage.camera === stage.ortho;
+  const activeControls = isOrtho ? stage.orthoControls : stage.controls;
+  const savedPos = stage.camera.position.clone();
+  const savedTarget = activeControls.target.clone();
+  const savedQuat = stage.camera.quaternion.clone();
+  const savedZoom = stage.camera.zoom;
+  const prevAspect = stage.persp.aspect;
+
   stage.renderer.setPixelRatio(1);
   stage.renderer.setSize(w, h, false);
-  stage.persp.aspect = w / h;
-  stage.persp.updateProjectionMatrix();
-  const prevAspect = stage._aspect;
-  stage._aspect = w / h;
-  stage.reframeOrtho();
-  // A preset framed for the viewport does not fit a differently-shaped export,
-  // so re-solve it at the render aspect. Manual framing is left alone.
-  stage.refit();
+
+  if (!isOrtho) {
+    stage.persp.aspect = w / h;
+    stage.persp.updateProjectionMatrix();
+  } else {
+    stage._aspect = w / h;
+    stage.reframeOrtho();
+  }
 
   const sp = home?.sitePhoto;
   const useBgPhoto = sp && sp.src && sp.show && !alpha;
@@ -62,6 +71,7 @@ export function renderToCanvas(stage, w, h, alpha, sceneOpts, home) {
   const overlayWas = stage.overlay?.visible;
   if (stage.overlay) stage.overlay.visible = false;
 
+  // Render current camera view at export size
   stage.renderer.render(stage.scene, stage.camera);
 
   if (stage.overlay) stage.overlay.visible = overlayWas;
@@ -103,17 +113,26 @@ export function renderToCanvas(stage, w, h, alpha, sceneOpts, home) {
 
   ctx.drawImage(stage.renderer.domElement, 0, 0, w, h);
 
-  // Restore the viewport exactly as it was.
+  // Restore live viewport size, aspect ratio, camera position, and target
   stage.scene.background = prevBg;
   stage.renderer.setClearAlpha(1);
   stage.grid.visible = sceneOpts.grid;
   stage.renderer.setPixelRatio(prevRatio);
   stage.renderer.setSize(prevSize.x, prevSize.y, false);
-  stage.persp.aspect = prevAspect;
-  stage.persp.updateProjectionMatrix();
-  stage._aspect = prevAspect;
-  stage.reframeOrtho();
-  stage.refit();
+
+  stage.camera.position.copy(savedPos);
+  activeControls.target.copy(savedTarget);
+  stage.camera.quaternion.copy(savedQuat);
+  stage.camera.zoom = savedZoom;
+
+  if (!isOrtho) {
+    stage.persp.aspect = prevAspect;
+    stage.persp.updateProjectionMatrix();
+  } else {
+    stage._aspect = prevAspect;
+    stage.reframeOrtho();
+  }
+  activeControls.update();
 
   return out;
 }
