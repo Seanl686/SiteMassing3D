@@ -116,7 +116,9 @@ export class Stage {
     s.near = 1; s.far = r * 3;
     s.updateProjectionMatrix();
 
-    this.grid.visible = o.grid;
+    const blockLandscape = !!o.blockLandscape;
+    this.ground.visible = o.grid && !blockLandscape;
+    this.grid.visible = o.grid && !blockLandscape;
     this.scene.background = o.bgVisible === false ? null : new THREE.Color(o.bg);
     this.persp.fov = focalToFov(o.focal);
     this.persp.updateProjectionMatrix();
@@ -284,6 +286,19 @@ export class Stage {
     this.ground.position.y = y;
     this.grid.position.y = -0.005 + y;
     this.planGroup.position.y = y;
+  }
+
+  rotateView(deg) {
+    const cam = this.camera === this.ortho ? this.ortho : this.persp;
+    const controls = this.camera === this.ortho ? this.orthoControls : this.controls;
+    const target = controls.target;
+    const rad = THREE.MathUtils.degToRad(deg);
+
+    const offset = cam.position.clone().sub(target);
+    offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), rad);
+    cam.position.copy(target).add(offset);
+    cam.lookAt(target);
+    controls.update();
   }
 
   render() {

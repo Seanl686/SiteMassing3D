@@ -60,7 +60,7 @@ function updateSitePhotoPlate() {
   const bg = $('sitePhotoBg');
   if (!bg) return;
   const sp = state.home.sitePhoto;
-  if (!sp || !sp.src || !sp.show) {
+  if (!sp || !sp.src || !sp.show || state.scene.blockLandscape) {
     bg.style.display = 'none';
     if (state.scene) stage.scene.background = state.scene.bgVisible === false ? null : new THREE.Color(state.scene.bg);
     return;
@@ -154,7 +154,7 @@ const photoFields = [
 ];
 const sceneNums = [['s_focal', 'focal'], ['s_eye', 'eye'], ['s_landingDepth', 'landingDepthFt']];
 const sceneRanges = [['s_sunAz', 'sunAz'], ['s_sunEl', 'sunEl'], ['s_flat', 'flat']];
-const sceneChecks = [['s_grid', 'grid'], ['s_shadow', 'shadow'], ['s_steps', 'steps'], ['s_stepLanding', 'stepLanding'], ['s_labels', 'labels'], ['s_dims', 'dims']];
+const sceneChecks = [['s_grid', 'grid'], ['s_shadow', 'shadow'], ['s_steps', 'steps'], ['s_stepLanding', 'stepLanding'], ['s_blockLandscape', 'blockLandscape'], ['s_labels', 'labels'], ['s_dims', 'dims']];
 
 function syncForm() {
   $('f_name').value = state.home.name;
@@ -385,6 +385,13 @@ function bind() {
   $('btnAddDoor').addEventListener('click', () => armAdd('door'));
   $('btnAddSlider').addEventListener('click', () => armAdd('slider'));
   $('btnAddWindow').addEventListener('click', () => armAdd('window'));
+
+  if ($('btnRotL90')) {
+    $('btnRotL90').addEventListener('click', () => stage.rotateView(-90));
+  }
+  if ($('btnRotR90')) {
+    $('btnRotR90').addEventListener('click', () => stage.rotateView(90));
+  }
 
   for (const b of document.querySelectorAll('#viewPresets button')) {
     b.addEventListener('click', () => {

@@ -89,7 +89,7 @@ main { flex: 1 1 auto; display: flex; min-height: 0; }
 
 .photo-drag-badge {
   position: absolute;
-  top: 12px;
+  top: 48px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(43, 108, 176, 0.92);
@@ -102,6 +102,55 @@ main { flex: 1 1 auto; display: flex; min-height: 0; }
   box-shadow: 0 3px 10px rgba(0,0,0,0.5);
   z-index: 100;
   letter-spacing: 0.02em;
+}
+
+.view-bar {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  z-index: 10;
+  pointer-events: none;
+}
+.view-bar > * {
+  pointer-events: auto;
+}
+.view-rot-group {
+  display: flex;
+  gap: 4px;
+  background: rgba(18, 22, 28, 0.88);
+  padding: 3px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.15);
+  backdrop-filter: blur(8px);
+}
+.btn-rot {
+  background: #283344;
+  color: #6fb2ff;
+  border: 1px solid rgba(111,178,255,0.3);
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-rot:hover {
+  background: #3b4b63;
+  color: #ffffff;
+  border-color: #6fb2ff;
+}
+.view-presets-bar {
+  background: rgba(18, 22, 28, 0.88);
+  padding: 3px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.15);
+  backdrop-filter: blur(8px);
+  margin: 0;
 }
 
 #hud {

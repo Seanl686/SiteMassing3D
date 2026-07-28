@@ -183,6 +183,7 @@
       </div>
       <label class="row check"><input id="s_labels" type="checkbox" autocomplete="off"><span>Door callout markers</span></label>
       <label class="row check"><input id="s_dims" type="checkbox" autocomplete="off"><span>Dimension outline on ground</span></label>
+      <label class="row check" style="margin-top:8px;background:rgba(255,100,100,0.12);padding:5px 8px;border-radius:4px;border:1px solid rgba(255,133,133,0.3);"><input id="s_blockLandscape" type="checkbox" autocomplete="off"><span style="color:#ff8585;font-weight:600;">🚫 Block landscape &amp; ground view</span></label>
     </section>
 
     <section class="panel">
@@ -201,6 +202,21 @@
   </aside>
 
   <div id="stage">
+    <div id="viewBar" class="view-bar">
+      <div class="view-rot-group">
+        <button id="btnRotL90" class="btn-rot" title="Rotate camera 90° Left">↺ 90°</button>
+        <button id="btnRotR90" class="btn-rot" title="Rotate camera 90° Right">↻ 90°</button>
+      </div>
+      <div id="viewPresets" class="btn-group view-presets-bar">
+        <button data-view="hero-left">¾ L</button>
+        <button data-view="hero-right">¾ R</button>
+        <button data-view="front">Front</button>
+        <button data-view="rear">Rear</button>
+        <button data-view="left">Left</button>
+        <button data-view="right">Right</button>
+        <button data-view="plan">Plan</button>
+      </div>
+    </div>
     <div id="photoDragBadge" class="photo-drag-badge" style="display:none;">🖱️ Photo Mouse Drag Active (Drag: Pan, Scroll: Zoom, Alt+Drag: Rotate)</div>
     <div id="sitePhotoBg" class="site-photo-bg"></div>
     <canvas id="view"></canvas>

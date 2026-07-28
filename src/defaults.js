@@ -69,6 +69,7 @@ export function defaultScene() {
     stepLanding: true,
     landingDepthFt: 3.5,
     stepRailings: 'both', // 'none', 'left', 'right', 'both'
+    blockLandscape: false,
     labels: false,
     dims: false,
   };
