@@ -119,6 +119,8 @@
         <div id="dormerSizeRows"></div>
         <label class="row check"><input id="f_dormerFalseEave" type="checkbox" autocomplete="off"><span>False eave return band</span></label>
         <label class="row check"><input id="f_dormerInnerFalseEave" type="checkbox" autocomplete="off"><span>Inner false eave (double-wide)</span></label>
+        <label class="row check"><input id="f_dormerDripEdge" type="checkbox" autocomplete="off"><span>Drip edge / bottom eave trim band</span></label>
+        <label class="row check"><input id="f_dormerContinuousWall" type="checkbox" autocomplete="off"><span>Continue wall siding up into dormer (no seam)</span></label>
         <label class="row check"><input id="f_dormerConnected" type="checkbox" autocomplete="off"><span>Connected dormer cap</span></label>
         <label class="row check"><input id="f_dormerNested" type="checkbox" autocomplete="off"><span>Nested dormer (2nd inside 1st)</span></label>
         <label id="row_dormerNestOffset"><span>Nested offset (ft)</span><input id="f_dormerNestOffset" type="number" autocomplete="off" step="0.25" min="-20" max="20"></label>
@@ -165,6 +167,7 @@
         </div>
         <div class="grid2 colors" style="margin-top:8px;">
           <label><span>Main Siding</span><input id="c_siding" type="color" autocomplete="off"></label>
+          <label><span>Below-Dormer Siding</span><input id="c_belowDormerSiding" type="color" autocomplete="off"></label>
           <label><span>Dormer Siding</span><input id="c_dormerSiding" type="color" autocomplete="off"></label>
           <label><span>Gable Siding</span><input id="c_gableSiding" type="color" autocomplete="off"></label>
           <label><span>Trim</span><input id="c_trim" type="color" autocomplete="off"></label>

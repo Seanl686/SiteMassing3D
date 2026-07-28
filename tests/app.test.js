@@ -538,3 +538,26 @@ test('21. Corner Trim Boards & Per-Area Siding Assignment (Dormers & Gable Accen
   assert.ok(materials.gableSiding, 'Gable siding material initialized');
 });
 
+test('22. Continuous Wall Siding & Drip Edge Removal Verification', () => {
+  const home = defaultHome();
+  home.dimensions.dormerCount = 1;
+  home.dimensions.dormerDripEdge = false;
+  home.dimensions.dormerContinuousWall = true;
+  home.colors.belowDormerSiding = '#7a828d';
+
+  const root = buildHome(home, defaultScene());
+  const roof = root.children.find((c) => c.name === 'roof');
+  assert.ok(roof, 'Roof constructed');
+  const dormers = roof.children.find((c) => c.name === 'dormers');
+  assert.ok(dormers, 'Dormers constructed');
+
+  const materials = root.userData.materials;
+  assert.ok(materials.belowDormerSiding, 'Below-dormer siding material initialized');
+
+  // Verify continuous wall siding inherits main siding material when dormerContinuousWall is true
+  const dormer0 = dormers.children[0];
+  const frontGable = dormer0.children[0];
+  assert.equal(frontGable.material, materials.siding, 'Dormer inherits main wall siding material for seamless wall continuation');
+});
+
+

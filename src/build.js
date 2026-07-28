@@ -346,7 +346,10 @@ function buildDormers(dim, materials) {
 
   const g = new THREE.Group();
   g.name = 'dormers';
-  const dormerMat = materials.dormerSiding || materials.siding;
+
+  const isContinuous = dim.dormerContinuousWall === true;
+  const isDripEdgeOn = dim.dormerDripEdge !== false && !isContinuous;
+  const dormerMat = isContinuous ? materials.siding : (materials.dormerSiding || materials.siding);
 
   const { slope, eaveY } = derived(dim);
   const frontZ = -dim.widthFt / 2;
@@ -478,15 +481,17 @@ function buildDormers(dim, materials) {
       fascia.userData.dormerIndex = 0;
       capGroup.add(fascia);
 
-      // Bottom trim across the eave line.
-      const bottomTrim = new THREE.Mesh(
-        new THREE.BoxGeometry(capWidth + 2.4, 0.35, 0.18),
-        materials.trim
-      );
-      bottomTrim.position.set(capCenterX, eaveY - 0.18, dormerFrontZ + 0.05);
-      bottomTrim.castShadow = true;
-      bottomTrim.userData.dormerIndex = 0;
-      capGroup.add(bottomTrim);
+      // Bottom trim across the eave line (drip edge).
+      if (isDripEdgeOn) {
+        const bottomTrim = new THREE.Mesh(
+          new THREE.BoxGeometry(capWidth + 2.4, 0.35, 0.18),
+          materials.trim
+        );
+        bottomTrim.position.set(capCenterX, eaveY - 0.18, dormerFrontZ + 0.05);
+        bottomTrim.castShadow = true;
+        bottomTrim.userData.dormerIndex = 0;
+        capGroup.add(bottomTrim);
+      }
     }
 
     // 5. Accent windows — one in each dormer position.
@@ -563,7 +568,9 @@ function buildDormers(dim, materials) {
  *  shallower than, the outer gable it is tucked into. */
 function gableDormer(dim, materials, opts) {
   const { index: i, posX, dW, dH, frontZ: dormerFrontZ, eaveY, slope, ov } = opts;
-  const dormerMat = materials.dormerSiding || materials.siding;
+  const isContinuous = dim.dormerContinuousWall === true;
+  const isDripEdgeOn = dim.dormerDripEdge !== false && !isContinuous;
+  const dormerMat = isContinuous ? materials.siding : (materials.dormerSiding || materials.siding);
   const dormerGroup = new THREE.Group();
   dormerGroup.name = `dormer:${i}`;
   dormerGroup.userData.dormerIndex = i;
@@ -582,8 +589,8 @@ function gableDormer(dim, materials, opts) {
   frontGable.userData.dormerIndex = i;
   dormerGroup.add(frontGable);
 
-  // 2. False Eave Return Band — outer (if enabled)
-  if (dim.dormerFalseEave !== false) {
+  // 2. False Eave Return Band — outer (if enabled and drip edge on)
+  if (dim.dormerFalseEave !== false && isDripEdgeOn) {
     const falseEaveW = dW + 1.2;
     const falseEave = new THREE.Mesh(
       new THREE.BoxGeometry(falseEaveW, 0.55, 0.45),
@@ -1039,6 +1046,7 @@ export function buildHome(home, sceneOpts) {
   const dim = home.dimensions;
   const materials = {
     siding: createSidingMaterial(home.colors.siding, dim.sidingTexture || 'horizontal_lap'),
+    belowDormerSiding: createSidingMaterial(home.colors.belowDormerSiding || home.colors.siding, dim.sidingTexture || 'horizontal_lap'),
     dormerSiding: createSidingMaterial(home.colors.dormerSiding || home.colors.siding, dim.dormerSidingTexture || dim.sidingTexture || 'horizontal_lap'),
     gableSiding: createSidingMaterial(home.colors.gableSiding || home.colors.siding, dim.gableSidingTexture || dim.sidingTexture || 'horizontal_lap'),
     trim: mat(home.colors.trim, { roughness: 0.75 }),

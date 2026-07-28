@@ -185,7 +185,7 @@ const dimFields = [
   ['f_leftWallHeight', 'leftWallHeightFt'], ['f_rightWallHeight', 'rightWallHeightFt'],
 ];
 const colorFields = [
-  ['c_siding', 'siding'], ['c_dormerSiding', 'dormerSiding'], ['c_gableSiding', 'gableSiding'],
+  ['c_siding', 'siding'], ['c_belowDormerSiding', 'belowDormerSiding'], ['c_dormerSiding', 'dormerSiding'], ['c_gableSiding', 'gableSiding'],
   ['c_trim', 'trim'], ['c_roof', 'roof'], ['c_skirting', 'skirting'], ['c_door', 'door'], ['c_glass', 'glass'],
 ];
 const planFields = [['p_width', 'widthFt'], ['p_rot', 'rotation'], ['p_x', 'offsetX'], ['p_z', 'offsetZ']];
@@ -274,6 +274,8 @@ function syncForm() {
   if ($('f_dormerFalseEave')) $('f_dormerFalseEave').checked = state.home.dimensions.dormerFalseEave !== false;
   if ($('f_dormerInnerFalseEave')) $('f_dormerInnerFalseEave').checked = state.home.dimensions.dormerInnerFalseEave !== false;
   if ($('f_dormerConnected')) $('f_dormerConnected').checked = !!state.home.dimensions.dormerConnected;
+  if ($('f_dormerDripEdge')) $('f_dormerDripEdge').checked = state.home.dimensions.dormerDripEdge !== false;
+  if ($('f_dormerContinuousWall')) $('f_dormerContinuousWall').checked = !!state.home.dimensions.dormerContinuousWall;
   if ($('f_dormerWindow')) $('f_dormerWindow').checked = state.home.dimensions.dormerWindow !== false;
   if ($('f_dormerLinkSizes')) $('f_dormerLinkSizes').checked = state.home.dimensions.dormerLinkSizes === true;
   if ($('f_dormerNested')) $('f_dormerNested').checked = !!state.home.dimensions.dormerNested;
@@ -417,6 +419,18 @@ function bind() {
   if ($('f_dormerInnerFalseEave')) {
     $('f_dormerInnerFalseEave').addEventListener('change', (e) => {
       state.home.dimensions.dormerInnerFalseEave = e.target.checked;
+      rebuild(); save();
+    });
+  }
+  if ($('f_dormerDripEdge')) {
+    $('f_dormerDripEdge').addEventListener('change', (e) => {
+      state.home.dimensions.dormerDripEdge = e.target.checked;
+      rebuild(); save();
+    });
+  }
+  if ($('f_dormerContinuousWall')) {
+    $('f_dormerContinuousWall').addEventListener('change', (e) => {
+      state.home.dimensions.dormerContinuousWall = e.target.checked;
       rebuild(); save();
     });
   }

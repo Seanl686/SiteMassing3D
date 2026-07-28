@@ -45,6 +45,8 @@ export function defaultHome() {
       dormerNested: false,         // dormer 2 sits inside dormer 1 (gable-in-gable)
       dormerNestOffsetFt: 0,       // inner gable X offset from the outer gable center
       dormerWindow: true,
+      dormerDripEdge: true,        // horizontal drip edge / eave trim under dormer
+      dormerContinuousWall: false, // continue wall siding straight up into dormer face
       dormerPositions: [],          // custom X offsets in ft; empty = auto-place
       dormerLinkSizes: false,       // true = every dormer shares the global size
       dormerSizes: [],              // per-dormer { widthFt, heightFt } overrides
@@ -56,6 +58,7 @@ export function defaultHome() {
     },
     colors: {
       siding: '#8d9299',
+      belowDormerSiding: '#8d9299',
       dormerSiding: '#8d9299',
       gableSiding: '#8d9299',
       trim: '#f2f2f0',
@@ -132,6 +135,7 @@ export function migrate(home) {
   // Sizes are independent unless a save explicitly asked for linked sizes.
   dimensions.dormerLinkSizes = dimensions.dormerLinkSizes === true;
   const colors = { ...base.colors, ...(home.colors || {}) };
+  if (!home.colors?.belowDormerSiding) colors.belowDormerSiding = colors.siding;
   if (!home.colors?.dormerSiding) colors.dormerSiding = colors.siding;
   if (!home.colors?.gableSiding) colors.gableSiding = colors.siding;
   const out = {
