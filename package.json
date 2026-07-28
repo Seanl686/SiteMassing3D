@@ -1,6 +1,6 @@
 {
   "name": "sitemassing3d",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Parametric double-wide massing model with defined exterior doors, elevation and 3/4 views, and PNG export for site-render plates.",
   "scripts": {
     "start": "npx --yes serve@14 -l 5173 .",
