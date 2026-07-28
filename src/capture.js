@@ -34,6 +34,7 @@ function getCachedImage(src) {
  * The live viewport size is restored before returning.
  */
 export function renderToCanvas(stage, w, h, alpha, sceneOpts, home) {
+  const dom = stage.renderer?.domElement;
   const prevSize = new THREE.Vector2();
   stage.renderer.getSize(prevSize);
   const prevRatio = stage.renderer.getPixelRatio();
@@ -48,15 +49,19 @@ export function renderToCanvas(stage, w, h, alpha, sceneOpts, home) {
   const savedZoom = stage.camera.zoom;
   const prevAspect = stage.persp.aspect;
 
-  stage.renderer.setPixelRatio(1);
-  stage.renderer.setSize(w, h, false);
+  const isLiveSize = dom && Math.abs(w - dom.width) < 2 && Math.abs(h - dom.height) < 2;
 
-  if (!isOrtho) {
-    stage.persp.aspect = w / h;
-    stage.persp.updateProjectionMatrix();
-  } else {
-    stage._aspect = w / h;
-    stage.reframeOrtho();
+  if (!isLiveSize) {
+    stage.renderer.setPixelRatio(1);
+    stage.renderer.setSize(w, h, false);
+
+    if (!isOrtho) {
+      stage.persp.aspect = w / h;
+      stage.persp.updateProjectionMatrix();
+    } else {
+      stage._aspect = w / h;
+      stage.reframeOrtho();
+    }
   }
 
   const sp = home?.sitePhoto;
@@ -71,7 +76,7 @@ export function renderToCanvas(stage, w, h, alpha, sceneOpts, home) {
   const overlayWas = stage.overlay?.visible;
   if (stage.overlay) stage.overlay.visible = false;
 
-  // Render current camera view at export size
+  // Render current camera view
   stage.renderer.render(stage.scene, stage.camera);
 
   if (stage.overlay) stage.overlay.visible = overlayWas;
@@ -118,7 +123,7 @@ export function renderToCanvas(stage, w, h, alpha, sceneOpts, home) {
 
   ctx.drawImage(stage.renderer.domElement, 0, 0, w, h);
 
-  // Restore live viewport size, aspect ratio, camera position, and target
+  // Restore live viewport state
   stage.scene.background = prevBg;
   if (prevBg === null || useBgPhoto) {
     stage.renderer.setClearAlpha(0);
@@ -126,22 +131,25 @@ export function renderToCanvas(stage, w, h, alpha, sceneOpts, home) {
     stage.renderer.setClearAlpha(1);
   }
   stage.grid.visible = sceneOpts.grid;
-  stage.renderer.setPixelRatio(prevRatio);
-  stage.renderer.setSize(prevSize.x, prevSize.y, false);
 
-  stage.camera.position.copy(savedPos);
-  activeControls.target.copy(savedTarget);
-  stage.camera.quaternion.copy(savedQuat);
-  stage.camera.zoom = savedZoom;
+  if (!isLiveSize) {
+    stage.renderer.setPixelRatio(prevRatio);
+    stage.renderer.setSize(prevSize.x, prevSize.y, false);
 
-  if (!isOrtho) {
-    stage.persp.aspect = prevAspect;
-    stage.persp.updateProjectionMatrix();
-  } else {
-    stage._aspect = prevAspect;
-    stage.reframeOrtho();
+    stage.camera.position.copy(savedPos);
+    activeControls.target.copy(savedTarget);
+    stage.camera.quaternion.copy(savedQuat);
+    stage.camera.zoom = savedZoom;
+
+    if (!isOrtho) {
+      stage.persp.aspect = prevAspect;
+      stage.persp.updateProjectionMatrix();
+    } else {
+      stage._aspect = prevAspect;
+      stage.reframeOrtho();
+    }
+    activeControls.update();
   }
-  activeControls.update();
 
   return out;
 }
@@ -169,13 +177,18 @@ function burnCaption(canvas, text) {
 
 export function shoot(stage, home, sceneOpts, exportOpts, viewName) {
   const dom = stage.renderer?.domElement;
-  const liveW = (dom && dom.clientWidth > 0) ? dom.clientWidth : 1200;
-  const liveH = (dom && dom.clientHeight > 0) ? dom.clientHeight : 800;
+  const liveW = dom ? dom.width : 1920;
+  const liveH = dom ? dom.height : 1080;
   const liveAspect = liveW / liveH;
 
-  // Preserve the exact live screen aspect ratio so distance, zoom, and framing match 1-to-1
-  const targetW = exportOpts.w && exportOpts.w > 0 ? exportOpts.w : liveW;
-  const targetH = Math.round(targetW / liveAspect);
+  // Use current live WebGL canvas pixel dimensions for 100% exact 1-to-1 replica
+  let targetW = liveW;
+  let targetH = liveH;
+
+  if (exportOpts && exportOpts.w && exportOpts.w > 0 && exportOpts.w !== 1200) {
+    targetW = exportOpts.w;
+    targetH = Math.round(targetW / liveAspect);
+  }
 
   const c = renderToCanvas(stage, targetW, targetH, exportOpts.alpha, sceneOpts, home);
   if (exportOpts.burn && !exportOpts.alpha) burnCaption(c, caption(home, viewName));
