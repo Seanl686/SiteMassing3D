@@ -21,7 +21,7 @@ let pendingAdd = null;
 
 const canvas = document.getElementById('view');
 const stage = new Stage(canvas);
-const gizmo = new Gizmo(stage.scene);
+const gizmo = new Gizmo(stage.homeGroup);
 stage.overlay = gizmo.group; // hidden during export — it is UI, not part of the render
 const $ = (id) => document.getElementById(id);
 
@@ -37,6 +37,7 @@ function rebuild() {
     disposeTree(c);
   }
   stage.homeGroup.add(buildHome(state.home, state.scene));
+  stage.homeGroup.add(gizmo.group);
 
   const sp = state.home.sitePhoto || {};
   const baseY = sp.baselineY || 0;
@@ -319,8 +320,6 @@ function bind() {
 
   function syncCameraStateToForm() {
     const cam = stage.camera;
-    const controls = cam === stage.ortho ? stage.orthoControls : stage.controls;
-    const target = controls.target;
 
     // 1. Camera Distance
     const dist = Math.round(stage.getCameraDistance() * 10) / 10;
@@ -335,25 +334,6 @@ function bind() {
     if ($('s_eye') && document.activeElement !== $('s_eye')) {
       $('s_eye').value = eyeY;
     }
-
-    // 3. Ground / Target Baseline Y
-    const baseY = Math.round(target.y * 10) / 10;
-    state.home.sitePhoto.baselineY = baseY;
-    if ($('sp_baselineY') && document.activeElement !== $('sp_baselineY')) {
-      $('sp_baselineY').value = baseY;
-    }
-
-    // 4. House / Target Pan offset
-    const posX = Math.round(-target.x * 10) / 10;
-    const posZ = Math.round(-target.z * 10) / 10;
-    state.home.sitePhoto.posX = posX;
-    state.home.sitePhoto.posZ = posZ;
-    if ($('sp_posX') && document.activeElement !== $('sp_posX')) $('sp_posX').value = posX;
-    if ($('sp_posZ') && document.activeElement !== $('sp_posZ')) $('sp_posZ').value = posZ;
-
-    // Keep 3D ground & home group in sync with site photo alignment
-    stage.setGroundBaseline(baseY);
-    stage.homeGroup.position.set(posX, baseY, posZ);
 
     updateHud();
     save();
@@ -595,7 +575,7 @@ function onPick(ev) {
 }
 
 function beginDrag(o, mode) {
-  const hit = wallPlaneHit(ray, o.wall, state.home.dimensions);
+  const hit = wallPlaneHit(ray, o.wall, state.home.dimensions, stage.homeGroup);
   if (!hit) return;
   drag = {
     id: o.id,
@@ -644,7 +624,7 @@ function onMove(ev) {
   const o = state.home.openings.find((x) => x.id === drag.id);
   if (!o) return;
   setRay(ev);
-  const hit = wallPlaneHit(ray, o.wall, state.home.dimensions);
+  const hit = wallPlaneHit(ray, o.wall, state.home.dimensions, stage.homeGroup);
   if (!hit) return;
 
   let du = hit.u - drag.origin.u;

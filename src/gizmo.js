@@ -13,11 +13,11 @@ const SNAP = 1 / 12;     // 1 inch
 export const snap = (v, free) => (free ? v : Math.round(v / SNAP) * SNAP);
 
 export class Gizmo {
-  constructor(scene) {
+  constructor(parentGroup) {
     this.group = new THREE.Group();
     this.group.name = 'gizmo';
     this.group.renderOrder = 900;
-    scene.add(this.group);
+    if (parentGroup) parentGroup.add(this.group);
     this.handles = [];
     this.opening = null;
 
@@ -98,12 +98,20 @@ export class Gizmo {
  * Intersect a ray with the plane of a wall and return the hit in wall-local
  * (u, v) feet. Returns null when the ray runs parallel to the wall.
  */
-export function wallPlaneHit(raycaster, wall, dim) {
+export function wallPlaneHit(raycaster, wall, dim, homeGroup) {
   const f = wallFrames(dim)[wall];
   if (!f) return null;
+
+  const localRay = raycaster.ray.clone();
+  if (homeGroup) {
+    homeGroup.updateMatrixWorld(true);
+    const invMat = homeGroup.matrixWorld.clone().invert();
+    localRay.applyMatrix4(invMat);
+  }
+
   const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(f.normal, f.origin);
   const p = new THREE.Vector3();
-  if (!raycaster.ray.intersectPlane(plane, p)) return null;
+  if (!localRay.intersectPlane(plane, p)) return null;
   const rel = p.clone().sub(f.origin);
   return { u: rel.dot(f.right), v: rel.y, span: f.span };
 }
