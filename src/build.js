@@ -280,6 +280,160 @@ function buildDormers(dim, materials) {
   const xPositions = customPos
     || (count === 1 ? [0] : [-dim.lengthFt * 0.25, dim.lengthFt * 0.25]);
 
+  // ── Connected dormer cap mode (double-wide) ──────────────────────────
+  // Merges two dormers into one continuous raised section with a shed roof,
+  // continuous siding front wall, eave returns on each outer edge, and
+  // accent windows — the classic double-wide manufactured home profile.
+  if (count === 2 && dim.dormerConnected) {
+    const capGroup = new THREE.Group();
+    capGroup.name = 'dormer:connected';
+    capGroup.userData.dormerIndex = 0;
+
+    const leftX  = Math.min(xPositions[0], xPositions[1]);
+    const rightX = Math.max(xPositions[0], xPositions[1]);
+    const capLeft  = leftX  - dW / 2;
+    const capRight = rightX + dW / 2;
+    const capWidth = capRight - capLeft;
+    const capCenterX = (capLeft + capRight) / 2;
+
+    // Dormer depth: how far back toward the ridge the cap extends.
+    const dormerDepth = (dH / (slope || 0.33)) + ov * 0.5;
+
+    // 1. Front wall — continuous siding rectangle across the cap width.
+    const wallShape = new THREE.Shape();
+    wallShape.moveTo(-capWidth / 2, 0);
+    wallShape.lineTo(capWidth / 2, 0);
+    wallShape.lineTo(capWidth / 2, dH);
+    wallShape.lineTo(-capWidth / 2, dH);
+    wallShape.closePath();
+
+    const wallMesh = new THREE.Mesh(
+      new THREE.ExtrudeGeometry(wallShape, { depth: 0.2, bevelEnabled: false }),
+      materials.siding
+    );
+    wallMesh.position.set(capCenterX, eaveY, dormerFrontZ);
+    wallMesh.castShadow = true;
+    wallMesh.userData.dormerIndex = 0;
+    capGroup.add(wallMesh);
+
+    // 2. Shed roof — single slope from the cap top back toward the main ridge.
+    const shedAngle = Math.atan2(dH, dormerDepth);
+    const shedLen = Math.sqrt(dH * dH + dormerDepth * dormerDepth);
+    const shedRoof = new THREE.Mesh(
+      new THREE.BoxGeometry(capWidth + 1.0, 0.35, shedLen),
+      materials.roof
+    );
+    shedRoof.position.set(
+      capCenterX,
+      eaveY + dH / 2,
+      dormerFrontZ + dormerDepth / 2
+    );
+    shedRoof.rotation.x = shedAngle;
+    shedRoof.castShadow = true;
+    shedRoof.userData.dormerIndex = 0;
+    capGroup.add(shedRoof);
+
+    // 3. Side walls — triangular gable cheeks on each end.
+    for (const side of [-1, 1]) {
+      const sideShape = new THREE.Shape();
+      sideShape.moveTo(0, 0);
+      sideShape.lineTo(dormerDepth, 0);
+      sideShape.lineTo(0, dH);
+      sideShape.closePath();
+
+      const sideMesh = new THREE.Mesh(
+        new THREE.ExtrudeGeometry(sideShape, { depth: 0.15, bevelEnabled: false }),
+        materials.siding
+      );
+      const sideX = side === -1 ? capLeft : capRight;
+      sideMesh.position.set(sideX + side * 0.08, eaveY, dormerFrontZ);
+      sideMesh.rotation.y = -Math.PI / 2;
+      if (side === 1) {
+        sideMesh.rotation.y = Math.PI / 2;
+        sideMesh.position.z = dormerFrontZ + dormerDepth;
+      }
+      sideMesh.castShadow = true;
+      sideMesh.userData.dormerIndex = 0;
+      capGroup.add(sideMesh);
+    }
+
+    // 4. Eave returns — false eave trim on each outer side.
+    if (dim.dormerFalseEave !== false) {
+      for (const side of [-1, 1]) {
+        const returnX = side === -1 ? capLeft - 0.6 : capRight + 0.6;
+        const eaveReturn = new THREE.Mesh(
+          new THREE.BoxGeometry(1.6, 0.55, 0.45),
+          materials.trim
+        );
+        eaveReturn.position.set(returnX, eaveY - 0.28, dormerFrontZ + 0.1);
+        eaveReturn.castShadow = true;
+        eaveReturn.userData.dormerIndex = 0;
+        capGroup.add(eaveReturn);
+
+        // Inner eave return (double-wide stepped profile)
+        if (dim.dormerInnerFalseEave !== false) {
+          const innerReturn = new THREE.Mesh(
+            new THREE.BoxGeometry(1.2, 0.45, 0.35),
+            materials.trim
+          );
+          innerReturn.position.set(returnX, eaveY + 0.18, dormerFrontZ + 0.25);
+          innerReturn.castShadow = true;
+          innerReturn.userData.dormerIndex = 0;
+          innerReturn.name = 'innerFalseEave';
+          capGroup.add(innerReturn);
+        }
+      }
+
+      // Continuous fascia trim across the top of the front wall.
+      const fascia = new THREE.Mesh(
+        new THREE.BoxGeometry(capWidth + 2.4, 0.5, 0.2),
+        materials.trim
+      );
+      fascia.position.set(capCenterX, eaveY + dH + 0.1, dormerFrontZ - 0.05);
+      fascia.castShadow = true;
+      fascia.userData.dormerIndex = 0;
+      capGroup.add(fascia);
+
+      // Bottom trim across the eave line.
+      const bottomTrim = new THREE.Mesh(
+        new THREE.BoxGeometry(capWidth + 2.4, 0.35, 0.18),
+        materials.trim
+      );
+      bottomTrim.position.set(capCenterX, eaveY - 0.18, dormerFrontZ + 0.05);
+      bottomTrim.castShadow = true;
+      bottomTrim.userData.dormerIndex = 0;
+      capGroup.add(bottomTrim);
+    }
+
+    // 5. Accent windows — one in each dormer position.
+    if (dim.dormerWindow !== false) {
+      for (const posX of xPositions) {
+        const winW = Math.min(3.2, dW * 0.4);
+        const winH = Math.min(2.5, dH * 0.5);
+
+        const glass = new THREE.Mesh(
+          new THREE.BoxGeometry(winW, winH, 0.1),
+          materials.glass
+        );
+        glass.position.set(posX, eaveY + dH * 0.35, dormerFrontZ - 0.05);
+        glass.userData.dormerIndex = 0;
+        capGroup.add(glass);
+
+        const frame = new THREE.Mesh(
+          new THREE.BoxGeometry(winW + 0.4, winH + 0.4, 0.08),
+          materials.trim
+        );
+        frame.position.set(posX, eaveY + dH * 0.35, dormerFrontZ - 0.03);
+        frame.userData.dormerIndex = 0;
+        capGroup.add(frame);
+      }
+    }
+
+    g.add(capGroup);
+    return g;
+  }
+
+  // ── Individual (separate) dormers ────────────────────────────────────
   for (let i = 0; i < xPositions.length; i++) {
     const posX = xPositions[i];
     const dormerGroup = new THREE.Group();

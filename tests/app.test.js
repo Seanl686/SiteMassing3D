@@ -271,3 +271,34 @@ test('14. Nested Inner False Eave (Double-Wide Stepped Profile)', () => {
   });
   assert.equal(innerEaves2.length, 0, 'Inner false eave absent when disabled');
 });
+
+test('15. Connected Dormer Cap (Double-Wide Merged Shed Profile)', () => {
+  const home = defaultHome();
+  home.dimensions.dormerCount = 2;
+  home.dimensions.dormerConnected = true;
+  home.dimensions.dormerFalseEave = true;
+  home.dimensions.dormerInnerFalseEave = true;
+  home.dimensions.dormerWindow = true;
+
+  const root = buildHome(home, defaultScene());
+  const roof = root.children.find((c) => c.name === 'roof');
+  assert.ok(roof, 'Roof group exists');
+  const dormers = roof.children.find((c) => c.name === 'dormers');
+  assert.ok(dormers, 'Dormers group generated');
+
+  // Connected mode produces a single cap group, not two separate dormers.
+  assert.equal(dormers.children.length, 1, 'Single connected cap group');
+  const cap = dormers.children[0];
+  assert.equal(cap.name, 'dormer:connected', 'Cap group named dormer:connected');
+
+  // Should contain: front wall, shed roof, 2 side walls, 2 eave returns,
+  // 2 inner eave returns, top fascia, bottom trim, and 4 window meshes (2 glass + 2 frame).
+  assert.ok(cap.children.length >= 10, `Cap has ${cap.children.length} children (expected >= 10)`);
+
+  // Verify inner false eaves exist
+  const innerEaves = [];
+  cap.traverse((child) => {
+    if (child.name === 'innerFalseEave') innerEaves.push(child);
+  });
+  assert.equal(innerEaves.length, 2, 'Two inner false eave returns (one per side)');
+});

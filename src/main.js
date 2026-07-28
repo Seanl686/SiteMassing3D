@@ -180,6 +180,7 @@ function syncForm() {
   if ($('f_dormerStyle')) $('f_dormerStyle').value = state.home.dimensions.dormerStyle || 'gable';
   if ($('f_dormerFalseEave')) $('f_dormerFalseEave').checked = state.home.dimensions.dormerFalseEave !== false;
   if ($('f_dormerInnerFalseEave')) $('f_dormerInnerFalseEave').checked = state.home.dimensions.dormerInnerFalseEave !== false;
+  if ($('f_dormerConnected')) $('f_dormerConnected').checked = !!state.home.dimensions.dormerConnected;
   if ($('f_dormerWindow')) $('f_dormerWindow').checked = state.home.dimensions.dormerWindow !== false;
   for (const [id, key] of colorFields) $(id).value = state.home.colors[key];
   for (const [id, key] of planFields) $(id).value = state.home.plan[key];
@@ -282,6 +283,12 @@ function bind() {
   if ($('f_dormerInnerFalseEave')) {
     $('f_dormerInnerFalseEave').addEventListener('change', (e) => {
       state.home.dimensions.dormerInnerFalseEave = e.target.checked;
+      rebuild(); save();
+    });
+  }
+  if ($('f_dormerConnected')) {
+    $('f_dormerConnected').addEventListener('change', (e) => {
+      state.home.dimensions.dormerConnected = e.target.checked;
       rebuild(); save();
     });
   }

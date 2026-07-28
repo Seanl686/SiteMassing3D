@@ -38,6 +38,7 @@ export function defaultHome() {
       dormerHeightFt: 4.5,
       dormerFalseEave: true,
       dormerInnerFalseEave: true,  // nested inner return band (double-wide)
+      dormerConnected: false,      // merge double dormers into one continuous cap
       dormerWindow: true,
       dormerPositions: [],          // custom X offsets in ft; empty = auto-place
     },
