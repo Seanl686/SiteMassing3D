@@ -946,10 +946,16 @@ function bind() {
     save();
   });
 
-  const doShot = () => shoot(stage, state.home, state.scene, state.export, currentViewName);
+  const doShot = () => {
+    shoot(stage, state.home, state.scene, state.export, currentViewName);
+    updateSitePhotoPlate();
+  };
   $('btnShot').addEventListener('click', doShot);
   $('btnShot2').addEventListener('click', doShot);
-  $('btnSheet').addEventListener('click', () => contactSheet(stage, state.home, state.scene, state.export));
+  $('btnSheet').addEventListener('click', () => {
+    contactSheet(stage, state.home, state.scene, state.export);
+    updateSitePhotoPlate();
+  });
 
   canvas.addEventListener('pointerdown', onPick);
   // Move/up live on the window so a drag survives the pointer leaving the canvas.
