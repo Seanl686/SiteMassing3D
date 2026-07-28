@@ -354,6 +354,7 @@ main.sidebar-collapsed #sidebar {
 }
 
 .panel.collapsible .panel-header h2 .count {
+  white-space: nowrap;
   color: var(--cat);
   font: 500 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing: 0;
@@ -398,11 +399,16 @@ main.sidebar-collapsed #sidebar {
 
 .panel.collapsible .panel-body {
   display: none;
-  padding: 12px;
+  /* Left pad matches the header's, so labels, fields and the code chip all sit
+     on one vertical line down the whole sidebar. */
+  padding: 12px 12px 16px 15px;
 }
 
 .panel.collapsible.open .panel-body {
   display: block;
+  /* A trace of the category colour bleeding off the spine — enough to tell two
+     open panels apart while scrolling, not enough to tint the controls. */
+  background: linear-gradient(90deg, color-mix(in srgb, var(--cat) 5%, transparent), transparent 45%), var(--panel);
 }
 
 .panel h2 {
@@ -416,10 +422,24 @@ main.sidebar-collapsed #sidebar {
 
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px 8px; }
 .grid2 label, .row { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.grid2 label span, .row > span { font-size: 11px; color: var(--dim); }
-.row { margin-bottom: 6px; }
-.row.check, label.check { flex-direction: row; align-items: center; gap: 7px; margin-top: 6px; }
+.grid2 label span, .row > span { font-size: 10.5px; color: var(--dim); letter-spacing: 0.01em; }
+.row { margin-bottom: 8px; }
+/* Checkboxes are settings, not fields — group them tighter than the value grid
+   and let the category colour carry the "on" state. */
+.row.check, label.check { flex-direction: row; align-items: center; gap: 7px; margin-top: 5px; }
 .row.check span { font-size: 12px; color: var(--text); }
+.panel-body .grid2 + .row.check { margin-top: 10px; }
+
+/* Numbers read as measurements: one mono face for every dimension field, the
+   HUD and the code chips, so digits line up column to column. */
+input[type=number] { font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+input:focus-visible, select:focus-visible, button:focus-visible {
+  outline: 2px solid var(--cat, var(--accent));
+  outline-offset: 1px;
+  border-color: transparent;
+}
+input[type=text]:focus, input[type=number]:focus, select:focus { border-color: var(--cat, var(--accent)); }
 .btnrow { display: flex; gap: 5px; margin-bottom: 8px; }
 .btnrow button { flex: 1; }
 
@@ -428,10 +448,20 @@ main.sidebar-collapsed #sidebar {
   background: none; border: 1px solid var(--line); border-radius: 5px; cursor: pointer;
 }
 
-input[type=range] { width: 100%; accent-color: var(--accent); }
-input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; }
+input[type=range] { width: 100%; accent-color: var(--cat, var(--accent)); }
+input[type=checkbox] { accent-color: var(--cat, var(--accent)); width: 15px; height: 15px; }
 
-.hint { color: var(--dim); font-size: 11px; margin: 8px 0 0; }
+/* Instructions sit behind the controls, not beside them: quieter type, indented
+   off a hairline so the eye can skip the block once it has been read. */
+.hint {
+  color: #7f8894;
+  font-size: 10.5px;
+  line-height: 1.5;
+  margin: 8px 0 0;
+  padding-left: 8px;
+  border-left: 1px solid var(--line);
+}
+.hint b { color: #a9b2be; font-weight: 600; }
 
 /* ---------- opening rows ---------- */
 
@@ -448,23 +478,39 @@ input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; }
 .opening .grid4 input[type=number],
 .group-card .grid4 input[type=number] { appearance: textfield; -moz-appearance: textfield; }
 
+/* A row is a unit card: hairline by default, category-lit when selected, gold
+   when it is one of several. Three states, three levels of contrast. */
 .opening {
+  --unit: var(--cat, var(--accent));
+  position: relative;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-left: 3px solid #3d444e;
+  border-radius: 5px;
   padding: 7px 8px;
   margin-bottom: 7px;
   background: var(--panel2);
+  transition: border-color 0.12s ease, background 0.12s ease;
 }
-.opening.sel { border-color: var(--accent); }
+.opening:hover { border-left-color: color-mix(in srgb, var(--unit) 60%, transparent); }
+.opening.sel {
+  border-color: var(--unit);
+  border-left-color: var(--unit);
+  background: color-mix(in srgb, var(--unit) 9%, var(--panel2));
+}
 .opening header {
   display: flex; align-items: center; gap: 6px;
-  margin-bottom: 6px; font-size: 12px;
+  margin-bottom: 7px; font-size: 12px;
 }
+/* Door / slider / window each get their own tag colour, repeated on the type
+   select and nowhere else, so the list is scannable by type at a glance. */
 .opening header .tag {
-  font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
-  background: var(--accent2); border-radius: 3px; padding: 1px 5px;
+  font: 600 9.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-transform: uppercase; letter-spacing: .08em;
+  border-radius: 3px; padding: 3px 5px;
+  color: #12161b; background: #e8a33c;
 }
-.opening header .tag.window { background: #4a5568; }
+.opening header .tag.slider { background: #c99cf5; }
+.opening header .tag.window { background: #4fd6c0; }
 .opening header input.lbl { flex: 1; padding: 3px 6px; font-size: 12px; }
 /* Four across when the sidebar is wide enough for a legible field, otherwise
    two — a clipped "46.83" is worse than an extra row. */
@@ -476,16 +522,50 @@ input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; }
 .opening .foot { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; align-items: center; }
 .opening .foot select { flex: 1 1 120px; min-width: 0; }
 .opening header input.pick { width: 13px; height: 13px; flex: 0 0 auto; cursor: pointer; }
-.opening.ingroup { border-color: #ffd479; background: rgba(255, 212, 121, 0.06); }
-.opening.ingroup.sel { border-color: var(--accent); }
+.opening.ingroup {
+  border-color: rgba(255, 212, 121, 0.55);
+  border-left-color: #ffd479;
+  background: rgba(255, 212, 121, 0.07);
+}
+/* The anchor of a group: same gold, but solid — align/match measure from here. */
+.opening.ingroup.sel { border-color: #ffd479; background: rgba(255, 212, 121, 0.14); }
+
+/* Wall grouping inside the openings list: proximity does the work, a hairline
+   plus a mono label marks each break. */
+.wall-head {
+  margin: 12px 0 5px;
+  font: 600 9.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #7d8794;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.selected-unit-section { margin-bottom: 4px; }
+.subhead.group { color: #e2c98a; }
+.subhead.group::before { background: #ffd479; }
 
 /* ---------- group edit card ---------- */
 
-.group-card { border: 1px solid rgba(255, 212, 121, 0.45); border-radius: 6px; padding: 8px; background: rgba(255, 212, 121, 0.06); }
+.group-card {
+  border: 1px solid rgba(255, 212, 121, 0.45);
+  border-left: 3px solid #ffd479;
+  border-radius: 5px;
+  padding: 9px;
+  background: rgba(255, 212, 121, 0.07);
+}
 .group-head {
   display: flex; align-items: center; justify-content: space-between; gap: 6px;
-  font-size: 11px; font-weight: 600; color: #e2e7ee; margin-bottom: 6px;
+  margin-bottom: 7px; padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 212, 121, 0.25);
+  font: 600 10px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.02em;
+  color: #f3e6c8;
 }
+.group-head button { flex: 0 0 auto; padding: 3px 9px; font-size: 10.5px; }
+.group-card .group-nudge > span,
+.group-card .grid4 span,
+.group-card .grid2 span { color: #b9ae94; }
 .group-card .grid4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); gap: 5px; }
 .group-card .grid4 label { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .group-card .grid4 span { font-size: 10px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

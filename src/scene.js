@@ -188,12 +188,14 @@ export class Stage {
   }
 
   resize(w, h) {
+    if (w <= 0 || h <= 0) return;
     this.renderer.setSize(w, h, false);
     this.persp.aspect = w / h;
     this.persp.updateProjectionMatrix();
     this._aspect = w / h;
     this.reframeOrtho();
-    this.refit();
+    if (this.controls) this.controls.update();
+    if (this.orthoControls) this.orthoControls.update();
   }
 
   /**

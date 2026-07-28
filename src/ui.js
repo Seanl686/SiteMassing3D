@@ -40,8 +40,8 @@ export function renderOpeningList(container, home, cb) {
     topSec.className = 'selected-unit-section';
 
     const h = document.createElement('h3');
-    h.textContent = `Group Edit — ${groupUnits.length} selected`;
-    h.style.cssText = 'margin:6px 0 6px;font-size:11px;color:#ffd479;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;';
+    h.className = 'subhead group';
+    h.textContent = `Group edit — ${groupUnits.length} selected`;
     topSec.appendChild(h);
     topSec.appendChild(renderGroupCard(groupUnits, cb));
     container.appendChild(topSec);
@@ -53,8 +53,8 @@ export function renderOpeningList(container, home, cb) {
     topSec.className = 'selected-unit-section';
 
     const h = document.createElement('h3');
-    h.textContent = 'Selected Unit Details';
-    h.style.cssText = 'margin:6px 0 6px;font-size:11px;color:#6fb2ff;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;';
+    h.className = 'subhead';
+    h.textContent = 'Selected unit';
     topSec.appendChild(h);
 
     const card = renderSelectedUnitCard(selectedUnit, cb);
@@ -69,8 +69,8 @@ export function renderOpeningList(container, home, cb) {
   }
 
   const allHeader = document.createElement('h3');
-  allHeader.textContent = selectedUnit ? 'All Openings by Wall' : 'Openings';
-  allHeader.style.cssText = 'margin:12px 0 6px;font-size:11px;color:#9aa2ad;font-weight:600;';
+  allHeader.className = 'subhead';
+  allHeader.textContent = selectedUnit ? 'All openings by wall' : 'All openings';
   container.appendChild(allHeader);
 
   for (const wall of WALLS) {
@@ -78,8 +78,8 @@ export function renderOpeningList(container, home, cb) {
     if (!list.length) continue;
 
     const h = document.createElement('div');
+    h.className = 'wall-head';
     h.textContent = WALL_LABEL[wall];
-    h.style.cssText = 'margin:8px 0 4px;font-size:10px;color:#858d98;font-weight:600;text-transform:uppercase;';
     container.appendChild(h);
 
     for (const o of list) {
@@ -456,7 +456,7 @@ function row(o, cb) {
   head.appendChild(pick);
 
   const tag = document.createElement('span');
-  tag.className = 'tag' + (o.type === 'window' ? ' window' : '');
+  tag.className = `tag ${o.type}`;
   tag.textContent = o.type;
   head.appendChild(tag);
 

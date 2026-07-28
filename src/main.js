@@ -1331,8 +1331,12 @@ function load() {
 // ---------------------------------------------------------------------------
 
 function fit() {
-  const r = canvas.parentElement.getBoundingClientRect();
-  stage.resize(Math.max(1, Math.floor(r.width)), Math.max(1, Math.floor(r.height)));
+  const p = canvas.parentElement;
+  if (!p) return;
+  const r = p.getBoundingClientRect();
+  if (r.width > 0 && r.height > 0) {
+    stage.resize(Math.floor(r.width), Math.floor(r.height));
+  }
 }
 
 syncForm();
@@ -1342,6 +1346,11 @@ refreshList();
 fit();
 updatePlanPlate(stage, state.home.plan);
 stage.setView('hero-left', state.home.dimensions, state.scene);
+
+if (window.ResizeObserver && canvas.parentElement) {
+  const ro = new ResizeObserver(fit);
+  ro.observe(canvas.parentElement);
+}
 addEventListener('resize', fit);
 
 // Debug handle: lets you poke at state/stage from the console without a build step.
