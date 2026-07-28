@@ -444,8 +444,8 @@ function buildDormers(dim, materials) {
       capGroup.add(sideMesh);
     }
 
-    // 4. Eave returns — false eave trim on each outer side.
-    if (dim.dormerFalseEave !== false) {
+    // 4. Eave returns — false eave trim on each outer side (omitted when isContinuous is true for a 100% seamless wall).
+    if (dim.dormerFalseEave !== false && !isContinuous) {
       for (const side of [-1, 1]) {
         const returnX = side === -1 ? capLeft - 0.6 : capRight + 0.6;
         const eaveReturn = new THREE.Mesh(
