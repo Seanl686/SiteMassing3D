@@ -71,6 +71,7 @@ export function defaultScene() {
     stepRailings: 'both', // 'none', 'left', 'right', 'both'
     railMat: 'pressure_treated', // 'pressure_treated', 'white_trim', 'black_metal', 'matching_trim'
     balusterStyle: 'balusters', // 'balusters', 'horizontal_cables', 'open'
+    wireframe: false,
     blockLandscape: false,
     labels: false,
     dims: false,

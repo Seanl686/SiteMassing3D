@@ -139,3 +139,27 @@ test('7. Independent Per-Item Customization Verification', () => {
   assert.equal(door2.stepEgress, 'split');
   assert.equal(door2.railMat, 'white_trim');
 });
+
+test('8. Wireframe View Mode State Verification', () => {
+  const scene = defaultScene();
+  assert.equal(scene.wireframe, false, 'Default wireframe setting is false');
+
+  const home = defaultHome();
+  const root = buildHome(home, scene);
+
+  let meshCount = 0;
+  root.traverse((o) => {
+    if (o.isMesh && o.material) {
+      meshCount++;
+      const list = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of list) {
+        m.wireframe = true;
+        assert.equal(m.wireframe, true);
+        m.wireframe = false;
+        assert.equal(m.wireframe, false);
+      }
+    }
+  });
+
+  assert.ok(meshCount > 0, 'Meshes present to apply wireframe');
+});

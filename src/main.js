@@ -165,7 +165,7 @@ const photoFields = [
 ];
 const sceneNums = [['s_focal', 'focal'], ['s_eye', 'eye'], ['s_landingDepth', 'landingDepthFt']];
 const sceneRanges = [['s_sunAz', 'sunAz'], ['s_sunEl', 'sunEl'], ['s_flat', 'flat']];
-const sceneChecks = [['s_grid', 'grid'], ['s_shadow', 'shadow'], ['s_steps', 'steps'], ['s_stepLanding', 'stepLanding'], ['s_blockLandscape', 'blockLandscape'], ['s_labels', 'labels'], ['s_dims', 'dims']];
+const sceneChecks = [['s_grid', 'grid'], ['s_shadow', 'shadow'], ['s_steps', 'steps'], ['s_stepLanding', 'stepLanding'], ['s_wireframe', 'wireframe'], ['s_blockLandscape', 'blockLandscape'], ['s_labels', 'labels'], ['s_dims', 'dims']];
 
 function syncForm() {
   $('f_name').value = state.home.name;
@@ -195,6 +195,7 @@ function syncForm() {
   if ($('s_stepEgress')) $('s_stepEgress').value = state.scene.stepEgress || 'front';
   if ($('s_railMat')) $('s_railMat').value = state.scene.railMat || 'pressure_treated';
   if ($('s_balusterStyle')) $('s_balusterStyle').value = state.scene.balusterStyle || 'balusters';
+  if ($('btnWireframe')) $('btnWireframe').classList.toggle('active', !!state.scene.wireframe);
   $('s_bg').value = state.scene.bg;
   $('x_w').value = state.export.w;
   $('x_h').value = state.export.h;
@@ -432,6 +433,15 @@ function bind() {
   }
   if ($('btnRotR90')) {
     $('btnRotR90').addEventListener('click', () => stage.rotateView(90));
+  }
+  if ($('btnWireframe')) {
+    $('btnWireframe').addEventListener('click', () => {
+      state.scene.wireframe = !state.scene.wireframe;
+      if ($('s_wireframe')) $('s_wireframe').checked = state.scene.wireframe;
+      $('btnWireframe').classList.toggle('active', state.scene.wireframe);
+      stage.setWireframe(state.scene.wireframe);
+      save();
+    });
   }
 
   for (const b of document.querySelectorAll('#viewPresets button')) {

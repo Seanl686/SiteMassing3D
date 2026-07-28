@@ -122,6 +122,20 @@ export class Stage {
     this.scene.background = o.bgVisible === false ? null : new THREE.Color(o.bg);
     this.persp.fov = focalToFov(o.focal);
     this.persp.updateProjectionMatrix();
+    this.setWireframe(o.wireframe);
+  }
+
+  setWireframe(enabled) {
+    if (!this.homeGroup) return;
+    const wf = !!enabled;
+    this.homeGroup.traverse((o) => {
+      if (o.isMesh && o.material) {
+        const list = Array.isArray(o.material) ? o.material : [o.material];
+        for (const m of list) {
+          m.wireframe = wf;
+        }
+      }
+    });
   }
 
   resize(w, h) {
