@@ -180,6 +180,8 @@ function syncForm() {
     if ($(id)) $(id).checked = !!state.scene[key];
   }
   if ($('s_stepRailings')) $('s_stepRailings').value = state.scene.stepRailings || 'both';
+  if ($('s_stepMat')) $('s_stepMat').value = state.scene.stepMat || 'concrete';
+  if ($('s_stepEgress')) $('s_stepEgress').value = state.scene.stepEgress || 'front';
   $('s_bg').value = state.scene.bg;
   $('x_w').value = state.export.w;
   $('x_h').value = state.export.h;
@@ -196,7 +198,9 @@ function loadHome(raw) {
   rebuild();
   refreshList();
   updatePlanPlate(stage, state.home.plan);
-  stage.setView('hero-left', state.home.dimensions, state.scene);
+  if (!stage.userMoved) {
+    stage.setView('hero-left', state.home.dimensions, state.scene);
+  }
 }
 
 function bind() {
@@ -367,6 +371,18 @@ function bind() {
   if ($('s_stepRailings')) {
     $('s_stepRailings').addEventListener('change', (e) => {
       state.scene.stepRailings = e.target.value;
+      rebuild();
+    });
+  }
+  if ($('s_stepMat')) {
+    $('s_stepMat').addEventListener('change', (e) => {
+      state.scene.stepMat = e.target.value;
+      rebuild();
+    });
+  }
+  if ($('s_stepEgress')) {
+    $('s_stepEgress').addEventListener('change', (e) => {
+      state.scene.stepEgress = e.target.value;
       rebuild();
     });
   }
