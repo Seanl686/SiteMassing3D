@@ -80,6 +80,11 @@ export function renderToCanvas(stage, w, h, alpha, sceneOpts, home) {
   out.width = w; out.height = h;
   const ctx = out.getContext('2d');
 
+  if (!alpha && sceneOpts?.bg) {
+    ctx.fillStyle = sceneOpts.bg;
+    ctx.fillRect(0, 0, w, h);
+  }
+
   if (useBgPhoto) {
     const img = getCachedImage(sp.src);
     if (img && (img.complete || img.naturalWidth)) {
@@ -164,12 +169,12 @@ function burnCaption(canvas, text) {
 
 export function shoot(stage, home, sceneOpts, exportOpts, viewName) {
   const dom = stage.renderer?.domElement;
-  const liveAspect = (dom && dom.clientHeight > 0)
-    ? (dom.clientWidth / dom.clientHeight)
-    : (exportOpts.w / (exportOpts.h || 1));
+  const liveW = (dom && dom.clientWidth > 0) ? dom.clientWidth : 1200;
+  const liveH = (dom && dom.clientHeight > 0) ? dom.clientHeight : 800;
+  const liveAspect = liveW / liveH;
 
-  // Match live screen aspect ratio for 1-to-1 exact viewport replica
-  const targetW = exportOpts.w || 1200;
+  // Preserve the exact live screen aspect ratio so distance, zoom, and framing match 1-to-1
+  const targetW = exportOpts.w && exportOpts.w > 0 ? exportOpts.w : liveW;
   const targetH = Math.round(targetW / liveAspect);
 
   const c = renderToCanvas(stage, targetW, targetH, exportOpts.alpha, sceneOpts, home);
