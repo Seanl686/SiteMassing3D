@@ -64,10 +64,19 @@ button.danger:hover { border-color: #e06c6c; color: #ffb3b3; }
 
 main { flex: 1 1 auto; display: flex; min-height: 0; position: relative; }
 
+/* Sidebar width tracks the viewport so the dense number grids get room on a
+   wide screen and stay legible on a laptop. Drag the bottom-right corner to
+   override it by hand. */
+:root { --side-w: clamp(248px, 21vw, 380px); }
+
 #sidebar {
-  width: 260px;
-  flex: 0 0 260px;
+  width: var(--side-w);
+  flex: 0 0 auto;
+  min-width: 220px;
+  max-width: 560px;
+  resize: horizontal;
   overflow-y: auto;
+  overflow-x: hidden;
   background: var(--panel);
   border-right: 1px solid var(--line);
   padding-bottom: 40px;
@@ -77,9 +86,15 @@ main { flex: 1 1 auto; display: flex; min-height: 0; position: relative; }
 main.sidebar-collapsed #sidebar {
   width: 0px;
   flex: 0 0 0px;
+  min-width: 0;
+  resize: none;
   overflow: hidden;
   padding: 0;
   border-right: none;
+}
+
+@media (max-width: 1000px) {
+  :root { --side-w: clamp(220px, 32vw, 300px); }
 }
 
 .sidebar-toggle-btn {
@@ -322,8 +337,8 @@ main.sidebar-collapsed #sidebar {
 }
 .panel h2 .count { color: var(--accent); }
 
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; }
-.grid2 label, .row { display: flex; flex-direction: column; gap: 3px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px 8px; }
+.grid2 label, .row { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .grid2 label span, .row > span { font-size: 11px; color: var(--dim); }
 .row { margin-bottom: 6px; }
 .row.check, label.check { flex-direction: row; align-items: center; gap: 7px; margin-top: 6px; }
@@ -343,6 +358,19 @@ input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; }
 
 /* ---------- opening rows ---------- */
 
+/* Spin buttons cost ~15px of a field that is already only ~70px wide, and the
+   opening values are far more often typed, dragged in the viewport, or nudged
+   from the group card than stepped. Arrow keys still step by 0.25. */
+.opening .grid4 input[type=number]::-webkit-outer-spin-button,
+.opening .grid4 input[type=number]::-webkit-inner-spin-button,
+.group-card .grid4 input[type=number]::-webkit-outer-spin-button,
+.group-card .grid4 input[type=number]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.opening .grid4 input[type=number],
+.group-card .grid4 input[type=number] { appearance: textfield; -moz-appearance: textfield; }
+
 .opening {
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -361,12 +389,15 @@ input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; }
 }
 .opening header .tag.window { background: #4a5568; }
 .opening header input.lbl { flex: 1; padding: 3px 6px; font-size: 12px; }
-.opening .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
-.opening .grid4 label { display: flex; flex-direction: column; gap: 2px; }
-.opening .grid4 span { font-size: 10px; color: var(--dim); }
-.opening .grid4 input, .opening select { padding: 3px 5px; font-size: 12px; }
-.opening .foot { display: flex; gap: 5px; margin-top: 6px; align-items: center; }
-.opening .foot select { flex: 1; }
+/* Four across when the sidebar is wide enough for a legible field, otherwise
+   two — a clipped "46.83" is worse than an extra row. */
+.opening .grid4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); gap: 5px; }
+.opening .grid4 label { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.opening .grid4 span { font-size: 10px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.opening .grid4 input, .opening select { padding: 3px 5px; font-size: 12px; min-width: 0; }
+.opening .stair-custom-sub .grid2 { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.opening .foot { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; align-items: center; }
+.opening .foot select { flex: 1 1 120px; min-width: 0; }
 .opening header input.pick { width: 13px; height: 13px; flex: 0 0 auto; cursor: pointer; }
 .opening.ingroup { border-color: #ffd479; background: rgba(255, 212, 121, 0.06); }
 .opening.ingroup.sel { border-color: var(--accent); }
@@ -378,17 +409,18 @@ input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; }
   display: flex; align-items: center; justify-content: space-between; gap: 6px;
   font-size: 11px; font-weight: 600; color: #e2e7ee; margin-bottom: 6px;
 }
-.group-card .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
-.group-card .grid4 label { display: flex; flex-direction: column; gap: 2px; }
-.group-card .grid4 span { font-size: 10px; color: var(--dim); }
-.group-card .grid4 input, .group-card select { padding: 3px 5px; font-size: 12px; }
-.group-card .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; }
-.group-card .grid2 label { display: flex; flex-direction: column; gap: 2px; }
-.group-card .grid2 span { font-size: 10px; color: var(--dim); }
-.group-card .foot { display: flex; gap: 5px; margin-top: 6px; align-items: center; }
-.group-card .foot select { flex: 1; min-width: 0; }
-.group-nudge { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 5px; }
+.group-card .grid4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); gap: 5px; }
+.group-card .grid4 label { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.group-card .grid4 span { font-size: 10px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.group-card .grid4 input, .group-card select { padding: 3px 5px; font-size: 12px; min-width: 0; }
+.group-card .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 5px; }
+.group-card .grid2 label { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.group-card .grid2 span { font-size: 10px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.group-card .foot { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; align-items: center; }
+.group-card .foot select { flex: 1 1 130px; min-width: 0; }
+/* Always the four ± steps on one line — they stay legible even at 220px. */
+.group-nudge { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin-top: 5px; }
 .group-nudge > span { grid-column: 1 / -1; font-size: 10px; color: var(--dim); }
 .group-nudge button { padding: 2px 0; font-size: 11px; }
-.group-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; margin-top: 7px; }
+.group-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 4px; margin-top: 7px; }
 .group-actions button { padding: 4px 2px; font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
