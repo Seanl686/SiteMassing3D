@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { Stage } from './scene.js';
 import { buildHome, disposeTree, wallFrames, clampOpening, fmtFt, derived } from './build.js';
-import { renderOpeningList, syncOpeningValues } from './ui.js';
+import { renderOpeningList, syncOpeningValues, initAccordions } from './ui.js';
 import { updatePlanPlate, nearestWallHit } from './plan.js';
 import { Gizmo, wallPlaneHit, applyDrag } from './gizmo.js';
 import { shoot, contactSheet, renderToCanvas } from './capture.js';
@@ -223,6 +223,7 @@ function loadHome(raw) {
 }
 
 function bind() {
+  initAccordions();
   $('f_name').addEventListener('input', (e) => { state.home.name = e.target.value; updateHud(); save(); });
 
   for (const [id, key] of dimFields) {

@@ -44,210 +44,253 @@
 </header>
 
 <main>
-  <aside id="sidebar">
-
-    <section class="panel">
-      <h2>Home</h2>
-      <label class="row"><span>Model name</span><input id="f_name" type="text" autocomplete="off"></label>
-      <div class="grid2">
-        <label><span>Width (ft)</span><input id="f_width" type="number" autocomplete="off" step="0.1" min="8"></label>
-        <label><span>Length (ft)</span><input id="f_length" type="number" autocomplete="off" step="0.1" min="8"></label>
-        <label><span>Wall height (ft)</span><input id="f_wallHeight" type="number" autocomplete="off" step="0.1" min="6"></label>
-        <label><span>Floor height (ft)</span><input id="f_floorHeight" type="number" autocomplete="off" step="0.05" min="0"></label>
-        <label><span>Roof pitch (/12)</span><input id="f_pitch" type="number" autocomplete="off" step="0.5" min="0" max="12"></label>
-        <label><span>Eave overhang (ft)</span><input id="f_eaveOverhang" type="number" autocomplete="off" step="0.1" min="0"></label>
-        <label><span>Rake overhang (ft)</span><input id="f_rakeOverhang" type="number" autocomplete="off" step="0.1" min="0"></label>
-        <label><span>Roof style</span>
-          <select id="f_roofStyle"><option value="gable">Gable (ridge along length)</option><option value="flat">Flat / low slope</option></select>
-        </label>
+  <aside id="side    <section class="panel collapsible open" id="panel_building">
+      <div class="panel-header">
+        <h2><span class="icon">🏡</span> Building Dimensions</h2>
+        <span class="chevron">▲</span>
       </div>
-
-      <h3 style="margin:12px 0 6px;font-size:11px;color:#6fb2ff;font-weight:600;text-transform:uppercase;">Roof Dormers &amp; False Eaves</h3>
-      <div class="grid2">
-        <label><span>Dormer count</span>
-          <select id="f_dormerCount">
-            <option value="0">0 (None)</option>
-            <option value="1">1 (Single Dormer)</option>
-            <option value="2">2 (Double / Twin Dormers)</option>
-          </select>
-        </label>
-        <label><span>Dormer style</span>
-          <select id="f_dormerStyle">
-            <option value="gable">Gable Dormer</option>
-          </select>
-        </label>
-        <label><span>Dormer width (ft)</span><input id="f_dormerWidth" type="number" autocomplete="off" step="0.5" min="4" max="20"></label>
-        <label><span>Dormer height (ft)</span><input id="f_dormerHeight" type="number" autocomplete="off" step="0.5" min="2" max="10"></label>
-      </div>
-      <label class="row check" style="margin-top:6px;"><input id="f_dormerFalseEave" type="checkbox" autocomplete="off"><span>False eave return band</span></label>
-      <label class="row check"><input id="f_dormerWindow" type="checkbox" autocomplete="off"><span>Accent dormer window</span></label>
-      <p class="hint" id="ratioHint"></p>
-    </section>
-
-    <section class="panel">
-      <h2>Colors</h2>
-      <div class="grid2 colors">
-        <label><span>Siding</span><input id="c_siding" type="color" autocomplete="off"></label>
-        <label><span>Trim</span><input id="c_trim" type="color" autocomplete="off"></label>
-        <label><span>Roof</span><input id="c_roof" type="color" autocomplete="off"></label>
-        <label><span>Skirting</span><input id="c_skirting" type="color" autocomplete="off"></label>
-        <label><span>Door</span><input id="c_door" type="color" autocomplete="off"></label>
-        <label><span>Glass</span><input id="c_glass" type="color" autocomplete="off"></label>
+      <div class="panel-body">
+        <label class="row"><span>Model name</span><input id="f_name" type="text" autocomplete="off"></label>
+        <div class="grid2">
+          <label><span>Width (ft)</span><input id="f_width" type="number" autocomplete="off" step="0.1" min="8"></label>
+          <label><span>Length (ft)</span><input id="f_length" type="number" autocomplete="off" step="0.1" min="8"></label>
+          <label><span>Wall height (ft)</span><input id="f_wallHeight" type="number" autocomplete="off" step="0.1" min="6"></label>
+          <label><span>Floor height (ft)</span><input id="f_floorHeight" type="number" autocomplete="off" step="0.05" min="0"></label>
+          <label><span>Roof pitch (/12)</span><input id="f_pitch" type="number" autocomplete="off" step="0.5" min="0" max="12"></label>
+          <label><span>Eave overhang (ft)</span><input id="f_eaveOverhang" type="number" autocomplete="off" step="0.1" min="0"></label>
+          <label><span>Rake overhang (ft)</span><input id="f_rakeOverhang" type="number" autocomplete="off" step="0.1" min="0"></label>
+          <label><span>Roof style</span>
+            <select id="f_roofStyle"><option value="gable">Gable (ridge along length)</option><option value="flat">Flat / low slope</option></select>
+          </label>
+        </div>
+        <p class="hint" id="ratioHint"></p>
       </div>
     </section>
 
-    <section class="panel">
-      <h2>Openings <span class="count" id="openCount"></span></h2>
-      <div class="btnrow">
-        <button id="btnAddDoor">+ Door</button>
-        <button id="btnAddSlider">+ Slider</button>
-        <button id="btnAddWindow">+ Window</button>
+    <section class="panel collapsible" id="panel_dormers">
+      <div class="panel-header">
+        <h2><span class="icon">🏛️</span> Roof Dormers &amp; False Eaves</h2>
+        <span class="chevron">▼</span>
       </div>
-      <p class="hint">Click a wall to add at that spot. Click a door or window to select it, drag to move, drag a blue handle to resize. <b>Shift</b> locks to one axis, <b>Alt</b> disables the 1&Prime; snap, <b>Del</b> removes. Offset is measured left&rarr;right as seen from outside that wall.</p>
-      <div id="openingList"></div>
-      <datalist id="heightPresets">
-        <option value="6.67" label="6'-8&quot; (Standard Door)"></option>
-        <option value="7.0" label="7'-0&quot; (Tall Door)"></option>
-        <option value="8.0" label="8'-0&quot; (Full Height Door)"></option>
-        <option value="3.5" label="3'-6&quot; (Standard Window)"></option>
-        <option value="4.0" label="4'-0&quot; (Tall Window)"></option>
-        <option value="5.0" label="5'-0&quot; (Picture Window)"></option>
-      </datalist>
-      <datalist id="widthPresets">
-        <option value="2.67" label="2'-8&quot; / 32&quot;"></option>
-        <option value="3.0" label="3'-0&quot; / 36&quot; (Standard Door)"></option>
-        <option value="3.5" label="3'-6&quot; / 42&quot;"></option>
-        <option value="4.0" label="4'-0&quot; / 48&quot; (Standard Window)"></option>
-        <option value="5.0" label="5'-0&quot; / 60&quot;"></option>
-        <option value="6.0" label="6'-0&quot; / 72&quot; (Sliding Door)"></option>
-      </datalist>
+      <div class="panel-body">
+        <div class="grid2">
+          <label><span>Dormer count</span>
+            <select id="f_dormerCount">
+              <option value="0">0 (None)</option>
+              <option value="1">1 (Single Dormer)</option>
+              <option value="2">2 (Double / Twin Dormers)</option>
+            </select>
+          </label>
+          <label><span>Dormer style</span>
+            <select id="f_dormerStyle">
+              <option value="gable">Gable Dormer</option>
+            </select>
+          </label>
+          <label><span>Dormer width (ft)</span><input id="f_dormerWidth" type="number" autocomplete="off" step="0.5" min="4" max="20"></label>
+          <label><span>Dormer height (ft)</span><input id="f_dormerHeight" type="number" autocomplete="off" step="0.5" min="2" max="10"></label>
+        </div>
+        <label class="row check" style="margin-top:6px;"><input id="f_dormerFalseEave" type="checkbox" autocomplete="off"><span>False eave return band</span></label>
+        <label class="row check"><input id="f_dormerWindow" type="checkbox" autocomplete="off"><span>Accent dormer window</span></label>
+      </div>
     </section>
 
-    <section class="panel">
-      <h2>Site photo &amp; perspective match</h2>
-      <label class="btn block" for="fileSitePhoto">Load site photo (PNG/JPG)</label>
-      <input type="file" id="fileSitePhoto" accept="image/*" hidden>
-      <div class="grid2">
-        <label><span>Photo fit mode</span>
-          <select id="sp_fitMode">
-            <option value="contain">Full photo (contain)</option>
-            <option value="cover">Fill stage (cover)</option>
-            <option value="100% 100%">Stretch to fit</option>
-          </select>
-        </label>
-        <label><span>Photo opacity</span><input id="sp_op" type="range" autocomplete="off" min="0.1" max="1" step="0.05"></label>
-        <label><span>Photo zoom</span><input id="sp_scale" type="range" autocomplete="off" min="0.5" max="3" step="0.05"></label>
-        <label><span>Pan X (%)</span><input id="sp_panX" type="number" autocomplete="off" step="1" min="-100" max="100"></label>
-        <label><span>Pan Y / Baseline (%)</span><input id="sp_panY" type="number" autocomplete="off" step="1" min="-100" max="100"></label>
-        <label><span>Photo angle (&deg;)</span><input id="sp_rot" type="number" autocomplete="off" step="1" min="-180" max="180"></label>
+    <section class="panel collapsible" id="panel_colors">
+      <div class="panel-header">
+        <h2><span class="icon">🎨</span> Exterior Materials &amp; Colors</h2>
+        <span class="chevron">▼</span>
       </div>
-      <label class="row check"><input id="sp_show" type="checkbox" autocomplete="off"><span>Show site photo background</span></label>
-      <label class="row check" style="margin-top:8px;background:rgba(111,178,255,0.12);padding:5px 8px;border-radius:4px;border:1px solid rgba(111,178,255,0.3);"><input id="sp_dragMode" type="checkbox" autocomplete="off"><span style="color:#6fb2ff;font-weight:600;">🖱️ Mouse Photo Drag: Pan &amp; Zoom photo with mouse</span></label>
-
-      <h3 style="margin:10px 0 6px;font-size:10px;color:#858d98;text-transform:uppercase;">Ground Horizon &amp; Camera Distance</h3>
-      <div class="grid2">
-        <label><span>Ground baseline Y (ft)</span><input id="sp_baselineY" type="number" autocomplete="off" step="0.5" min="-50" max="50"></label>
-        <label><span>Cam distance (ft)</span><input id="sp_camDist" type="number" autocomplete="off" step="1" min="5" max="500"></label>
+      <div class="panel-body">
+        <div class="grid2 colors">
+          <label><span>Siding</span><input id="c_siding" type="color" autocomplete="off"></label>
+          <label><span>Trim</span><input id="c_trim" type="color" autocomplete="off"></label>
+          <label><span>Roof</span><input id="c_roof" type="color" autocomplete="off"></label>
+          <label><span>Skirting</span><input id="c_skirting" type="color" autocomplete="off"></label>
+          <label><span>Door</span><input id="c_door" type="color" autocomplete="off"></label>
+          <label><span>Glass</span><input id="c_glass" type="color" autocomplete="off"></label>
+        </div>
       </div>
-
-      <h3 style="margin:10px 0 6px;font-size:10px;color:#858d98;text-transform:uppercase;">House Realignment / Lot Offset</h3>
-      <div class="grid2">
-        <label><span>House X (ft)</span><input id="sp_posX" type="number" autocomplete="off" step="0.5"></label>
-        <label><span>House Z (ft)</span><input id="sp_posZ" type="number" autocomplete="off" step="0.5"></label>
-        <label><span>Heading (&deg;)</span><input id="sp_rotY" type="number" autocomplete="off" step="1"></label>
-        <button id="btnResetPhoto" style="margin-top: auto;">Reset all align</button>
-      </div>
-      <p class="hint">Full photo displays uncropped. Adjust photo pan/zoom, ground baseline Y, and camera distance to align perspective independently of house lot position.</p>
     </section>
 
-    <section class="panel">
-      <h2>Floor plan plate</h2>
-      <label class="btn block" for="filePlan">Load plan image (PNG/JPG)</label>
-      <input type="file" id="filePlan" accept="image/*" hidden>
-      <div class="grid2">
-        <label><span>Plate width (ft)</span><input id="p_width" type="number" autocomplete="off" step="0.5"></label>
-        <label><span>Rotation (deg)</span><input id="p_rot" type="number" autocomplete="off" step="1"></label>
-        <label><span>Offset X (ft)</span><input id="p_x" type="number" autocomplete="off" step="0.25"></label>
-        <label><span>Offset Z (ft)</span><input id="p_z" type="number" autocomplete="off" step="0.25"></label>
-        <label><span>Opacity</span><input id="p_op" type="range" autocomplete="off" min="0" max="1" step="0.05"></label>
-        <label><span>Show</span><input id="p_show" type="checkbox" autocomplete="off"></label>
+    <section class="panel collapsible open" id="panel_openings">
+      <div class="panel-header">
+        <h2><span class="icon">🚪</span> Openings <span class="count" id="openCount"></span></h2>
+        <span class="chevron">▲</span>
       </div>
-      <label class="row check"><input id="p_pick" type="checkbox" autocomplete="off"><span>Plan-pick mode: click plan to drop a door on nearest wall</span></label>
-      <p class="hint">Scale the plate so its printed footprint matches the white outline, then trace door positions off it.</p>
+      <div class="panel-body">
+        <div class="btnrow">
+          <button id="btnAddDoor">+ Door</button>
+          <button id="btnAddSlider">+ Slider</button>
+          <button id="btnAddWindow">+ Window</button>
+        </div>
+        <p class="hint">Click a wall to add at that spot. Click a door or window to select it, drag to move, drag a blue handle to resize. <b>Shift</b> locks to one axis, <b>Alt</b> disables the 1&Prime; snap, <b>Del</b> removes. Offset is measured left&rarr;right as seen from outside that wall.</p>
+        <div id="openingList"></div>
+        <datalist id="heightPresets">
+          <option value="6.67" label="6'-8&quot; (Standard Door)"></option>
+          <option value="7.0" label="7'-0&quot; (Tall Door)"></option>
+          <option value="8.0" label="8'-0&quot; (Full Height Door)"></option>
+          <option value="3.5" label="3'-6&quot; (Standard Window)"></option>
+          <option value="4.0" label="4'-0&quot; (Tall Window)"></option>
+          <option value="5.0" label="5'-0&quot; (Picture Window)"></option>
+        </datalist>
+        <datalist id="widthPresets">
+          <option value="2.67" label="2'-8&quot; / 32&quot;"></option>
+          <option value="3.0" label="3'-0&quot; / 36&quot; (Standard Door)"></option>
+          <option value="3.5" label="3'-6&quot; / 42&quot;"></option>
+          <option value="4.0" label="4'-0&quot; (Standard Window)"></option>
+          <option value="5.0" label="5'-0&quot; / 60&quot;"></option>
+          <option value="6.0" label="6'-0&quot; / 72&quot; (Sliding Door)"></option>
+        </datalist>
+      </div>
     </section>
 
-    <section class="panel">
-      <h2>Scene &amp; lighting</h2>
-      <div class="grid2">
-        <label><span>Sun azimuth</span><input id="s_sunAz" type="range" autocomplete="off" min="0" max="360" step="1"></label>
-        <label><span>Sun elevation</span><input id="s_sunEl" type="range" autocomplete="off" min="5" max="89" step="1"></label>
-        <label><span>Overcast mix</span><input id="s_flat" type="range" autocomplete="off" min="0" max="1" step="0.05"></label>
-        <label><span>Focal (mm)</span><input id="s_focal" type="number" autocomplete="off" step="1" min="10" max="200"></label>
-        <label><span>Eye height (ft)</span><input id="s_eye" type="number" autocomplete="off" step="0.5"></label>
-        <label><span>Background</span><input id="s_bg" type="color" autocomplete="off"></label>
+    <section class="panel collapsible" id="panel_stairs">
+      <div class="panel-header">
+        <h2><span class="icon">🪜</span> Decks, Stairs &amp; Railings</h2>
+        <span class="chevron">▼</span>
       </div>
-      <label class="row check"><input id="s_grid" type="checkbox" autocomplete="off"><span>Ground grid</span></label>
-      <label class="row check"><input id="s_shadow" type="checkbox" autocomplete="off"><span>Cast shadow</span></label>
-      <label class="row check"><input id="s_steps" type="checkbox" autocomplete="off"><span>Steps at exterior doors</span></label>
-      <label class="row check"><input id="s_stepLanding" type="checkbox" autocomplete="off"><span>Top landing platform</span></label>
-      <div class="grid2" style="margin-top:4px;">
-        <label><span>Landing depth (ft)</span><input id="s_landingDepth" type="number" autocomplete="off" step="0.5" min="2" max="10"></label>
-        <label><span>Stair railings</span>
-          <select id="s_stepRailings">
-            <option value="both">Both sides</option>
-            <option value="left">Left side only</option>
-            <option value="right">Right side only</option>
-            <option value="none">None</option>
-          </select>
-        </label>
-        <label><span>Deck/Stair material</span>
-          <select id="s_stepMat">
-            <option value="concrete">Concrete (Masonry)</option>
-            <option value="pressure_treated">Pressure-Treated Wood</option>
-            <option value="dark_composite">Dark Composite</option>
-          </select>
-        </label>
-        <label><span>Stair egress direction</span>
-          <select id="s_stepEgress">
-            <option value="front">Front / Straight out</option>
-            <option value="left">Left side egress</option>
-            <option value="right">Right side egress</option>
-            <option value="split">Split (Both sides)</option>
-          </select>
-        </label>
-        <label><span>Railing material</span>
-          <select id="s_railMat">
-            <option value="pressure_treated">Pressure-Treated Wood</option>
-            <option value="white_trim">Classic White Wood</option>
-            <option value="black_metal">Black Wrought Iron</option>
-            <option value="matching_trim">Matching House Trim</option>
-          </select>
-        </label>
-        <label><span>Balusters / Infill</span>
-          <select id="s_balusterStyle">
-            <option value="balusters">Vertical Balusters (4" spacing)</option>
-            <option value="horizontal_cables">Horizontal Cable Railing</option>
-            <option value="open">Open Post &amp; Rail</option>
-          </select>
-        </label>
+      <div class="panel-body">
+        <label class="row check"><input id="s_steps" type="checkbox" autocomplete="off"><span>Steps at exterior doors</span></label>
+        <label class="row check"><input id="s_stepLanding" type="checkbox" autocomplete="off"><span>Top landing platform</span></label>
+        <div class="grid2" style="margin-top:4px;">
+          <label><span>Landing depth (ft)</span><input id="s_landingDepth" type="number" autocomplete="off" step="0.5" min="2" max="10"></label>
+          <label><span>Stair railings</span>
+            <select id="s_stepRailings">
+              <option value="both">Both sides</option>
+              <option value="left">Left side only</option>
+              <option value="right">Right side only</option>
+              <option value="none">None</option>
+            </select>
+          </label>
+          <label><span>Deck/Stair material</span>
+            <select id="s_stepMat">
+              <option value="concrete">Concrete (Masonry)</option>
+              <option value="pressure_treated">Pressure-Treated Wood</option>
+              <option value="dark_composite">Dark Composite</option>
+            </select>
+          </label>
+          <label><span>Stair egress direction</span>
+            <select id="s_stepEgress">
+              <option value="front">Front / Straight out</option>
+              <option value="left">Left side egress</option>
+              <option value="right">Right side egress</option>
+              <option value="split">Split (Both sides)</option>
+            </select>
+          </label>
+          <label><span>Railing material</span>
+            <select id="s_railMat">
+              <option value="pressure_treated">Pressure-Treated Wood</option>
+              <option value="white_trim">Classic White Wood</option>
+              <option value="black_metal">Black Wrought Iron</option>
+              <option value="matching_trim">Matching House Trim</option>
+            </select>
+          </label>
+          <label><span>Balusters / Infill</span>
+            <select id="s_balusterStyle">
+              <option value="balusters">Vertical Balusters (4" spacing)</option>
+              <option value="horizontal_cables">Horizontal Cable Railing</option>
+              <option value="open">Open Post &amp; Rail</option>
+            </select>
+          </label>
+        </div>
       </div>
-      <label class="row check"><input id="s_wireframe" type="checkbox" autocomplete="off"><span style="color:#6fb2ff;font-weight:600;">📐 Wireframe view mode</span></label>
-      <label class="row check"><input id="s_labels" type="checkbox" autocomplete="off"><span>Door callout markers</span></label>
-      <label class="row check"><input id="s_dims" type="checkbox" autocomplete="off"><span>Dimension outline on ground</span></label>
-      <label class="row check" style="margin-top:8px;background:rgba(255,100,100,0.12);padding:5px 8px;border-radius:4px;border:1px solid rgba(255,133,133,0.3);"><input id="s_blockLandscape" type="checkbox" autocomplete="off"><span style="color:#ff8585;font-weight:600;">🚫 Block landscape &amp; ground view</span></label>
     </section>
 
-    <section class="panel">
-      <h2>Screenshot</h2>
-      <div class="grid2">
-        <label><span>Width (px)</span><input id="x_w" type="number" autocomplete="off" step="16"></label>
-        <label><span>Height (px)</span><input id="x_h" type="number" autocomplete="off" step="16"></label>
+    <section class="panel collapsible open" id="panel_photo">
+      <div class="panel-header">
+        <h2><span class="icon">📸</span> Site Photo &amp; Camera Framing</h2>
+        <span class="chevron">▲</span>
       </div>
-      <label class="row check"><input id="x_alpha" type="checkbox" autocomplete="off"><span>Transparent background (for compositing)</span></label>
-      <label class="row check"><input id="x_burn" type="checkbox" autocomplete="off"><span>Burn in model name + W×L caption</span></label>
-      <button id="btnFitPx" class="block">Fit pixel aspect to current view</button>
-      <button id="btnShot2" class="primary block">Render PNG</button>
-      <button id="btnSheet" class="block">Render 4-view contact sheet</button>
+      <div class="panel-body">
+        <label class="btn block" for="fileSitePhoto">Load site photo (PNG/JPG)</label>
+        <input type="file" id="fileSitePhoto" accept="image/*" hidden>
+        <div class="grid2">
+          <label><span>Photo fit mode</span>
+            <select id="sp_fitMode">
+              <option value="contain">Full photo (contain)</option>
+              <option value="cover">Fill stage (cover)</option>
+              <option value="100% 100%">Stretch to fit</option>
+            </select>
+          </label>
+          <label><span>Photo opacity</span><input id="sp_op" type="range" autocomplete="off" min="0.1" max="1" step="0.05"></label>
+          <label><span>Photo zoom</span><input id="sp_scale" type="range" autocomplete="off" min="0.5" max="3" step="0.05"></label>
+          <label><span>Pan X (%)</span><input id="sp_panX" type="number" autocomplete="off" step="1" min="-100" max="100"></label>
+          <label><span>Pan Y / Baseline (%)</span><input id="sp_panY" type="number" autocomplete="off" step="1" min="-100" max="100"></label>
+          <label><span>Photo angle (&deg;)</span><input id="sp_rot" type="number" autocomplete="off" step="1" min="-180" max="180"></label>
+        </div>
+        <label class="row check"><input id="sp_show" type="checkbox" autocomplete="off"><span>Show site photo background</span></label>
+        <label class="row check" style="margin-top:8px;background:rgba(111,178,255,0.12);padding:5px 8px;border-radius:4px;border:1px solid rgba(111,178,255,0.3);"><input id="sp_dragMode" type="checkbox" autocomplete="off"><span style="color:#6fb2ff;font-weight:600;">🖱️ Mouse Photo Drag: Pan &amp; Zoom photo with mouse</span></label>
+
+        <h3 style="margin:10px 0 6px;font-size:10px;color:#858d98;text-transform:uppercase;">Ground Horizon &amp; Camera Distance</h3>
+        <div class="grid2">
+          <label><span>Ground baseline Y (ft)</span><input id="sp_baselineY" type="number" autocomplete="off" step="0.5" min="-50" max="50"></label>
+          <label><span>Cam distance (ft)</span><input id="sp_camDist" type="number" autocomplete="off" step="1" min="5" max="500"></label>
+        </div>
+
+        <h3 style="margin:10px 0 6px;font-size:10px;color:#858d98;text-transform:uppercase;">House Realignment / Lot Offset</h3>
+        <div class="grid2">
+          <label><span>House X (ft)</span><input id="sp_posX" type="number" autocomplete="off" step="0.5"></label>
+          <label><span>House Z (ft)</span><input id="sp_posZ" type="number" autocomplete="off" step="0.5"></label>
+          <label><span>Heading (&deg;)</span><input id="sp_rotY" type="number" autocomplete="off" step="1"></label>
+          <button id="btnResetPhoto" style="margin-top: auto;">Reset all align</button>
+        </div>
+        <p class="hint">Full photo displays uncropped. Adjust photo pan/zoom, ground baseline Y, and camera distance to align perspective independently of house lot position.</p>
+      </div>
+    </section>
+
+    <section class="panel collapsible" id="panel_plan">
+      <div class="panel-header">
+        <h2><span class="icon">📐</span> Floor Plan Tracing Plate</h2>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="panel-body">
+        <label class="btn block" for="filePlan">Load plan image (PNG/JPG)</label>
+        <input type="file" id="filePlan" accept="image/*" hidden>
+        <div class="grid2">
+          <label><span>Plate width (ft)</span><input id="p_width" type="number" autocomplete="off" step="0.5"></label>
+          <label><span>Rotation (deg)</span><input id="p_rot" type="number" autocomplete="off" step="1"></label>
+          <label><span>Offset X (ft)</span><input id="p_x" type="number" autocomplete="off" step="0.25"></label>
+          <label><span>Offset Z (ft)</span><input id="p_z" type="number" autocomplete="off" step="0.25"></label>
+          <label><span>Opacity</span><input id="p_op" type="range" autocomplete="off" min="0" max="1" step="0.05"></label>
+          <label><span>Show</span><input id="p_show" type="checkbox" autocomplete="off"></label>
+        </div>
+        <label class="row check"><input id="p_pick" type="checkbox" autocomplete="off"><span>Plan-pick mode: click plan to drop a door on nearest wall</span></label>
+        <p class="hint">Scale the plate so its printed footprint matches the white outline, then trace door positions off it.</p>
+      </div>
+    </section>
+
+    <section class="panel collapsible" id="panel_export">
+      <div class="panel-header">
+        <h2><span class="icon">⚙️</span> Scene, View &amp; Screenshot Export</h2>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="panel-body">
+        <h3 style="margin:0 0 6px;font-size:10px;color:#858d98;text-transform:uppercase;">Lighting &amp; Environment</h3>
+        <div class="grid2">
+          <label><span>Sun azimuth</span><input id="s_sunAz" type="range" autocomplete="off" min="0" max="360" step="1"></label>
+          <label><span>Sun elevation</span><input id="s_sunEl" type="range" autocomplete="off" min="5" max="89" step="1"></label>
+          <label><span>Overcast mix</span><input id="s_flat" type="range" autocomplete="off" min="0" max="1" step="0.05"></label>
+          <label><span>Focal (mm)</span><input id="s_focal" type="number" autocomplete="off" step="1" min="10" max="200"></label>
+          <label><span>Eye height (ft)</span><input id="s_eye" type="number" autocomplete="off" step="0.5"></label>
+          <label><span>Background</span><input id="s_bg" type="color" autocomplete="off"></label>
+        </div>
+        <label class="row check"><input id="s_grid" type="checkbox" autocomplete="off"><span>Ground grid</span></label>
+        <label class="row check"><input id="s_shadow" type="checkbox" autocomplete="off"><span>Cast shadow</span></label>
+        <label class="row check"><input id="s_wireframe" type="checkbox" autocomplete="off"><span style="color:#6fb2ff;font-weight:600;">📐 Wireframe view mode</span></label>
+        <label class="row check"><input id="s_labels" type="checkbox" autocomplete="off"><span>Door callout markers</span></label>
+        <label class="row check"><input id="s_dims" type="checkbox" autocomplete="off"><span>Dimension outline on ground</span></label>
+        <label class="row check" style="margin-top:8px;background:rgba(255,100,100,0.12);padding:5px 8px;border-radius:4px;border:1px solid rgba(255,133,133,0.3);"><input id="s_blockLandscape" type="checkbox" autocomplete="off"><span style="color:#ff8585;font-weight:600;">🚫 Block landscape &amp; ground view</span></label>
+
+        <h3 style="margin:12px 0 6px;font-size:10px;color:#858d98;text-transform:uppercase;">PNG Screenshot &amp; Contact Sheet</h3>
+        <div class="grid2">
+          <label><span>Width (px)</span><input id="x_w" type="number" autocomplete="off" step="16"></label>
+          <label><span>Height (px)</span><input id="x_h" type="number" autocomplete="off" step="16"></label>
+        </div>
+        <label class="row check"><input id="x_alpha" type="checkbox" autocomplete="off"><span>Transparent background (for compositing)</span></label>
+        <label class="row check"><input id="x_burn" type="checkbox" autocomplete="off"><span>Burn in model name + W×L caption</span></label>
+        <button id="btnFitPx" class="block">Fit pixel aspect to current view</button>
+        <button id="btnShot2" class="primary block">Render PNG</button>
+        <button id="btnSheet" class="block">Render 4-view contact sheet</button>
+      </div>
     </section>
 
   </aside>

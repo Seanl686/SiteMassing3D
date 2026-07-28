@@ -11,6 +11,19 @@ const NUMS = [
 
 const round = (v) => Math.round((v ?? 0) * 100) / 100;
 
+export function initAccordions() {
+  document.querySelectorAll('.panel.collapsible .panel-header').forEach((header) => {
+    header.addEventListener('click', () => {
+      const panel = header.closest('.panel');
+      const isOpen = panel.classList.toggle('open');
+      const chevron = header.querySelector('.chevron');
+      if (chevron) {
+        chevron.textContent = isOpen ? '▲' : '▼';
+      }
+    });
+  });
+}
+
 export function renderOpeningList(container, home, cb) {
   container.textContent = '';
 

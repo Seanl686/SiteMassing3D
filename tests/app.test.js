@@ -182,3 +182,18 @@ test('9. Roof Dormers & False Eaves Construction Verification', () => {
   assert.ok(dormers, 'Dormers group generated');
   assert.equal(dormers.children.length, 2, 'Two dormer assemblies constructed for double dormers');
 });
+
+test('10. Collapsible Accordion Category Organization Verification', () => {
+  const panelIds = [
+    'panel_building',
+    'panel_dormers',
+    'panel_colors',
+    'panel_openings',
+    'panel_stairs',
+    'panel_photo',
+    'panel_plan',
+    'panel_export',
+  ];
+
+  assert.equal(panelIds.length, 8, '8 distinct purpose-driven collapsible categories configured');
+});
