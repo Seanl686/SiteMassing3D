@@ -756,7 +756,13 @@ function onMove(ev) {
     const r = canvas.getBoundingClientRect();
     const camDist = stage.getCameraDistance();
     const ftPerPx = (camDist * 2 * Math.tan(THREE.MathUtils.degToRad(stage.persp.fov / 2))) / r.height;
-    const dx = (ev.clientX - dormerDrag.startClientX) * ftPerPx;
+    const screenDx = (ev.clientX - dormerDrag.startClientX) * ftPerPx;
+    // Use the camera's right vector to determine the world-X sign so the
+    // drag direction matches the cursor regardless of camera angle.
+    const camRight = new THREE.Vector3();
+    stage.camera.getWorldDirection(camRight);
+    camRight.cross(stage.camera.up).normalize();
+    const dx = screenDx * Math.sign(camRight.x || 1);
     const newX = Math.max(-halfL, Math.min(halfL, dormerDrag.startPosX + dx));
     dim.dormerPositions[dormerDrag.index] = Math.round(newX * 12) / 12; // snap to 1 inch
     queueRebuild();
