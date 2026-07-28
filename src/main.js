@@ -46,7 +46,7 @@ function rebuild() {
 function select(id) {
   selectedId = id;
   gizmo.show(state.home.openings.find((o) => o.id === id), state.home.dimensions);
-  syncList();
+  refreshList();
 }
 
 /** Full rebuild of the list DOM — only for changes that move rows between groups. */

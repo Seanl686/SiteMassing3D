@@ -383,6 +383,16 @@ export function fmtFt(v) {
   return `${ft}'-${inch}"`;
 }
 
+export function fmtAllUnits(vFt) {
+  const v = vFt ?? 0;
+  const ft = Math.floor(v + 1e-6);
+  const inchTotal = Math.round(v * 12);
+  const inch = Math.round((v - ft) * 12);
+  const meters = (v * 0.3048).toFixed(2);
+  const ftInchStr = inch === 0 ? `${ft}'` : (inch === 12 ? `${ft + 1}'` : `${ft}'-${inch}"`);
+  return `${ftInchStr} (${inchTotal}" / ${meters}m)`;
+}
+
 // ---------------------------------------------------------------------------
 // Assembly
 // ---------------------------------------------------------------------------

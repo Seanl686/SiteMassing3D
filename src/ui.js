@@ -1,9 +1,5 @@
-// Openings list. Rows are built once per structural change (add / delete /
-// wall / type) and updated in place otherwise — re-rendering on every select or
-// drag would destroy the element the user is currently interacting with, which
-// is what makes selects refuse to open and number fields refuse to accept input.
-
 import { WALLS, WALL_LABEL, OPENING_PRESETS } from './defaults.js';
+import { fmtAllUnits } from './build.js';
 
 const TYPES = [['door', 'Door'], ['slider', 'Slider'], ['window', 'Window']];
 const NUMS = [
@@ -18,24 +14,70 @@ const round = (v) => Math.round((v ?? 0) * 100) / 100;
 export function renderOpeningList(container, home, cb) {
   container.textContent = '';
 
+  const selectedUnit = home.openings.find((o) => o.id === cb.selectedId);
+
+  // If a unit is selected, render the Selected Unit Details card at the top of the sidebar!
+  if (selectedUnit) {
+    const topSec = document.createElement('div');
+    topSec.className = 'selected-unit-section';
+
+    const h = document.createElement('h3');
+    h.textContent = 'Selected Unit Details';
+    h.style.cssText = 'margin:6px 0 6px;font-size:11px;color:#6fb2ff;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;';
+    topSec.appendChild(h);
+
+    const card = renderSelectedUnitCard(selectedUnit, cb);
+    topSec.appendChild(card);
+    container.appendChild(topSec);
+  }
+
   const byWall = new Map(WALLS.map((w) => [w, []]));
   for (const o of home.openings) {
     if (!byWall.has(o.wall)) byWall.set(o.wall, []);
     byWall.get(o.wall).push(o);
   }
 
+  const allHeader = document.createElement('h3');
+  allHeader.textContent = selectedUnit ? 'All Openings by Wall' : 'Openings';
+  allHeader.style.cssText = 'margin:12px 0 6px;font-size:11px;color:#9aa2ad;font-weight:600;';
+  container.appendChild(allHeader);
+
   for (const wall of WALLS) {
     const list = (byWall.get(wall) || []).slice().sort((a, b) => a.offsetFt - b.offsetFt);
     if (!list.length) continue;
 
-    const h = document.createElement('h3');
+    const h = document.createElement('div');
     h.textContent = WALL_LABEL[wall];
-    h.style.cssText = 'margin:10px 0 6px;font-size:11px;color:#9aa2ad;font-weight:600;';
+    h.style.cssText = 'margin:8px 0 4px;font-size:10px;color:#858d98;font-weight:600;text-transform:uppercase;';
     container.appendChild(h);
 
-    for (const o of list) container.appendChild(row(o, cb));
+    for (const o of list) {
+      if (selectedUnit && o.id === selectedUnit.id) continue;
+      container.appendChild(row(o, cb));
+    }
   }
   syncOpeningValues(container, home, cb.selectedId);
+}
+
+function renderSelectedUnitCard(o, cb) {
+  const card = document.createElement('div');
+  card.className = 'selected-card';
+
+  const summary = document.createElement('div');
+  summary.className = 'unit-summary';
+  summary.style.cssText = 'margin-bottom: 8px; padding: 6px 8px; background: rgba(111, 178, 255, 0.08); border-radius: 5px; font-size: 11px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; color: #cfd6e0; border: 1px solid rgba(111, 178, 255, 0.2);';
+
+  summary.innerHTML = `
+    <div><span style="color:#9aa2ad;">Width:</span> <b>${fmtAllUnits(o.widthFt)}</b></div>
+    <div><span style="color:#9aa2ad;">Height:</span> <b>${fmtAllUnits(o.heightFt)}</b></div>
+    <div><span style="color:#9aa2ad;">Offset:</span> <b>${fmtAllUnits(o.offsetFt)}</b></div>
+    <div><span style="color:#9aa2ad;">Sill:</span> <b>${fmtAllUnits(o.sillFt)}</b></div>
+  `;
+
+  card.appendChild(summary);
+  const r = row(o, cb);
+  card.appendChild(r);
+  return card;
 }
 
 /** Push current values into the existing rows without rebuilding them. */
@@ -50,6 +92,22 @@ export function syncOpeningValues(container, home, selectedId) {
     }
     const lbl = el.querySelector('input.lbl');
     if (lbl && document.activeElement !== lbl) lbl.value = o.label || '';
+  }
+
+  for (const card of container.querySelectorAll('.selected-card')) {
+    const rowEl = card.querySelector('.opening');
+    if (!rowEl) continue;
+    const o = home.openings.find((x) => x.id === rowEl.dataset.id);
+    if (!o) continue;
+    const summary = card.querySelector('.unit-summary');
+    if (summary) {
+      summary.innerHTML = `
+        <div><span style="color:#9aa2ad;">Width:</span> <b>${fmtAllUnits(o.widthFt)}</b></div>
+        <div><span style="color:#9aa2ad;">Height:</span> <b>${fmtAllUnits(o.heightFt)}</b></div>
+        <div><span style="color:#9aa2ad;">Offset:</span> <b>${fmtAllUnits(o.offsetFt)}</b></div>
+        <div><span style="color:#9aa2ad;">Sill:</span> <b>${fmtAllUnits(o.sillFt)}</b></div>
+      `;
+    }
   }
 }
 
