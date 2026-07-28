@@ -289,6 +289,22 @@ function row(o, cb) {
   });
   foot.appendChild(tsel);
 
+  // Opt this opening out of the global head alignment so it keeps the sill and
+  // height the user set by hand.
+  const freeLabel = document.createElement('label');
+  freeLabel.className = 'check';
+  freeLabel.title = 'Ignore the global opening head drop for this unit';
+  freeLabel.style.cssText = 'display:flex;align-items:center;gap:3px;font-size:10px;white-space:nowrap;';
+  const freeBox = document.createElement('input');
+  freeBox.type = 'checkbox';
+  freeBox.checked = !!o.headFree;
+  freeBox.addEventListener('change', () => { o.headFree = freeBox.checked; cb.onEdit(o, true); });
+  const freeText = document.createElement('span');
+  freeText.textContent = 'Free head';
+  freeLabel.appendChild(freeBox);
+  freeLabel.appendChild(freeText);
+  foot.appendChild(freeLabel);
+
   const dup = document.createElement('button');
   dup.type = 'button';
   dup.textContent = '⧉';

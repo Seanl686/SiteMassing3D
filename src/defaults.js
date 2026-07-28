@@ -32,6 +32,9 @@ export function defaultHome() {
       eaveOverhangFt: 1.0,   // horizontal overhang past the long walls
       rakeOverhangFt: 0.75,  // horizontal overhang past the gable ends
       roofStyle: 'gable',
+      headAlign: false,        // park every opening head a fixed drop below the wall top
+      windowHeadDropFt: 1.0,   // top of wall -> top of window
+      doorHeadDropFt: 1.33,    // top of wall -> top of door (6'-8" head in an 8' wall)
       dormerCount: 0,         // 0 (none), 1 (single), 2 (double)
       dormerStyle: 'gable',   // 'gable', 'shed', 'hip'
       dormerWidthFt: 10.0,
@@ -134,6 +137,7 @@ export function migrate(home) {
       heightFt: +o.heightFt || 3,
       sillFt: +o.sillFt || 0,
       label: o.label || '',
+      headFree: !!o.headFree,   // opt this opening out of the global head alignment
       stepMat: o.stepMat,
       stepEgress: o.stepEgress,
       railMat: o.railMat,

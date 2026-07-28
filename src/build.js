@@ -89,6 +89,32 @@ export function getWallHeight(name, dim) {
   return dim.wallHeightFt || 8.0;
 }
 
+/**
+ * Head alignment: park every opening's head a fixed drop below the top of its
+ * wall, with separate drops for windows and for doors/sliders. A door's sill is
+ * pinned at the floor, so its drop drives the door HEIGHT; a window keeps its
+ * height and rides up or down on its SILL. Openings flagged `headFree` are left
+ * where the user put them. Mutates and returns `home`.
+ */
+export function applyHeadAlign(home) {
+  const dim = home.dimensions;
+  if (!dim || !dim.headAlign) return home;
+  const winDrop = Number.isFinite(+dim.windowHeadDropFt) ? +dim.windowHeadDropFt : 1.0;
+  const doorDrop = Number.isFinite(+dim.doorHeadDropFt) ? +dim.doorHeadDropFt : 1.33;
+
+  for (const o of home.openings || []) {
+    if (o.headFree) continue;
+    const wallH = getWallHeight(o.wall, dim);
+    if (o.type === 'door' || o.type === 'slider') {
+      o.sillFt = 0;
+      o.heightFt = Math.max(0.5, wallH - doorDrop);
+    } else {
+      o.sillFt = Math.max(0, wallH - winDrop - o.heightFt);
+    }
+  }
+  return home;
+}
+
 /** Clamp an opening so it always fits inside its wall and under the eave. */
 export function clampOpening(o, dim) {
   const frames = wallFrames(dim);
@@ -932,6 +958,7 @@ export function fmtAllUnits(vFt) {
 // ---------------------------------------------------------------------------
 
 export function buildHome(home, sceneOpts) {
+  applyHeadAlign(home);
   const dim = home.dimensions;
   const materials = {
     siding: mat(home.colors.siding),

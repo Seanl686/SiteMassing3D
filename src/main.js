@@ -153,6 +153,7 @@ const dimFields = [
   ['f_floorHeight', 'floorHeightFt'], ['f_pitch', 'roofPitch'],
   ['f_eaveOverhang', 'eaveOverhangFt'], ['f_rakeOverhang', 'rakeOverhangFt'],
   ['f_dormerWidth', 'dormerWidthFt'], ['f_dormerHeight', 'dormerHeightFt'],
+  ['f_windowHeadDrop', 'windowHeadDropFt'], ['f_doorHeadDrop', 'doorHeadDropFt'],
   ['f_frontWallHeight', 'frontWallHeightFt'], ['f_backWallHeight', 'backWallHeightFt'],
   ['f_leftWallHeight', 'leftWallHeightFt'], ['f_rightWallHeight', 'rightWallHeightFt'],
 ];
@@ -172,6 +173,13 @@ const sceneChecks = [['s_grid', 'grid'], ['s_shadow', 'shadow'], ['s_steps', 'st
 
 /** Snap to the nearest quarter foot (3 in) so the steps land on whole feet. */
 const roundQuarter = (v) => Math.round(v * 4) / 4;
+
+/** The head-drop fields only bite while the global head alignment is on. */
+function syncHeadAlignRows() {
+  const on = !!state.home.dimensions.headAlign;
+  if ($('f_headAlign')) $('f_headAlign').checked = on;
+  if ($('row_headDrops')) $('row_headDrops').style.display = on ? '' : 'none';
+}
 
 /** Per-dormer width/height rows. Hidden while sizes are linked; when unlinked
  *  each dormer gets its own pair of inputs so one can be wide-and-low and the
@@ -243,6 +251,7 @@ function syncForm() {
   if ($('f_dormerLinkSizes')) $('f_dormerLinkSizes').checked = state.home.dimensions.dormerLinkSizes === true;
   if ($('f_dormerNested')) $('f_dormerNested').checked = !!state.home.dimensions.dormerNested;
   if ($('f_dormerNestOffset')) $('f_dormerNestOffset').value = state.home.dimensions.dormerNestOffsetFt ?? 0;
+  syncHeadAlignRows();
   renderDormerSizeRows();
   for (const [id, key] of colorFields) $(id).value = state.home.colors[key];
   for (const [id, key] of planFields) $(id).value = state.home.plan[key];
@@ -324,6 +333,13 @@ function bind() {
     state.home.dimensions.roofStyle = e.target.value;
     rebuild();
   });
+  if ($('f_headAlign')) {
+    $('f_headAlign').addEventListener('change', (e) => {
+      state.home.dimensions.headAlign = e.target.checked;
+      syncHeadAlignRows();
+      rebuild(); syncList(); save();
+    });
+  }
   if ($('f_dormerCount')) {
     $('f_dormerCount').addEventListener('change', (e) => {
       state.home.dimensions.dormerCount = parseInt(e.target.value, 10) || 0;

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { defaultHome, defaultScene, defaultExport, migrate, WALLS } from '../src/defaults.js';
-import { derived, wallFrames, fmtAllUnits, buildHome, getWallHeight, dormerSize } from '../src/build.js';
+import { derived, wallFrames, fmtAllUnits, buildHome, getWallHeight, dormerSize, applyHeadAlign } from '../src/build.js';
 
 test('1. Defaults & State Initialization', () => {
   const home = defaultHome();
@@ -453,4 +453,48 @@ test('19. Dormer Sizes Snap to the Quarter-Foot Grid', () => {
   assert.deepEqual(m.dormerSizes[0], { widthFt: 10, heightFt: 4 });
   // ...and nothing collapses to a zero-size gable.
   assert.deepEqual(m.dormerSizes[1], { widthFt: 0.25, heightFt: 3 });
+});
+
+test('20. Global Opening Head Alignment Below Wall Top', () => {
+  const home = defaultHome();
+  home.dimensions.wallHeightFt = 9;
+  home.dimensions.leftWallHeightFt = 12;   // per-wall heights drive their own heads
+  home.dimensions.headAlign = true;
+  home.dimensions.windowHeadDropFt = 1.5;
+  home.dimensions.doorHeadDropFt = 2;
+
+  const win = home.openings.find((o) => o.type === 'window' && o.wall === 'front');
+  const leftWin = home.openings.find((o) => o.type === 'window' && o.wall === 'left');
+  const door = home.openings.find((o) => o.type === 'door');
+  win.sillFt = 0.1;
+  door.heightFt = 3;
+
+  applyHeadAlign(home);
+
+  // Windows keep their height and ride on the sill; doors stay on the floor, so
+  // the drop sets their height instead.
+  assert.equal(win.sillFt + win.heightFt, 9 - 1.5, 'Front window head sits 1.5 ft below the wall top');
+  assert.equal(leftWin.sillFt + leftWin.heightFt, 12 - 1.5, 'Left window follows the 12 ft wall');
+  assert.equal(door.sillFt, 0, 'Door stays on the floor');
+  assert.equal(door.heightFt, 9 - 2, 'Door height set by the head drop');
+
+  // An opening flagged headFree keeps whatever the user set.
+  const other = home.openings.filter((o) => o.type === 'window')[1];
+  other.headFree = true;
+  other.sillFt = 0.25;
+  applyHeadAlign(home);
+  assert.equal(other.sillFt, 0.25, 'Free-head opening untouched');
+
+  // Off by default, and a no-op while off.
+  const plain = defaultHome();
+  assert.equal(plain.dimensions.headAlign, false);
+  const sill = plain.openings.find((o) => o.type === 'window').sillFt;
+  applyHeadAlign(plain);
+  assert.equal(plain.openings.find((o) => o.type === 'window').sillFt, sill, 'No change while disabled');
+
+  // buildHome applies it, so the geometry and the sidebar values agree.
+  home.dimensions.headAlign = true;
+  win.sillFt = 0;
+  buildHome(home, defaultScene());
+  assert.equal(win.sillFt + win.heightFt, 9 - 1.5, 'buildHome re-aligns the heads');
 });
