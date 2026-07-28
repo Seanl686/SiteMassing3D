@@ -273,10 +273,18 @@ function buildDormers(dim, materials) {
   const ov = dim.eaveOverhangFt ?? 1.0;
   const dormerFrontZ = frontZ - ov * 0.4;
 
-  const xPositions = count === 1 ? [0] : [-dim.lengthFt * 0.25, dim.lengthFt * 0.25];
+  // Use custom positions when available and length matches, otherwise auto-place.
+  const customPos = Array.isArray(dim.dormerPositions) && dim.dormerPositions.length === count
+    ? dim.dormerPositions
+    : null;
+  const xPositions = customPos
+    || (count === 1 ? [0] : [-dim.lengthFt * 0.25, dim.lengthFt * 0.25]);
 
-  for (const posX of xPositions) {
+  for (let i = 0; i < xPositions.length; i++) {
+    const posX = xPositions[i];
     const dormerGroup = new THREE.Group();
+    dormerGroup.name = `dormer:${i}`;
+    dormerGroup.userData.dormerIndex = i;
 
     // 1. Dormer Gable Front Wall / Triangle
     const shape = new THREE.Shape();
@@ -289,9 +297,10 @@ function buildDormers(dim, materials) {
     const frontGable = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, extrudeOpts), materials.siding);
     frontGable.position.set(posX, eaveY, dormerFrontZ);
     frontGable.castShadow = true;
+    frontGable.userData.dormerIndex = i;
     dormerGroup.add(frontGable);
 
-    // 2. False Eave Return Band (if enabled)
+    // 2. False Eave Return Band — outer (if enabled)
     if (dim.dormerFalseEave !== false) {
       const falseEaveW = dW + 1.2;
       const falseEave = new THREE.Mesh(
@@ -300,7 +309,22 @@ function buildDormers(dim, materials) {
       );
       falseEave.position.set(posX, eaveY - 0.28, dormerFrontZ + 0.1);
       falseEave.castShadow = true;
+      falseEave.userData.dormerIndex = i;
       dormerGroup.add(falseEave);
+
+      // 2b. Inner false eave — nested return band (double-wide stepped profile)
+      if (dim.dormerInnerFalseEave !== false) {
+        const innerW = falseEaveW - 1.6;
+        const innerEave = new THREE.Mesh(
+          new THREE.BoxGeometry(innerW, 0.45, 0.35),
+          materials.trim
+        );
+        innerEave.position.set(posX, eaveY + 0.18, dormerFrontZ + 0.25);
+        innerEave.castShadow = true;
+        innerEave.userData.dormerIndex = i;
+        innerEave.name = 'innerFalseEave';
+        dormerGroup.add(innerEave);
+      }
     }
 
     // 3. Dormer Roof Pitch Slopes
@@ -316,6 +340,7 @@ function buildDormers(dim, materials) {
     leftRoof.position.set(posX - dW / 4, eaveY + dH / 2, dormerFrontZ + dormerDepth / 2);
     leftRoof.rotation.z = dPitchAngle;
     leftRoof.castShadow = true;
+    leftRoof.userData.dormerIndex = i;
     dormerGroup.add(leftRoof);
 
     // Right slope
@@ -326,6 +351,7 @@ function buildDormers(dim, materials) {
     rightRoof.position.set(posX + dW / 4, eaveY + dH / 2, dormerFrontZ + dormerDepth / 2);
     rightRoof.rotation.z = -dPitchAngle;
     rightRoof.castShadow = true;
+    rightRoof.userData.dormerIndex = i;
     dormerGroup.add(rightRoof);
 
     // 4. Accent Dormer Window (if enabled)
@@ -338,6 +364,7 @@ function buildDormers(dim, materials) {
         materials.glass
       );
       glass.position.set(posX, eaveY + dH * 0.35, dormerFrontZ - 0.05);
+      glass.userData.dormerIndex = i;
       dormerGroup.add(glass);
 
       const frame = new THREE.Mesh(
@@ -345,6 +372,7 @@ function buildDormers(dim, materials) {
         materials.trim
       );
       frame.position.set(posX, eaveY + dH * 0.35, dormerFrontZ - 0.03);
+      frame.userData.dormerIndex = i;
       dormerGroup.add(frame);
     }
 

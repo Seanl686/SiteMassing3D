@@ -218,3 +218,56 @@ test('12. Wall Height Definition & Per-Wall Custom Height Verification', () => {
   const frontWallGroup = root.children.find((c) => c.name === 'wall:front');
   assert.ok(frontWallGroup, 'Front wall mesh constructed with defined height');
 });
+
+test('13. Custom Dormer Positions Respected in Build', () => {
+  const home = defaultHome();
+  home.dimensions.dormerCount = 2;
+  home.dimensions.dormerPositions = [-10, 10];
+
+  const root = buildHome(home, defaultScene());
+  const roof = root.children.find((c) => c.name === 'roof');
+  assert.ok(roof, 'Roof group exists');
+  const dormers = roof.children.find((c) => c.name === 'dormers');
+  assert.ok(dormers, 'Dormers group generated');
+  assert.equal(dormers.children.length, 2, 'Two dormer assemblies at custom positions');
+
+  // Each dormer should be tagged with its index for picking
+  const d0 = dormers.children[0];
+  const d1 = dormers.children[1];
+  assert.equal(d0.userData.dormerIndex, 0, 'First dormer tagged with index 0');
+  assert.equal(d1.userData.dormerIndex, 1, 'Second dormer tagged with index 1');
+  assert.equal(d0.name, 'dormer:0', 'First dormer named dormer:0');
+  assert.equal(d1.name, 'dormer:1', 'Second dormer named dormer:1');
+});
+
+test('14. Nested Inner False Eave (Double-Wide Stepped Profile)', () => {
+  const home = defaultHome();
+  home.dimensions.dormerCount = 1;
+  home.dimensions.dormerFalseEave = true;
+  home.dimensions.dormerInnerFalseEave = true;
+
+  const root = buildHome(home, defaultScene());
+  const roof = root.children.find((c) => c.name === 'roof');
+  const dormers = roof.children.find((c) => c.name === 'dormers');
+  assert.ok(dormers, 'Dormers group generated');
+
+  const dormer0 = dormers.children[0];
+  // Find inner false eave by name
+  const innerEaves = [];
+  dormer0.traverse((child) => {
+    if (child.name === 'innerFalseEave') innerEaves.push(child);
+  });
+  assert.equal(innerEaves.length, 1, 'Inner false eave mesh exists inside dormer assembly');
+
+  // Now test with inner false eave disabled
+  home.dimensions.dormerInnerFalseEave = false;
+  const root2 = buildHome(home, defaultScene());
+  const roof2 = root2.children.find((c) => c.name === 'roof');
+  const dormers2 = roof2.children.find((c) => c.name === 'dormers');
+  const dormer0b = dormers2.children[0];
+  const innerEaves2 = [];
+  dormer0b.traverse((child) => {
+    if (child.name === 'innerFalseEave') innerEaves2.push(child);
+  });
+  assert.equal(innerEaves2.length, 0, 'Inner false eave absent when disabled');
+});

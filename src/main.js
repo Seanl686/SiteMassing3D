@@ -179,6 +179,7 @@ function syncForm() {
   if ($('f_dormerCount')) $('f_dormerCount').value = state.home.dimensions.dormerCount ?? 0;
   if ($('f_dormerStyle')) $('f_dormerStyle').value = state.home.dimensions.dormerStyle || 'gable';
   if ($('f_dormerFalseEave')) $('f_dormerFalseEave').checked = state.home.dimensions.dormerFalseEave !== false;
+  if ($('f_dormerInnerFalseEave')) $('f_dormerInnerFalseEave').checked = state.home.dimensions.dormerInnerFalseEave !== false;
   if ($('f_dormerWindow')) $('f_dormerWindow').checked = state.home.dimensions.dormerWindow !== false;
   for (const [id, key] of colorFields) $(id).value = state.home.colors[key];
   for (const [id, key] of planFields) $(id).value = state.home.plan[key];
@@ -278,9 +279,21 @@ function bind() {
       rebuild(); save();
     });
   }
+  if ($('f_dormerInnerFalseEave')) {
+    $('f_dormerInnerFalseEave').addEventListener('change', (e) => {
+      state.home.dimensions.dormerInnerFalseEave = e.target.checked;
+      rebuild(); save();
+    });
+  }
   if ($('f_dormerWindow')) {
     $('f_dormerWindow').addEventListener('change', (e) => {
       state.home.dimensions.dormerWindow = e.target.checked;
+      rebuild(); save();
+    });
+  }
+  if ($('btnResetDormerPos')) {
+    $('btnResetDormerPos').addEventListener('click', () => {
+      state.home.dimensions.dormerPositions = [];
       rebuild(); save();
     });
   }
@@ -611,6 +624,7 @@ function armAdd(type) {
 const ray = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 let drag = null;
+let dormerDrag = null;  // { index, startX, startPosX }
 
 function setRay(ev) {
   const r = canvas.getBoundingClientRect();
@@ -620,6 +634,13 @@ function setRay(ev) {
 
 const findOpeningId = (obj) => {
   for (let o = obj; o; o = o.parent) if (o.userData?.opening) return o.userData.opening;
+  return null;
+};
+
+const findDormerIndex = (obj) => {
+  for (let o = obj; o; o = o.parent) {
+    if (o.userData?.dormerIndex !== undefined) return o.userData.dormerIndex;
+  }
   return null;
 };
 
@@ -645,6 +666,33 @@ function onPick(ev) {
 
   if (ev.button !== 0) return;
   setRay(ev);
+
+  // Dormer picking — check before opening picks so dormers can be dragged.
+  if (!pendingAdd) {
+    const dormerHits = ray.intersectObjects(stage.homeGroup.children, true);
+    const dormerIdx = dormerHits.map((h) => findDormerIndex(h.object)).find((v) => v !== null);
+    if (dormerIdx !== null && dormerIdx !== undefined) {
+      const dim = state.home.dimensions;
+      const count = parseInt(dim.dormerCount, 10) || 0;
+      if (count > 0) {
+        // Initialise positions array from auto-positions if empty
+        if (!Array.isArray(dim.dormerPositions) || dim.dormerPositions.length !== count) {
+          dim.dormerPositions = count === 1 ? [0] : [-dim.lengthFt * 0.25, dim.lengthFt * 0.25];
+        }
+        dormerDrag = {
+          index: dormerIdx,
+          startClientX: ev.clientX,
+          startPosX: dim.dormerPositions[dormerIdx],
+        };
+        stage.controls.enabled = false;
+        stage.orthoControls.enabled = false;
+        canvas.style.cursor = 'grabbing';
+        ev.preventDefault();
+        return;
+      }
+    }
+  }
+
   const planPick = $('p_pick').checked;
 
   if (planPick) {
@@ -699,6 +747,22 @@ function beginDrag(o, mode) {
 }
 
 function onMove(ev) {
+  // Dormer drag — project screen-space delta onto the world X axis.
+  if (dormerDrag) {
+    const dim = state.home.dimensions;
+    const dW = dim.dormerWidthFt ?? 10;
+    const halfL = dim.lengthFt / 2 - dW / 2 - 1; // keep dormer inside the building
+    // Approximate world-space feet per pixel from camera distance.
+    const r = canvas.getBoundingClientRect();
+    const camDist = stage.getCameraDistance();
+    const ftPerPx = (camDist * 2 * Math.tan(THREE.MathUtils.degToRad(stage.persp.fov / 2))) / r.height;
+    const dx = (ev.clientX - dormerDrag.startClientX) * ftPerPx;
+    const newX = Math.max(-halfL, Math.min(halfL, dormerDrag.startPosX + dx));
+    dim.dormerPositions[dormerDrag.index] = Math.round(newX * 12) / 12; // snap to 1 inch
+    queueRebuild();
+    return;
+  }
+
   if (photoDrag) {
     const r = canvas.getBoundingClientRect();
     const dx = ev.clientX - photoDrag.startX;
@@ -748,6 +812,16 @@ function onMove(ev) {
 }
 
 function onUp() {
+  if (dormerDrag) {
+    dormerDrag = null;
+    stage.controls.enabled = stage.camera !== stage.ortho;
+    stage.orthoControls.enabled = stage.camera === stage.ortho;
+    canvas.style.cursor = '';
+    rebuild();
+    save();
+    return;
+  }
+
   if (photoDrag) {
     photoDrag = null;
     if ($('sp_dragMode')?.checked) {

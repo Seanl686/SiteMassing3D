@@ -37,7 +37,9 @@ export function defaultHome() {
       dormerWidthFt: 10.0,
       dormerHeightFt: 4.5,
       dormerFalseEave: true,
+      dormerInnerFalseEave: true,  // nested inner return band (double-wide)
       dormerWindow: true,
+      dormerPositions: [],          // custom X offsets in ft; empty = auto-place
     },
     colors: {
       siding: '#8d9299',
