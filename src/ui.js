@@ -94,11 +94,13 @@ const MAT_LABELS = { concrete: '🧱 Concrete', pressure_treated: '🪵 Wood', d
 const EGRESS_LABELS = { front: '⬆ Front', left: '⬅ Left', right: '➡ Right', split: '↔ Split' };
 const RAIL_MAT_LABELS = { pressure_treated: '🪵 Wood', white_trim: '⚪ White', black_metal: '⬛ Iron', matching_trim: '🎨 Trim' };
 const BALUSTER_LABELS = { balusters: '║║ Spindles', horizontal_cables: '═ Cables', open: '🔓 Open' };
+const RAILINGS_LABELS = { both: '↔ Both & Outer', outer: '🛡️ Outer (Away Side)', all: '🏰 Full Surround', left: '⬅ Left Side', right: '➡ Right Side', none: '🚫 None' };
 
 const MAT_ARR = ['concrete', 'pressure_treated', 'dark_composite'];
 const EGRESS_ARR = ['front', 'left', 'right', 'split'];
 const RAIL_MAT_ARR = ['pressure_treated', 'white_trim', 'black_metal', 'matching_trim'];
 const BALUSTER_ARR = ['balusters', 'horizontal_cables', 'open'];
+const RAILINGS_ARR = ['both', 'outer', 'all', 'left', 'right', 'none'];
 
 function cycleNext(arr, current) {
   const idx = arr.indexOf(current || arr[0]);
@@ -365,6 +367,7 @@ function renderGroupCard(list, cb) {
     };
     addSel('Stair Material', 'stepMat', MAT_ARR.map((v) => [v, MAT_LABELS[v]]), 'concrete');
     addSel('Egress Direction', 'stepEgress', EGRESS_ARR.map((v) => [v, EGRESS_LABELS[v]]), 'front');
+    addSel('Stair Railings', 'stepRailings', RAILINGS_ARR.map((v) => [v, RAILINGS_LABELS[v]]), 'both');
     addSel('Railing Material', 'railMat', RAIL_MAT_ARR.map((v) => [v, RAIL_MAT_LABELS[v]]), 'pressure_treated');
     addSel('Balusters / Infill', 'balusterStyle', BALUSTER_ARR.map((v) => [v, BALUSTER_LABELS[v]]), 'balusters');
     sub.appendChild(subGrid);
@@ -618,6 +621,28 @@ function row(o, cb) {
     });
     egressLabel.append(egressSpan, egressSelect);
     subGrid.appendChild(egressLabel);
+
+    const railingsLabel = document.createElement('label');
+    const railingsSpan = document.createElement('span');
+    railingsSpan.textContent = 'Stair Railings';
+    const railingsSelect = document.createElement('select');
+    railingsSelect.dataset.key = 'stepRailings';
+    railingsSelect.innerHTML = `
+      <option value="both">Both sides &amp; outer</option>
+      <option value="outer">Outer side away from house</option>
+      <option value="all">Full surround (All sides)</option>
+      <option value="left">Left side only</option>
+      <option value="right">Right side only</option>
+      <option value="none">None</option>
+    `;
+    railingsSelect.value = o.stepRailings || 'both';
+    railingsSelect.addEventListener('focus', () => cb.onSelect(o.id, 'anchor'));
+    railingsSelect.addEventListener('change', () => {
+      o.stepRailings = railingsSelect.value;
+      cb.onEdit(o, true);
+    });
+    railingsLabel.append(railingsSpan, railingsSelect);
+    subGrid.appendChild(railingsLabel);
 
     const railMatLabel = document.createElement('label');
     const railMatSpan = document.createElement('span');

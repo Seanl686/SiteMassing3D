@@ -263,32 +263,66 @@ main.sidebar-collapsed #sidebar {
 }
 
 /* ---------- Collapsible Accordion Panels ---------- */
+/*
+ * Each panel is one discipline of the drawing set, so it carries a colour and a
+ * three-letter code the way a sheet number does. The colour rides a spine down
+ * the left edge — closed panels show a stub, open ones run it the full height —
+ * which gives the sidebar a hard edge to align against and makes "which section
+ * am I in" answerable without reading a word.
+ */
+
+#panel_building { --cat: #5aa9ff; }  /* azure    — the model itself */
+#panel_dormers  { --cat: #a78bfa; }  /* violet   — roof volumes */
+#panel_colors   { --cat: #ef6f5e; }  /* coral    — materials & finish */
+#panel_openings { --cat: #35d0ba; }  /* teal     — doors & windows */
+#panel_stairs   { --cat: #7fc94a; }  /* green    — site-built additions */
+#panel_photo    { --cat: #ff6fa5; }  /* pink     — the photographic plate */
+#panel_plan     { --cat: #cbb994; }  /* vellum   — the traced paper plan */
+#panel_export   { --cat: #9aa2ad; }  /* graphite — output, not a model property */
 
 .panel.collapsible {
+  --cat: var(--accent);
   border-bottom: 1px solid var(--line);
   padding: 0;
   margin-bottom: 0;
+  position: relative;
 }
+
+/* The spine. A stub while closed, full height once the panel is open. */
+.panel.collapsible::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0;
+  width: 3px;
+  height: 38px;
+  background: var(--cat);
+  opacity: 0.55;
+  transition: height 0.2s ease, opacity 0.15s ease;
+}
+.panel.collapsible.open::before { height: 100%; opacity: 1; }
+.panel.collapsible:hover::before { opacity: 1; }
 
 .panel.collapsible .panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
-  background: rgba(22, 27, 34, 0.95);
+  gap: 8px;
+  padding: 10px 12px 10px 15px;
+  background: #191d23;
   cursor: pointer;
   user-select: none;
   border-bottom: 1px solid transparent;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.panel.collapsible .panel-header:hover {
-  background: rgba(35, 42, 54, 0.95);
-}
+.panel.collapsible .panel-header:hover { background: #212730; }
 
+/* Open headers get the category tint, so an open section is unmistakable. */
 .panel.collapsible.open .panel-header {
   border-bottom-color: var(--line);
-  background: rgba(26, 32, 42, 0.95);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--cat) 16%, transparent), transparent 62%),
+    #1c2129;
 }
 
 .panel.collapsible .panel-header h2 {
@@ -297,27 +331,70 @@ main.sidebar-collapsed #sidebar {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #c9d1d9;
+  color: #aeb6c1;
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
+  min-width: 0;
+}
+.panel.collapsible.open .panel-header h2 { color: #f2f5f9; }
+
+/* Fixed-width code chip: every panel title starts on the same vertical line. */
+.panel.collapsible .panel-header h2 .code {
+  flex: 0 0 auto;
+  font: 600 9.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.1em;
+  color: var(--cat);
+  background: color-mix(in srgb, var(--cat) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cat) 45%, transparent);
+  border-radius: 3px;
+  padding: 3px 5px;
+  width: 34px;
+  text-align: center;
 }
 
-.panel.collapsible .panel-header h2 .icon {
-  font-size: 13px;
+.panel.collapsible .panel-header h2 .count {
+  color: var(--cat);
+  font: 500 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0;
+  text-transform: none;
 }
-
-.panel.collapsible .panel-header h2 .count { color: var(--accent); }
 
 .panel.collapsible .panel-header .chevron {
-  font-size: 10px;
-  color: #8b949e;
+  flex: 0 0 auto;
+  font-size: 9px;
+  color: #6b7480;
   transition: color 0.15s ease, transform 0.2s ease;
 }
 
-.panel.collapsible.open .panel-header .chevron {
-  color: var(--accent);
+.panel.collapsible.open .panel-header .chevron { color: var(--cat); }
+
+/* Subheads repeat one shape everywhere: category tick, then the label. */
+.subhead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 0 6px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: #8d96a3;
 }
+.subhead::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 7px;
+  height: 2px;
+  background: var(--cat, var(--accent));
+}
+.subhead::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--line);
+}
+.panel-body > .subhead:first-child { margin-top: 0; }
 
 .panel.collapsible .panel-body {
   display: none;

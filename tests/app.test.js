@@ -565,4 +565,23 @@ test('22. Continuous Wall Siding & Drip Edge Removal Verification', () => {
   assert.equal(frontFascia.children.length, 2, '2 front fascia segments on outer sides of single dormer');
 });
 
+test('23. Split Double Side Egress Stair Railings Verification', () => {
+  const home = defaultHome();
+  const frontDoor = home.openings.find((o) => o.type === 'door');
+  assert.ok(frontDoor, 'Door exists');
+
+  frontDoor.stepEgress = 'split';
+  frontDoor.stepRailings = 'both';
+  frontDoor.railMat = 'black_metal';
+
+  const root = buildHome(home, defaultScene());
+  const stepsGroup = root.children.find((c) => c.name === 'steps');
+  assert.ok(stepsGroup, 'Steps constructed');
+  assert.ok(stepsGroup.children.length > 0, 'Step meshes generated for split egress door');
+
+  // Verify railing posts & sloped rails exist for double side egress
+  const doorSteps = stepsGroup.children[0];
+  assert.ok(doorSteps.children.length > 5, 'Railings and posts generated for split double side egress stairs');
+});
+
 

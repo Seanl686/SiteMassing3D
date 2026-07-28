@@ -50,7 +50,7 @@
 
     <section class="panel collapsible open" id="panel_building">
       <div class="panel-header">
-        <h2><span class="icon">🏡</span> Building Dimensions</h2>
+        <h2><span class="code">BLD</span> Building Dimensions</h2>
         <span class="chevron">▲</span>
       </div>
       <div class="panel-body">
@@ -75,14 +75,14 @@
           </label>
         </div>
 
-        <h3 style="margin:10px 0 4px;font-size:10px;color:#6fb2ff;font-weight:600;text-transform:uppercase;">Per-Wall Custom Heights (Optional)</h3>
+        <h3 class="subhead">Per-Wall Custom Heights (Optional)</h3>
         <div class="grid2">
           <label><span>Front wall (ft)</span><input id="f_frontWallHeight" type="number" autocomplete="off" step="0.1" placeholder="Auto"></label>
           <label><span>Back wall (ft)</span><input id="f_backWallHeight" type="number" autocomplete="off" step="0.1" placeholder="Auto"></label>
           <label><span>Left wall (ft)</span><input id="f_leftWallHeight" type="number" autocomplete="off" step="0.1" placeholder="Auto"></label>
           <label><span>Right wall (ft)</span><input id="f_rightWallHeight" type="number" autocomplete="off" step="0.1" placeholder="Auto"></label>
         </div>
-        <h3 style="margin:10px 0 4px;font-size:10px;color:#6fb2ff;font-weight:600;text-transform:uppercase;">Opening Head Heights</h3>
+        <h3 class="subhead">Opening Head Heights</h3>
         <label class="row check"><input id="f_headAlign" type="checkbox" autocomplete="off"><span>Align all heads below wall top</span></label>
         <div class="grid2" id="row_headDrops">
           <label><span>Window head drop (ft)</span><input id="f_windowHeadDrop" type="number" autocomplete="off" step="0.25" min="0" max="10"></label>
@@ -95,7 +95,7 @@
 
     <section class="panel collapsible" id="panel_dormers">
       <div class="panel-header">
-        <h2><span class="icon">🏛️</span> Roof Dormers &amp; False Eaves</h2>
+        <h2><span class="code">DRM</span> Roof Dormers &amp; False Eaves</h2>
         <span class="chevron">▼</span>
       </div>
       <div class="panel-body">
@@ -132,7 +132,7 @@
 
     <section class="panel collapsible" id="panel_colors">
       <div class="panel-header">
-        <h2><span class="icon">🎨</span> Exterior Materials &amp; Colors</h2>
+        <h2><span class="code">MAT</span> Exterior Materials &amp; Colors</h2>
         <span class="chevron">▼</span>
       </div>
       <div class="panel-body">
@@ -182,7 +182,7 @@
 
     <section class="panel collapsible open" id="panel_openings">
       <div class="panel-header">
-        <h2><span class="icon">🚪</span> Openings <span class="count" id="openCount"></span></h2>
+        <h2><span class="code">OPN</span> Openings <span class="count" id="openCount"></span></h2>
         <span class="chevron">▲</span>
       </div>
       <div class="panel-body">
@@ -215,7 +215,7 @@
 
     <section class="panel collapsible" id="panel_stairs">
       <div class="panel-header">
-        <h2><span class="icon">🪜</span> Decks, Stairs &amp; Railings</h2>
+        <h2><span class="code">STR</span> Decks, Stairs &amp; Railings</h2>
         <span class="chevron">▼</span>
       </div>
       <div class="panel-body">
@@ -225,7 +225,9 @@
           <label><span>Landing depth (ft)</span><input id="s_landingDepth" type="number" autocomplete="off" step="0.5" min="2" max="10"></label>
           <label><span>Stair railings</span>
             <select id="s_stepRailings">
-              <option value="both">Both sides</option>
+              <option value="both">Both sides &amp; outer</option>
+              <option value="outer">Outer side away from house</option>
+              <option value="all">Full surround (All sides)</option>
               <option value="left">Left side only</option>
               <option value="right">Right side only</option>
               <option value="none">None</option>
@@ -267,7 +269,7 @@
 
     <section class="panel collapsible open" id="panel_photo">
       <div class="panel-header">
-        <h2><span class="icon">📸</span> Site Photo &amp; Camera Framing</h2>
+        <h2><span class="code">PHT</span> Site Photo &amp; Camera Framing</h2>
         <span class="chevron">▲</span>
       </div>
       <div class="panel-body">
@@ -290,13 +292,13 @@
         <label class="row check"><input id="sp_show" type="checkbox" autocomplete="off"><span>Show site photo background</span></label>
         <label class="row check" style="margin-top:8px;background:rgba(111,178,255,0.12);padding:5px 8px;border-radius:4px;border:1px solid rgba(111,178,255,0.3);"><input id="sp_dragMode" type="checkbox" autocomplete="off"><span style="color:#6fb2ff;font-weight:600;">🖱️ Mouse Photo Drag: Pan &amp; Zoom photo with mouse</span></label>
 
-        <h3 style="margin:10px 0 6px;font-size:10px;color:#858d98;text-transform:uppercase;">Ground Horizon &amp; Camera Distance</h3>
+        <h3 class="subhead">Ground Horizon &amp; Camera Distance</h3>
         <div class="grid2">
           <label><span>Ground baseline Y (ft)</span><input id="sp_baselineY" type="number" autocomplete="off" step="0.5" min="-50" max="50"></label>
           <label><span>Cam distance (ft)</span><input id="sp_camDist" type="number" autocomplete="off" step="1" min="5" max="500"></label>
         </div>
 
-        <h3 style="margin:10px 0 6px;font-size:10px;color:#858d98;text-transform:uppercase;">House Realignment / Lot Offset</h3>
+        <h3 class="subhead">House Realignment / Lot Offset</h3>
         <div class="grid2">
           <label><span>House X (ft)</span><input id="sp_posX" type="number" autocomplete="off" step="0.5"></label>
           <label><span>House Z (ft)</span><input id="sp_posZ" type="number" autocomplete="off" step="0.5"></label>
@@ -309,7 +311,7 @@
 
     <section class="panel collapsible" id="panel_plan">
       <div class="panel-header">
-        <h2><span class="icon">📐</span> Floor Plan Tracing Plate</h2>
+        <h2><span class="code">PLN</span> Floor Plan Tracing Plate</h2>
         <span class="chevron">▼</span>
       </div>
       <div class="panel-body">
@@ -330,11 +332,11 @@
 
     <section class="panel collapsible" id="panel_export">
       <div class="panel-header">
-        <h2><span class="icon">⚙️</span> Scene, View &amp; Screenshot Export</h2>
+        <h2><span class="code">OUT</span> Scene, View &amp; Screenshot Export</h2>
         <span class="chevron">▼</span>
       </div>
       <div class="panel-body">
-        <h3 style="margin:0 0 6px;font-size:10px;color:#858d98;text-transform:uppercase;">Lighting &amp; Environment</h3>
+        <h3 class="subhead">Lighting &amp; Environment</h3>
         <div class="grid2">
           <label><span>Sun azimuth</span><input id="s_sunAz" type="range" autocomplete="off" min="0" max="360" step="1"></label>
           <label><span>Sun elevation</span><input id="s_sunEl" type="range" autocomplete="off" min="5" max="89" step="1"></label>
@@ -350,7 +352,7 @@
         <label class="row check"><input id="s_dims" type="checkbox" autocomplete="off"><span>Dimension outline on ground</span></label>
         <label class="row check" style="margin-top:8px;background:rgba(255,100,100,0.12);padding:5px 8px;border-radius:4px;border:1px solid rgba(255,133,133,0.3);"><input id="s_blockLandscape" type="checkbox" autocomplete="off"><span style="color:#ff8585;font-weight:600;">🚫 Block landscape &amp; ground view</span></label>
 
-        <h3 style="margin:12px 0 6px;font-size:10px;color:#858d98;text-transform:uppercase;">PNG Screenshot &amp; Contact Sheet</h3>
+        <h3 class="subhead">PNG Screenshot &amp; Contact Sheet</h3>
         <div class="grid2">
           <label><span>Width (px)</span><input id="x_w" type="number" autocomplete="off" step="16"></label>
           <label><span>Height (px)</span><input id="x_h" type="number" autocomplete="off" step="16"></label>
