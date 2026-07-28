@@ -170,6 +170,9 @@ const sceneNums = [['s_focal', 'focal'], ['s_eye', 'eye'], ['s_landingDepth', 'l
 const sceneRanges = [['s_sunAz', 'sunAz'], ['s_sunEl', 'sunEl'], ['s_flat', 'flat']];
 const sceneChecks = [['s_grid', 'grid'], ['s_shadow', 'shadow'], ['s_steps', 'steps'], ['s_stepLanding', 'stepLanding'], ['s_wireframe', 'wireframe'], ['s_blockLandscape', 'blockLandscape'], ['s_labels', 'labels'], ['s_dims', 'dims']];
 
+/** Round to the nearest 1/12 ft (1 inch) and drop float noise from the field. */
+const round12 = (v) => +(Math.round(v * 12) / 12).toFixed(4);
+
 /** Per-dormer width/height rows. Hidden while sizes are linked; when unlinked
  *  each dormer gets its own pair of inputs so one can be wide-and-low and the
  *  other narrow-and-tall. */
@@ -200,11 +203,12 @@ function renderDormerSizeRows() {
     html +=
       `<div class="grid2">` +
       `<label><span>${label} width (ft)</span>` +
-      `<input type="number" autocomplete="off" step="0.5" min="4" max="20" ` +
-      `data-dormer-idx="${i}" data-dormer-key="widthFt" value="${dW}"></label>` +
+      // step 1/12 ft = 1 inch, so the arrows walk the gable an inch at a time.
+      `<input type="number" autocomplete="off" step="0.0833" min="0.5" max="40" ` +
+      `data-dormer-idx="${i}" data-dormer-key="widthFt" value="${round12(dW)}"></label>` +
       `<label><span>${label} height (ft)</span>` +
-      `<input type="number" autocomplete="off" step="0.5" min="2" max="10" ` +
-      `data-dormer-idx="${i}" data-dormer-key="heightFt" value="${dH}"></label>` +
+      `<input type="number" autocomplete="off" step="0.0833" min="0.25" max="20" ` +
+      `data-dormer-idx="${i}" data-dormer-key="heightFt" value="${round12(dH)}"></label>` +
       `</div>`;
   }
   host.innerHTML = html;
