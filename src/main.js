@@ -124,7 +124,20 @@ function plateSize(mode, w, h, aspect, scale) {
   return [h * aspect * scale, h * scale];
 }
 
+/**
+ * Paint the stage behind the plate with the scene's own background colour.
+ * The WebGL canvas is cleared to transparent whenever the photo is showing, so
+ * without this the letterboxed bands fall through to the page colour while the
+ * export fills them with scene.bg — the same frame, two different backdrops.
+ */
+function syncStageBackdrop() {
+  const stageEl = canvas.parentElement;
+  if (!stageEl) return;
+  stageEl.style.background = state.scene.bgVisible === false ? '' : state.scene.bg;
+}
+
 function updateSitePhotoPlate() {
+  syncStageBackdrop();
   const bg = $('sitePhotoBg');
   if (!bg) return;
   const sp = state.home.sitePhoto;
@@ -889,6 +902,7 @@ function bind() {
   $('s_bg').addEventListener('input', (e) => {
     state.scene.bg = e.target.value;
     stage.applySceneOpts(state.scene, state.home.dimensions);
+    syncStageBackdrop();
     save();
   });
 
@@ -988,22 +1002,21 @@ function bind() {
   // An elevation is far wider than it is tall; a 3:2 export wastes most of the
   // frame on sky. This retargets the pixel height to the subject's proportions.
   $('btnFitPx').addEventListener('click', () => {
-    const fit = stage._orthoFit;
-    let ratio;
-    if (stage.camera === stage.ortho && fit) {
-      ratio = fit.h / fit.w;
-    } else {
-      const d = state.home.dimensions;
-      ratio = 0.62; // three-quarter views read well near 8:5
-      if (d.lengthFt > 0) ratio = Math.max(0.5, Math.min(0.75, (derived(d).ridgeY * 2.4) / d.lengthFt));
-    }
-    state.export.h = Math.max(240, Math.round((state.export.w * ratio) / 16) * 16);
+    // A PNG always frames exactly what is on screen, so the only height a
+    // screenshot can deliver is the one the live viewport's aspect implies.
+    // This button just fills that number in; the contact sheet still uses it.
+    const dom = stage.renderer.domElement;
+    const ratio = dom.width > 0 ? dom.height / dom.width : 0.62;
+    state.export.h = Math.max(240, Math.round(state.export.w * ratio));
     $('x_h').value = state.export.h;
     save();
   });
 
   const doShot = () => {
-    shoot(stage, state.home, state.scene, state.export, currentViewName);
+    const c = shoot(stage, state.home, state.scene, state.export, currentViewName);
+    // shoot() locks the height to the live aspect so the PNG frames exactly what
+    // is on screen — show the user the height they actually got.
+    if (c) { state.export.h = c.height; $('x_h').value = c.height; save(); }
     updateSitePhotoPlate();
   };
   $('btnShot').addEventListener('click', doShot);

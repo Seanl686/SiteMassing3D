@@ -65,13 +65,18 @@ export function renderToCanvas(stage, w, h, alpha, sceneOpts, home) {
   }
 
   const sp = home?.sitePhoto;
-  const useBgPhoto = sp && sp.src && sp.show && !alpha;
+  // Same test the live plate uses — "block landscape" hides the photo on screen,
+  // so it has to hide it here too.
+  const useBgPhoto = sp && sp.src && sp.show && !alpha && !sceneOpts?.blockLandscape;
 
   if (alpha || useBgPhoto) {
     stage.scene.background = null;
     stage.renderer.setClearAlpha(0);
-    stage.grid.visible = false;
   }
+  // The ground grid is part of the view, not an overlay, so it is exported when
+  // it is switched on. A cutout (alpha) export is the exception: it exists to be
+  // composited elsewhere, where a baked-in grid would be in the way.
+  if (alpha) stage.grid.visible = false;
 
   const overlayWas = stage.overlay?.visible;
   if (stage.overlay) stage.overlay.visible = false;
@@ -85,7 +90,7 @@ export function renderToCanvas(stage, w, h, alpha, sceneOpts, home) {
   out.width = w; out.height = h;
   const ctx = out.getContext('2d');
 
-  if (!alpha && sceneOpts?.bg) {
+  if (!alpha && sceneOpts?.bg && sceneOpts.bgVisible !== false) {
     ctx.fillStyle = sceneOpts.bg;
     ctx.fillRect(0, 0, w, h);
   }
@@ -102,8 +107,12 @@ export function renderToCanvas(stage, w, h, alpha, sceneOpts, home) {
       const panY = ((sp.panY ?? 0) / 100) * h;
       const rot = THREE.MathUtils.degToRad(sp.rotation ?? 0);
 
-      ctx.translate(w / 2 + panX, h / 2 + panY);
+      // Match the live plate's transform order exactly: the element rotates
+      // about the STAGE centre and the pan rides that rotation, so panning a
+      // rotated photo has to move along the rotated axes here as well.
+      ctx.translate(w / 2, h / 2);
       ctx.rotate(rot);
+      ctx.translate(panX, panY);
       ctx.scale(scale, scale);
 
       const fitMode = sp.fitMode || 'camera';
@@ -133,7 +142,7 @@ export function renderToCanvas(stage, w, h, alpha, sceneOpts, home) {
   } else {
     stage.renderer.setClearAlpha(1);
   }
-  stage.grid.visible = sceneOpts.grid;
+  stage.grid.visible = !!sceneOpts.grid && !sceneOpts.blockLandscape;
 
   if (!isLiveSize) {
     stage.renderer.setPixelRatio(prevRatio);
@@ -184,13 +193,16 @@ export function shoot(stage, home, sceneOpts, exportOpts, viewName) {
   const liveH = dom ? dom.height : 1080;
   const liveAspect = liveW / liveH;
 
-  // Use current live WebGL canvas pixel dimensions for 100% exact 1-to-1 replica
+  // Default to the live canvas's own pixel size — a 1:1 replica of the viewport.
+  // Any other width is honoured, but the height always follows the live aspect:
+  // both cameras hold a fixed vertical extent, so a free height would change how
+  // much of the scene is in frame and the export would stop matching the screen.
   let targetW = liveW;
   let targetH = liveH;
 
-  if (exportOpts && exportOpts.w && exportOpts.w > 0 && exportOpts.w !== 1200) {
-    targetW = exportOpts.w;
-    targetH = Math.round(targetW / liveAspect);
+  if (exportOpts && exportOpts.w > 0) {
+    targetW = Math.round(exportOpts.w);
+    targetH = Math.max(1, Math.round(targetW / liveAspect));
   }
 
   const c = renderToCanvas(stage, targetW, targetH, exportOpts.alpha, sceneOpts, home);
