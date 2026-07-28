@@ -62,15 +62,44 @@ button.danger:hover { border-color: #e06c6c; color: #ffb3b3; }
 
 /* ---------- layout ---------- */
 
-main { flex: 1 1 auto; display: flex; min-height: 0; }
+main { flex: 1 1 auto; display: flex; min-height: 0; position: relative; }
 
 #sidebar {
-  width: 330px;
-  flex: 0 0 330px;
+  width: 260px;
+  flex: 0 0 260px;
   overflow-y: auto;
   background: var(--panel);
   border-right: 1px solid var(--line);
   padding-bottom: 40px;
+  transition: width 0.2s ease, flex 0.2s ease, padding 0.2s ease;
+}
+
+main.sidebar-collapsed #sidebar {
+  width: 0px;
+  flex: 0 0 0px;
+  overflow: hidden;
+  padding: 0;
+  border-right: none;
+}
+
+.sidebar-toggle-btn {
+  background: rgba(30, 36, 46, 0.95);
+  color: #6fb2ff;
+  border: 1px solid rgba(111, 178, 255, 0.3);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin: 6px;
+  width: calc(100% - 12px);
+  text-align: center;
+  transition: all 0.15s ease;
+}
+.sidebar-toggle-btn:hover {
+  background: rgba(45, 55, 72, 0.95);
+  border-color: #6fb2ff;
+  color: #ffffff;
 }
 
 #stage { flex: 1 1 auto; position: relative; min-width: 0; overflow: hidden; }

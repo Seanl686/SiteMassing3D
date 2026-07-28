@@ -19,6 +19,7 @@
 <body>
 
 <header id="topbar">
+  <button id="btnToggleSidebarTop" class="btn-rot" style="margin-right:8px;font-size:10.5px;" title="Toggle sidebar / maximize 3D canvas">◀ Sidebar</button>
   <div class="brand">SiteMassing3D</div>
   <div class="views" id="viewPresets">
     <button data-view="front">Front elev</button>
@@ -43,8 +44,11 @@
   </div>
 </header>
 
-<main>
-  <aside id="side    <section class="panel collapsible open" id="panel_building">
+<main id="mainContainer">
+  <aside id="sidebar">
+    <button id="btnToggleSidebar" class="sidebar-toggle-btn" title="Toggle sidebar / maximize 3D canvas">◀ Collapse Sidebar</button>
+
+    <section class="panel collapsible open" id="panel_building">
       <div class="panel-header">
         <h2><span class="icon">🏡</span> Building Dimensions</h2>
         <span class="chevron">▲</span>

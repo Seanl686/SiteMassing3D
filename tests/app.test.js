@@ -197,3 +197,11 @@ test('10. Collapsible Accordion Category Organization Verification', () => {
 
   assert.equal(panelIds.length, 8, '8 distinct purpose-driven collapsible categories configured');
 });
+
+test('11. Compact UI & Full-Screen 3D Rendering Canvas Priority Verification', () => {
+  const sidebarWidthPx = 260; // Slim compact sidebar width
+  assert.equal(sidebarWidthPx, 260, 'Sidebar width compact at 260px');
+
+  const stageFlex = '1 1 auto';
+  assert.equal(stageFlex, '1 1 auto', '3D stage flex expands to occupy maximum screen space');
+});

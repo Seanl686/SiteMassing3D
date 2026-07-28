@@ -224,6 +224,24 @@ function loadHome(raw) {
 
 function bind() {
   initAccordions();
+
+  const toggleSidebar = () => {
+    const main = $('mainContainer');
+    if (!main) return;
+    const collapsed = main.classList.toggle('sidebar-collapsed');
+    const text = collapsed ? '▶ Show Sidebar' : '◀ Collapse Sidebar';
+    if ($('btnToggleSidebar')) $('btnToggleSidebar').textContent = text;
+    if ($('btnToggleSidebarTop')) $('btnToggleSidebarTop').textContent = collapsed ? '▶ Sidebar' : '◀ Sidebar';
+    
+    setTimeout(() => {
+      const c = $('view');
+      if (c) stage.resize(c.clientWidth, c.clientHeight);
+    }, 210);
+  };
+
+  if ($('btnToggleSidebar')) $('btnToggleSidebar').addEventListener('click', toggleSidebar);
+  if ($('btnToggleSidebarTop')) $('btnToggleSidebarTop').addEventListener('click', toggleSidebar);
+
   $('f_name').addEventListener('input', (e) => { state.home.name = e.target.value; updateHud(); save(); });
 
   for (const [id, key] of dimFields) {
