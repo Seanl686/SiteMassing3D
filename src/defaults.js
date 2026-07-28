@@ -80,3 +80,29 @@ export function defaultScene() {
 export function defaultExport() {
   return { w: 2400, h: 1600, alpha: false, burn: true };
 }
+
+export function migrate(home) {
+  const base = defaultHome();
+  const out = {
+    name: home.name || base.name,
+    dimensions: { ...base.dimensions, ...(home.dimensions || {}) },
+    colors: { ...base.colors, ...(home.colors || {}) },
+    openings: (home.openings || []).map((o) => ({
+      id: o.id || nextId('o'),
+      type: o.type || 'window',
+      wall: o.wall || 'front',
+      offsetFt: +o.offsetFt || 0,
+      widthFt: +o.widthFt || 3,
+      heightFt: +o.heightFt || 3,
+      sillFt: +o.sillFt || 0,
+      label: o.label || '',
+      stepMat: o.stepMat,
+      stepEgress: o.stepEgress,
+      railMat: o.railMat,
+      balusterStyle: o.balusterStyle,
+    })),
+    plan: { ...base.plan, ...(home.plan || {}) },
+    sitePhoto: { ...base.sitePhoto, ...(home.sitePhoto || {}) },
+  };
+  return out;
+}

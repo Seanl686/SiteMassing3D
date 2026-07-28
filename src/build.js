@@ -592,6 +592,9 @@ export function buildHome(home, sceneOpts) {
     concrete: mat('#b4bcc6', { roughness: 0.95 }),
     pressure_treated: mat('#a87442', { roughness: 0.78 }),
     dark_composite: mat('#383c42', { roughness: 0.70 }),
+    rail_pressure_treated: mat('#a87442', { roughness: 0.80 }),
+    rail_white: mat('#f5f7fa', { roughness: 0.65 }),
+    rail_black: mat('#22252a', { metalness: 0.75, roughness: 0.35 }),
     door: mat(home.colors.door, { roughness: 0.7 }),
     glass: mat(home.colors.glass, { roughness: 0.18, metalness: 0.15 }),
   };

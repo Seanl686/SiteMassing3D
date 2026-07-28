@@ -59,20 +59,96 @@ export function renderOpeningList(container, home, cb) {
   syncOpeningValues(container, home, cb.selectedId);
 }
 
+const MAT_LABELS = { concrete: '🧱 Concrete', pressure_treated: '🪵 Wood', dark_composite: '⬛ Composite' };
+const EGRESS_LABELS = { front: '⬆ Front', left: '⬅ Left', right: '➡ Right', split: '↔ Split' };
+const RAIL_MAT_LABELS = { pressure_treated: '🪵 Wood', white_trim: '⚪ White', black_metal: '⬛ Iron', matching_trim: '🎨 Trim' };
+const BALUSTER_LABELS = { balusters: '║║ Spindles', horizontal_cables: '═ Cables', open: '🔓 Open' };
+
+const MAT_ARR = ['concrete', 'pressure_treated', 'dark_composite'];
+const EGRESS_ARR = ['front', 'left', 'right', 'split'];
+const RAIL_MAT_ARR = ['pressure_treated', 'white_trim', 'black_metal', 'matching_trim'];
+const BALUSTER_ARR = ['balusters', 'horizontal_cables', 'open'];
+
+function cycleNext(arr, current) {
+  const idx = arr.indexOf(current || arr[0]);
+  return arr[(idx + 1) % arr.length];
+}
+
+function buildSummaryPills(summaryEl, o, cb) {
+  summaryEl.textContent = '';
+
+  const createPill = (lblText, valText, onClick) => {
+    const pill = document.createElement('button');
+    pill.type = 'button';
+    pill.className = 'summary-pill';
+    pill.title = 'Click to edit or cycle setting';
+    pill.innerHTML = `<span class="pill-lbl">${lblText}:</span> <span class="pill-val">${valText}</span>`;
+    pill.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onClick();
+    });
+    return pill;
+  };
+
+  summaryEl.appendChild(createPill('Width', fmtAllUnits(o.widthFt), () => {
+    const rowEl = summaryEl.closest('.selected-card')?.querySelector('.opening');
+    const input = rowEl?.querySelector('input[data-key="widthFt"]');
+    if (input) input.focus();
+  }));
+
+  summaryEl.appendChild(createPill('Height', fmtAllUnits(o.heightFt), () => {
+    const rowEl = summaryEl.closest('.selected-card')?.querySelector('.opening');
+    const input = rowEl?.querySelector('input[data-key="heightFt"]');
+    if (input) input.focus();
+  }));
+
+  summaryEl.appendChild(createPill('Offset', fmtAllUnits(o.offsetFt), () => {
+    const rowEl = summaryEl.closest('.selected-card')?.querySelector('.opening');
+    const input = rowEl?.querySelector('input[data-key="offsetFt"]');
+    if (input) input.focus();
+  }));
+
+  summaryEl.appendChild(createPill('Sill', fmtAllUnits(o.sillFt), () => {
+    const rowEl = summaryEl.closest('.selected-card')?.querySelector('.opening');
+    const input = rowEl?.querySelector('input[data-key="sillFt"]');
+    if (input) input.focus();
+  }));
+
+  if (o.type === 'door' || o.type === 'slider') {
+    const stMat = o.stepMat || 'concrete';
+    summaryEl.appendChild(createPill('Stair Mat', MAT_LABELS[stMat] || stMat, () => {
+      o.stepMat = cycleNext(MAT_ARR, stMat);
+      cb.onEdit(o, true);
+    }));
+
+    const egr = o.stepEgress || 'front';
+    summaryEl.appendChild(createPill('Egress', EGRESS_LABELS[egr] || egr, () => {
+      o.stepEgress = cycleNext(EGRESS_ARR, egr);
+      cb.onEdit(o, true);
+    }));
+
+    const rMat = o.railMat || 'pressure_treated';
+    summaryEl.appendChild(createPill('Rail Mat', RAIL_MAT_LABELS[rMat] || rMat, () => {
+      o.railMat = cycleNext(RAIL_MAT_ARR, rMat);
+      cb.onEdit(o, true);
+    }));
+
+    const bal = o.balusterStyle || 'balusters';
+    summaryEl.appendChild(createPill('Balusters', BALUSTER_LABELS[bal] || bal, () => {
+      o.balusterStyle = cycleNext(BALUSTER_ARR, bal);
+      cb.onEdit(o, true);
+    }));
+  }
+}
+
 function renderSelectedUnitCard(o, cb) {
   const card = document.createElement('div');
   card.className = 'selected-card';
 
   const summary = document.createElement('div');
   summary.className = 'unit-summary';
-  summary.style.cssText = 'margin-bottom: 8px; padding: 6px 8px; background: rgba(111, 178, 255, 0.08); border-radius: 5px; font-size: 11px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; color: #cfd6e0; border: 1px solid rgba(111, 178, 255, 0.2);';
 
-  summary.innerHTML = `
-    <div><span style="color:#9aa2ad;">Width:</span> <b>${fmtAllUnits(o.widthFt)}</b></div>
-    <div><span style="color:#9aa2ad;">Height:</span> <b>${fmtAllUnits(o.heightFt)}</b></div>
-    <div><span style="color:#9aa2ad;">Offset:</span> <b>${fmtAllUnits(o.offsetFt)}</b></div>
-    <div><span style="color:#9aa2ad;">Sill:</span> <b>${fmtAllUnits(o.sillFt)}</b></div>
-  `;
+  buildSummaryPills(summary, o, cb);
 
   card.appendChild(summary);
   const r = row(o, cb);
@@ -81,7 +157,7 @@ function renderSelectedUnitCard(o, cb) {
 }
 
 /** Push current values into the existing rows without rebuilding them. */
-export function syncOpeningValues(container, home, selectedId) {
+export function syncOpeningValues(container, home, selectedId, cb) {
   for (const el of container.querySelectorAll('.opening')) {
     const o = home.openings.find((x) => x.id === el.dataset.id);
     if (!o) continue;
@@ -100,13 +176,8 @@ export function syncOpeningValues(container, home, selectedId) {
     const o = home.openings.find((x) => x.id === rowEl.dataset.id);
     if (!o) continue;
     const summary = card.querySelector('.unit-summary');
-    if (summary) {
-      summary.innerHTML = `
-        <div><span style="color:#9aa2ad;">Width:</span> <b>${fmtAllUnits(o.widthFt)}</b></div>
-        <div><span style="color:#9aa2ad;">Height:</span> <b>${fmtAllUnits(o.heightFt)}</b></div>
-        <div><span style="color:#9aa2ad;">Offset:</span> <b>${fmtAllUnits(o.offsetFt)}</b></div>
-        <div><span style="color:#9aa2ad;">Sill:</span> <b>${fmtAllUnits(o.sillFt)}</b></div>
-      `;
+    if (summary && cb) {
+      buildSummaryPills(summary, o, cb);
     }
   }
 }

@@ -153,6 +153,58 @@ main { flex: 1 1 auto; display: flex; min-height: 0; }
   margin: 0;
 }
 
+.unit-summary {
+  margin-bottom: 8px;
+  padding: 8px;
+  background: rgba(111, 178, 255, 0.08);
+  border-radius: 6px;
+  font-size: 11px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: #cfd6e0;
+  border: 1px solid rgba(111, 178, 255, 0.25);
+}
+
+.summary-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(30, 36, 46, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 10.5px;
+  color: #e2e7ee;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.summary-pill:hover {
+  background: rgba(111, 178, 255, 0.22);
+  border-color: rgba(111, 178, 255, 0.55);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.summary-pill:active {
+  transform: translateY(0);
+}
+
+.summary-pill .pill-lbl {
+  color: #9aa2ad;
+  font-size: 9px;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.summary-pill .pill-val {
+  font-weight: 600;
+  color: #6fb2ff;
+}
+
 #hud {
   position: absolute;
   left: 10px;

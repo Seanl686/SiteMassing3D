@@ -7,7 +7,7 @@ import { renderOpeningList, syncOpeningValues } from './ui.js';
 import { updatePlanPlate, nearestWallHit } from './plan.js';
 import { Gizmo, wallPlaneHit, applyDrag } from './gizmo.js';
 import { shoot, contactSheet, renderToCanvas } from './capture.js';
-import { defaultHome, defaultScene, defaultExport, nextId, OPENING_PRESETS } from './defaults.js';
+import { defaultHome, defaultScene, defaultExport, nextId, OPENING_PRESETS, migrate } from './defaults.js';
 
 const STORE_KEY = 'sitemassing3d.v1';
 
@@ -738,27 +738,7 @@ function addOpening(type, wall, u, v) {
 // Persistence
 // ---------------------------------------------------------------------------
 
-function migrate(home) {
-  const base = defaultHome();
-  const out = {
-    name: home.name || base.name,
-    dimensions: { ...base.dimensions, ...(home.dimensions || {}) },
-    colors: { ...base.colors, ...(home.colors || {}) },
-    openings: (home.openings || []).map((o) => ({
-      id: o.id || nextId('o'),
-      type: o.type || 'window',
-      wall: o.wall || 'front',
-      offsetFt: +o.offsetFt || 0,
-      widthFt: +o.widthFt || 3,
-      heightFt: +o.heightFt || 3,
-      sillFt: +o.sillFt || 0,
-      label: o.label || '',
-    })),
-    plan: { ...base.plan, ...(home.plan || {}) },
-    sitePhoto: { ...base.sitePhoto, ...(home.sitePhoto || {}) },
-  };
-  return out;
-}
+
 
 function save() {
   try {
