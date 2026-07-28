@@ -185,8 +185,8 @@ const dimFields = [
   ['f_leftWallHeight', 'leftWallHeightFt'], ['f_rightWallHeight', 'rightWallHeightFt'],
 ];
 const colorFields = [
-  ['c_siding', 'siding'], ['c_trim', 'trim'], ['c_roof', 'roof'],
-  ['c_skirting', 'skirting'], ['c_door', 'door'], ['c_glass', 'glass'],
+  ['c_siding', 'siding'], ['c_dormerSiding', 'dormerSiding'], ['c_gableSiding', 'gableSiding'],
+  ['c_trim', 'trim'], ['c_roof', 'roof'], ['c_skirting', 'skirting'], ['c_door', 'door'], ['c_glass', 'glass'],
 ];
 const planFields = [['p_width', 'widthFt'], ['p_rot', 'rotation'], ['p_x', 'offsetX'], ['p_z', 'offsetZ']];
 const photoFields = [
@@ -278,9 +278,16 @@ function syncForm() {
   if ($('f_dormerLinkSizes')) $('f_dormerLinkSizes').checked = state.home.dimensions.dormerLinkSizes === true;
   if ($('f_dormerNested')) $('f_dormerNested').checked = !!state.home.dimensions.dormerNested;
   if ($('f_dormerNestOffset')) $('f_dormerNestOffset').value = state.home.dimensions.dormerNestOffsetFt ?? 0;
+  if ($('f_sidingTexture')) $('f_sidingTexture').value = state.home.dimensions.sidingTexture || 'horizontal_lap';
+  if ($('f_dormerSidingTexture')) $('f_dormerSidingTexture').value = state.home.dimensions.dormerSidingTexture || state.home.dimensions.sidingTexture || 'horizontal_lap';
+  if ($('f_gableSidingTexture')) $('f_gableSidingTexture').value = state.home.dimensions.gableSidingTexture || state.home.dimensions.sidingTexture || 'horizontal_lap';
+  if ($('f_cornerTrim')) $('f_cornerTrim').checked = state.home.dimensions.cornerTrim !== false;
+  if ($('f_cornerTrimWidth')) $('f_cornerTrimWidth').value = Math.round((state.home.dimensions.cornerTrimWidthFt ?? 0.5) * 12);
   syncHeadAlignRows();
   renderDormerSizeRows();
-  for (const [id, key] of colorFields) $(id).value = state.home.colors[key];
+  for (const [id, key] of colorFields) {
+    if ($(id)) $(id).value = state.home.colors[key] || state.home.colors.siding || '#8d9299';
+  }
   for (const [id, key] of planFields) $(id).value = state.home.plan[key];
   $('p_op').value = state.home.plan.opacity;
   $('p_show').checked = state.home.plan.show;
@@ -459,6 +466,38 @@ function bind() {
   if ($('btnResetDormerPos')) {
     $('btnResetDormerPos').addEventListener('click', () => {
       state.home.dimensions.dormerPositions = [];
+      rebuild(); save();
+    });
+  }
+  if ($('f_sidingTexture')) {
+    $('f_sidingTexture').addEventListener('change', (e) => {
+      state.home.dimensions.sidingTexture = e.target.value;
+      rebuild(); save();
+    });
+  }
+  if ($('f_dormerSidingTexture')) {
+    $('f_dormerSidingTexture').addEventListener('change', (e) => {
+      state.home.dimensions.dormerSidingTexture = e.target.value;
+      rebuild(); save();
+    });
+  }
+  if ($('f_gableSidingTexture')) {
+    $('f_gableSidingTexture').addEventListener('change', (e) => {
+      state.home.dimensions.gableSidingTexture = e.target.value;
+      rebuild(); save();
+    });
+  }
+  if ($('f_cornerTrim')) {
+    $('f_cornerTrim').addEventListener('change', (e) => {
+      state.home.dimensions.cornerTrim = e.target.checked;
+      rebuild(); save();
+    });
+  }
+  if ($('f_cornerTrimWidth')) {
+    $('f_cornerTrimWidth').addEventListener('input', (e) => {
+      const inch = parseFloat(e.target.value);
+      if (Number.isNaN(inch) || inch <= 0) return;
+      state.home.dimensions.cornerTrimWidthFt = inch / 12;
       rebuild(); save();
     });
   }

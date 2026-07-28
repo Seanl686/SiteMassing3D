@@ -5,6 +5,7 @@
 // Ground is y = 0, floor deck sits at y = floorHeightFt.
 
 import * as THREE from 'three';
+import { createSidingMaterial } from './textures.js';
 
 const WALL_THICK = 0.5;   // ft
 const TRIM_W = 0.28;      // ft, casing width around openings
@@ -141,30 +142,67 @@ function buildWall(name, frame, home, materials) {
   const { slope } = derived(dim);
   const H = getWallHeight(name, dim);
   const span = frame.span;
-
-  const shape = new THREE.Shape();
-  shape.moveTo(0, 0);
-  shape.lineTo(span, 0);
-  shape.lineTo(span, H);
-  if (frame.gable && dim.roofStyle !== 'flat') {
-    shape.lineTo(span / 2, H + (span / 2) * slope);
-  }
-  shape.lineTo(0, H);
-  shape.closePath();
-
   const openings = home.openings.filter((o) => o.wall === name);
-  for (const o of openings) {
-    shape.holes.push(rectPath(o.widthFt, o.heightFt, o.offsetFt, o.sillFt));
-  }
 
   const group = new THREE.Group();
   group.name = `wall:${name}`;
 
-  const wall = new THREE.Mesh(extrude(shape, WALL_THICK), materials.siding);
-  wall.castShadow = true;
-  wall.receiveShadow = true;
-  wall.userData.wall = name;
-  group.add(wall);
+  const hasGableAccent = frame.gable && dim.roofStyle !== 'flat' && (
+    (dim.gableSidingTexture && dim.gableSidingTexture !== dim.sidingTexture) ||
+    (home.colors.gableSiding && home.colors.gableSiding !== home.colors.siding)
+  );
+
+  if (hasGableAccent) {
+    // 1. Rectangular wall body (0 to H) with main siding material
+    const rectShape = new THREE.Shape();
+    rectShape.moveTo(0, 0);
+    rectShape.lineTo(span, 0);
+    rectShape.lineTo(span, H);
+    rectShape.lineTo(0, H);
+    rectShape.closePath();
+    for (const o of openings) {
+      rectShape.holes.push(rectPath(o.widthFt, o.heightFt, o.offsetFt, o.sillFt));
+    }
+    const wallBody = new THREE.Mesh(extrude(rectShape, WALL_THICK), materials.siding);
+    wallBody.castShadow = true;
+    wallBody.receiveShadow = true;
+    wallBody.userData.wall = name;
+    group.add(wallBody);
+
+    // 2. Triangular gable peak (above H) with gable accent siding material
+    const peakShape = new THREE.Shape();
+    peakShape.moveTo(0, H);
+    peakShape.lineTo(span, H);
+    peakShape.lineTo(span / 2, H + (span / 2) * slope);
+    peakShape.closePath();
+    const gablePeak = new THREE.Mesh(extrude(peakShape, WALL_THICK), materials.gableSiding || materials.siding);
+    gablePeak.castShadow = true;
+    gablePeak.receiveShadow = true;
+    gablePeak.userData.wall = name;
+    gablePeak.name = 'gablePeak';
+    group.add(gablePeak);
+  } else {
+    // Single extruded shape for wall + gable peak
+    const shape = new THREE.Shape();
+    shape.moveTo(0, 0);
+    shape.lineTo(span, 0);
+    shape.lineTo(span, H);
+    if (frame.gable && dim.roofStyle !== 'flat') {
+      shape.lineTo(span / 2, H + (span / 2) * slope);
+    }
+    shape.lineTo(0, H);
+    shape.closePath();
+
+    for (const o of openings) {
+      shape.holes.push(rectPath(o.widthFt, o.heightFt, o.offsetFt, o.sillFt));
+    }
+
+    const wall = new THREE.Mesh(extrude(shape, WALL_THICK), materials.siding);
+    wall.castShadow = true;
+    wall.receiveShadow = true;
+    wall.userData.wall = name;
+    group.add(wall);
+  }
 
   for (const o of openings) {
     const og = buildOpening(o, materials);
@@ -308,6 +346,7 @@ function buildDormers(dim, materials) {
 
   const g = new THREE.Group();
   g.name = 'dormers';
+  const dormerMat = materials.dormerSiding || materials.siding;
 
   const { slope, eaveY } = derived(dim);
   const frontZ = -dim.widthFt / 2;
@@ -354,7 +393,7 @@ function buildDormers(dim, materials) {
 
     const wallMesh = new THREE.Mesh(
       new THREE.ExtrudeGeometry(wallShape, { depth: 0.2, bevelEnabled: false }),
-      materials.siding
+      dormerMat
     );
     wallMesh.position.set(capCenterX, eaveY, dormerFrontZ);
     wallMesh.castShadow = true;
@@ -388,7 +427,7 @@ function buildDormers(dim, materials) {
 
       const sideMesh = new THREE.Mesh(
         new THREE.ExtrudeGeometry(sideShape, { depth: 0.15, bevelEnabled: false }),
-        materials.siding
+        dormerMat
       );
       const sideX = side === -1 ? capLeft : capRight;
       sideMesh.position.set(sideX + side * 0.08, eaveY, dormerFrontZ);
@@ -524,6 +563,7 @@ function buildDormers(dim, materials) {
  *  shallower than, the outer gable it is tucked into. */
 function gableDormer(dim, materials, opts) {
   const { index: i, posX, dW, dH, frontZ: dormerFrontZ, eaveY, slope, ov } = opts;
+  const dormerMat = materials.dormerSiding || materials.siding;
   const dormerGroup = new THREE.Group();
   dormerGroup.name = `dormer:${i}`;
   dormerGroup.userData.dormerIndex = i;
@@ -536,7 +576,7 @@ function gableDormer(dim, materials, opts) {
   shape.closePath();
 
   const extrudeOpts = { depth: 0.2, bevelEnabled: false };
-  const frontGable = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, extrudeOpts), materials.siding);
+  const frontGable = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, extrudeOpts), dormerMat);
   frontGable.position.set(posX, eaveY, dormerFrontZ);
   frontGable.castShadow = true;
   frontGable.userData.dormerIndex = i;
@@ -957,11 +997,50 @@ export function fmtAllUnits(vFt) {
 // Assembly
 // ---------------------------------------------------------------------------
 
+function buildCornerTrim(dim, materials) {
+  if (dim.cornerTrim === false) return null;
+  const g = new THREE.Group();
+  g.name = 'cornerTrim';
+
+  const w = dim.cornerTrimWidthFt || 0.5;
+  const t = 0.12;
+  const L = dim.lengthFt;
+  const W = dim.widthFt;
+  const H = dim.wallHeightFt;
+  const minY = dim.floorHeightFt;
+
+  const halfL = L / 2;
+  const halfW = W / 2;
+
+  const corners = [
+    { x: -halfL, z: -halfW, signX: -1, signZ: -1 },
+    { x:  halfL, z: -halfW, signX:  1, signZ: -1 },
+    { x:  halfL, z:  halfW, signX:  1, signZ:  1 },
+    { x: -halfL, z:  halfW, signX: -1, signZ:  1 },
+  ];
+
+  for (const c of corners) {
+    const boardX = new THREE.Mesh(new THREE.BoxGeometry(w, H, t), materials.trim);
+    boardX.position.set(c.x + c.signX * (w / 2), minY + H / 2, c.z + c.signZ * (t / 2));
+    boardX.castShadow = true;
+    g.add(boardX);
+
+    const boardZ = new THREE.Mesh(new THREE.BoxGeometry(t, H, w), materials.trim);
+    boardZ.position.set(c.x + c.signX * (t / 2), minY + H / 2, c.z + c.signZ * (w / 2));
+    boardZ.castShadow = true;
+    g.add(boardZ);
+  }
+
+  return g;
+}
+
 export function buildHome(home, sceneOpts) {
   applyHeadAlign(home);
   const dim = home.dimensions;
   const materials = {
-    siding: mat(home.colors.siding),
+    siding: createSidingMaterial(home.colors.siding, dim.sidingTexture || 'horizontal_lap'),
+    dormerSiding: createSidingMaterial(home.colors.dormerSiding || home.colors.siding, dim.dormerSidingTexture || dim.sidingTexture || 'horizontal_lap'),
+    gableSiding: createSidingMaterial(home.colors.gableSiding || home.colors.siding, dim.gableSidingTexture || dim.sidingTexture || 'horizontal_lap'),
     trim: mat(home.colors.trim, { roughness: 0.75 }),
     roof: mat(home.colors.roof, { roughness: 0.85 }),
     skirting: mat(home.colors.skirting, { roughness: 0.95 }),
@@ -984,6 +1063,8 @@ export function buildHome(home, sceneOpts) {
   }
 
   root.add(buildRoof(dim, materials));
+  const corners = buildCornerTrim(dim, materials);
+  if (corners) root.add(corners);
   const skirt = buildSkirting(dim, materials);
   if (skirt) root.add(skirt);
   if (sceneOpts.steps) root.add(buildSteps(home, materials, sceneOpts));

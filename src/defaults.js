@@ -48,9 +48,16 @@ export function defaultHome() {
       dormerPositions: [],          // custom X offsets in ft; empty = auto-place
       dormerLinkSizes: false,       // true = every dormer shares the global size
       dormerSizes: [],              // per-dormer { widthFt, heightFt } overrides
+      sidingTexture: 'horizontal_lap', // 'horizontal_lap', 'board_batten', 'cedar_shingle', 'smooth'
+      dormerSidingTexture: 'horizontal_lap',
+      gableSidingTexture: 'horizontal_lap',
+      cornerTrim: true,
+      cornerTrimWidthFt: 0.5,       // 6-inch vertical corner trim boards
     },
     colors: {
       siding: '#8d9299',
+      dormerSiding: '#8d9299',
+      gableSiding: '#8d9299',
       trim: '#f2f2f0',
       roof: '#3a3d42',
       skirting: '#e6e6e1',
@@ -124,10 +131,13 @@ export function migrate(home) {
     : [];
   // Sizes are independent unless a save explicitly asked for linked sizes.
   dimensions.dormerLinkSizes = dimensions.dormerLinkSizes === true;
+  const colors = { ...base.colors, ...(home.colors || {}) };
+  if (!home.colors?.dormerSiding) colors.dormerSiding = colors.siding;
+  if (!home.colors?.gableSiding) colors.gableSiding = colors.siding;
   const out = {
     name: home.name || base.name,
     dimensions,
-    colors: { ...base.colors, ...(home.colors || {}) },
+    colors,
     openings: (home.openings || []).map((o) => ({
       id: o.id || nextId('o'),
       type: o.type || 'window',

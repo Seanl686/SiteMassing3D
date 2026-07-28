@@ -134,14 +134,46 @@
         <span class="chevron">▼</span>
       </div>
       <div class="panel-body">
-        <div class="grid2 colors">
-          <label><span>Siding</span><input id="c_siding" type="color" autocomplete="off"></label>
+        <div class="grid2">
+          <label><span>Main siding style</span>
+            <select id="f_sidingTexture">
+              <option value="horizontal_lap">Horizontal Lap</option>
+              <option value="board_batten">Board &amp; Batten</option>
+              <option value="cedar_shingle">Cedar Shingle / Shake</option>
+              <option value="smooth">Smooth Vinyl</option>
+            </select>
+          </label>
+          <label><span>Dormer siding style</span>
+            <select id="f_dormerSidingTexture">
+              <option value="horizontal_lap">Horizontal Lap</option>
+              <option value="board_batten">Board &amp; Batten</option>
+              <option value="cedar_shingle">Cedar Shingle / Shake</option>
+              <option value="smooth">Smooth Vinyl</option>
+            </select>
+          </label>
+          <label><span>Gable end accent style</span>
+            <select id="f_gableSidingTexture">
+              <option value="horizontal_lap">Horizontal Lap</option>
+              <option value="board_batten">Board &amp; Batten</option>
+              <option value="cedar_shingle">Cedar Shingle / Shake</option>
+              <option value="smooth">Smooth Vinyl</option>
+            </select>
+          </label>
+          <label><span>Corner trim width (in)</span>
+            <input id="f_cornerTrimWidth" type="number" autocomplete="off" step="1" min="2" max="12">
+          </label>
+        </div>
+        <div class="grid2 colors" style="margin-top:8px;">
+          <label><span>Main Siding</span><input id="c_siding" type="color" autocomplete="off"></label>
+          <label><span>Dormer Siding</span><input id="c_dormerSiding" type="color" autocomplete="off"></label>
+          <label><span>Gable Siding</span><input id="c_gableSiding" type="color" autocomplete="off"></label>
           <label><span>Trim</span><input id="c_trim" type="color" autocomplete="off"></label>
           <label><span>Roof</span><input id="c_roof" type="color" autocomplete="off"></label>
           <label><span>Skirting</span><input id="c_skirting" type="color" autocomplete="off"></label>
           <label><span>Door</span><input id="c_door" type="color" autocomplete="off"></label>
           <label><span>Glass</span><input id="c_glass" type="color" autocomplete="off"></label>
         </div>
+        <label class="row check" style="margin-top:6px;"><input id="f_cornerTrim" type="checkbox" autocomplete="off"><span>Corner trim boards</span></label>
       </div>
     </section>
 

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { defaultHome, defaultScene, defaultExport, migrate, WALLS } from '../src/defaults.js';
 import { derived, wallFrames, fmtAllUnits, buildHome, getWallHeight, dormerSize, applyHeadAlign } from '../src/build.js';
+import { createSidingMaterial } from '../src/textures.js';
 
 test('1. Defaults & State Initialization', () => {
   const home = defaultHome();
@@ -498,3 +499,42 @@ test('20. Global Opening Head Alignment Below Wall Top', () => {
   buildHome(home, defaultScene());
   assert.equal(win.sillFt + win.heightFt, 9 - 1.5, 'buildHome re-aligns the heads');
 });
+
+test('20. Procedural Siding Material Creation & Texture Generation', () => {
+  const lapMat = createSidingMaterial('#8d9299', 'horizontal_lap');
+  assert.ok(lapMat, 'Horizontal lap material generated');
+
+  const shakeMat = createSidingMaterial('#4a525d', 'cedar_shingle');
+  assert.ok(shakeMat, 'Cedar shingle material generated');
+
+  const boardMat = createSidingMaterial('#ffffff', 'board_batten');
+  assert.ok(boardMat, 'Board & batten material generated');
+});
+
+test('21. Corner Trim Boards & Per-Area Siding Assignment (Dormers & Gable Accents)', () => {
+  const home = defaultHome();
+  home.dimensions.cornerTrim = true;
+  home.dimensions.cornerTrimWidthFt = 0.5;
+  home.dimensions.sidingTexture = 'horizontal_lap';
+  home.dimensions.dormerSidingTexture = 'cedar_shingle';
+  home.dimensions.gableSidingTexture = 'board_batten';
+  home.colors.dormerSiding = '#5a626d';
+  home.colors.gableSiding = '#3a424d';
+  home.dimensions.dormerCount = 1;
+
+  const root = buildHome(home, defaultScene());
+  const corners = root.children.find((c) => c.name === 'cornerTrim');
+  assert.ok(corners, 'Corner trim group constructed');
+  assert.equal(corners.children.length, 8, '8 corner trim boards generated for 4 L-shaped building corners');
+
+  const leftWall = root.children.find((c) => c.name === 'wall:left');
+  assert.ok(leftWall, 'Left gable end wall constructed');
+  const gablePeak = leftWall.children.find((c) => c.name === 'gablePeak');
+  assert.ok(gablePeak, 'Gable peak constructed with independent gable accent material');
+
+  const materials = root.userData.materials;
+  assert.ok(materials.siding, 'Main siding material initialized');
+  assert.ok(materials.dormerSiding, 'Dormer siding material initialized');
+  assert.ok(materials.gableSiding, 'Gable siding material initialized');
+});
+
