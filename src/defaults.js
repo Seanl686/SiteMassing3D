@@ -69,6 +69,8 @@ export function defaultScene() {
     stepLanding: true,
     landingDepthFt: 3.5,
     stepRailings: 'both', // 'none', 'left', 'right', 'both'
+    railMat: 'pressure_treated', // 'pressure_treated', 'white_trim', 'black_metal', 'matching_trim'
+    balusterStyle: 'balusters', // 'balusters', 'horizontal_cables', 'open'
     blockLandscape: false,
     labels: false,
     dims: false,

@@ -182,6 +182,8 @@ function syncForm() {
   if ($('s_stepRailings')) $('s_stepRailings').value = state.scene.stepRailings || 'both';
   if ($('s_stepMat')) $('s_stepMat').value = state.scene.stepMat || 'concrete';
   if ($('s_stepEgress')) $('s_stepEgress').value = state.scene.stepEgress || 'front';
+  if ($('s_railMat')) $('s_railMat').value = state.scene.railMat || 'pressure_treated';
+  if ($('s_balusterStyle')) $('s_balusterStyle').value = state.scene.balusterStyle || 'balusters';
   $('s_bg').value = state.scene.bg;
   $('x_w').value = state.export.w;
   $('x_h').value = state.export.h;
@@ -383,6 +385,18 @@ function bind() {
   if ($('s_stepEgress')) {
     $('s_stepEgress').addEventListener('change', (e) => {
       state.scene.stepEgress = e.target.value;
+      rebuild();
+    });
+  }
+  if ($('s_railMat')) {
+    $('s_railMat').addEventListener('change', (e) => {
+      state.scene.railMat = e.target.value;
+      rebuild();
+    });
+  }
+  if ($('s_balusterStyle')) {
+    $('s_balusterStyle').addEventListener('change', (e) => {
+      state.scene.balusterStyle = e.target.value;
       rebuild();
     });
   }

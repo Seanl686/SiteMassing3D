@@ -272,6 +272,43 @@ function row(o, cb) {
     egressLabel.append(egressSpan, egressSelect);
     subGrid.appendChild(egressLabel);
 
+    const railMatLabel = document.createElement('label');
+    const railMatSpan = document.createElement('span');
+    railMatSpan.textContent = 'Railing Material';
+    const railMatSelect = document.createElement('select');
+    railMatSelect.innerHTML = `
+      <option value="pressure_treated">Pressure-Treated Wood</option>
+      <option value="white_trim">Classic White Wood</option>
+      <option value="black_metal">Black Wrought Iron</option>
+      <option value="matching_trim">Matching House Trim</option>
+    `;
+    railMatSelect.value = o.railMat || 'pressure_treated';
+    railMatSelect.addEventListener('focus', () => cb.onSelect(o.id));
+    railMatSelect.addEventListener('change', () => {
+      o.railMat = railMatSelect.value;
+      cb.onEdit(o, true);
+    });
+    railMatLabel.append(railMatSpan, railMatSelect);
+    subGrid.appendChild(railMatLabel);
+
+    const balusterLabel = document.createElement('label');
+    const balusterSpan = document.createElement('span');
+    balusterSpan.textContent = 'Balusters / Infill';
+    const balusterSelect = document.createElement('select');
+    balusterSelect.innerHTML = `
+      <option value="balusters">Vertical Balusters (4" spacing)</option>
+      <option value="horizontal_cables">Horizontal Cable Railing</option>
+      <option value="open">Open Post &amp; Rail</option>
+    `;
+    balusterSelect.value = o.balusterStyle || 'balusters';
+    balusterSelect.addEventListener('focus', () => cb.onSelect(o.id));
+    balusterSelect.addEventListener('change', () => {
+      o.balusterStyle = balusterSelect.value;
+      cb.onEdit(o, true);
+    });
+    balusterLabel.append(balusterSpan, balusterSelect);
+    subGrid.appendChild(balusterLabel);
+
     sub.appendChild(subGrid);
     el.appendChild(sub);
   }

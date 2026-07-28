@@ -356,13 +356,23 @@ function buildSteps(home, materials, sceneOpts = {}) {
 
     // 3. Railings
     if (railings !== 'none') {
+      const doorRailMatType = o.railMat || sceneOpts.railMat || 'pressure_treated';
+      const balusterStyle = o.balusterStyle || sceneOpts.balusterStyle || 'balusters';
+
+      let railMat = materials.rail_pressure_treated;
+      if (doorRailMatType === 'white_trim') railMat = materials.rail_white;
+      else if (doorRailMatType === 'black_metal') railMat = materials.rail_black;
+      else if (doorRailMatType === 'matching_trim') railMat = materials.trim;
+      else if (doorRailMatType === 'pressure_treated') railMat = materials.rail_pressure_treated;
+
       const activeSides = [];
       if (railings === 'left' || railings === 'both') activeSides.push(-wide / 2 + postW / 2);
       if (railings === 'right' || railings === 'both') activeSides.push(wide / 2 - postW / 2);
 
-      for (const sideX of activeSides) {
-        const railMat = materials.trim;
+      const balusterW = 0.06;
+      const balusterH = railH - 0.25;
 
+      for (const sideX of activeSides) {
         // Post at wall
         const pWall = new THREE.Mesh(new THREE.BoxGeometry(postW, railH, postW), railMat);
         const pWallPos = f.origin.clone()
@@ -392,10 +402,41 @@ function buildSteps(home, materials, sceneOpts = {}) {
         landRail.position.copy(pLandRail);
         landRail.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), f.right);
         stepGroup.add(landRail);
+
+        // Infill / Balusters along side landing rail
+        if (balusterStyle === 'balusters') {
+          const spacing = 0.35; // 4" spacing
+          const numSpindles = Math.max(1, Math.floor((landingDepth - postW * 2) / spacing));
+          const stepDist = (landingDepth - postW * 2) / (numSpindles + 1);
+
+          for (const k of Array.from({length: numSpindles}, (_, i) => i + 1)) {
+            const dist = postW + k * stepDist;
+            const b = new THREE.Mesh(new THREE.BoxGeometry(balusterW, balusterH, balusterW), railMat);
+            const bPos = f.origin.clone()
+              .addScaledVector(f.right, uCenter + sideX)
+              .addScaledVector(f.normal, dist);
+            bPos.y = top + balusterH / 2 + 0.1;
+            b.position.copy(bPos);
+            b.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), f.right);
+            b.castShadow = true;
+            stepGroup.add(b);
+          }
+        } else if (balusterStyle === 'horizontal_cables') {
+          for (const hPct of [0.25, 0.50, 0.75]) {
+            const cable = new THREE.Mesh(new THREE.BoxGeometry(balusterW, 0.04, landingDepth), railMat);
+            const cPos = f.origin.clone()
+              .addScaledVector(f.right, uCenter + sideX)
+              .addScaledVector(f.normal, landingDepth / 2);
+            cPos.y = top + railH * hPct;
+            cable.position.copy(cPos);
+            cable.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), f.right);
+            stepGroup.add(cable);
+          }
+        }
       }
 
       if (egress !== 'front') {
-        const frontRail = new THREE.Mesh(new THREE.BoxGeometry(wide, 0.12, postW), materials.trim);
+        const frontRail = new THREE.Mesh(new THREE.BoxGeometry(wide, 0.12, postW), railMat);
         const pFrontRail = f.origin.clone()
           .addScaledVector(f.right, uCenter)
           .addScaledVector(f.normal, landingDepth - postW / 2);
@@ -403,6 +444,36 @@ function buildSteps(home, materials, sceneOpts = {}) {
         frontRail.position.copy(pFrontRail);
         frontRail.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), f.right);
         stepGroup.add(frontRail);
+
+        if (balusterStyle === 'balusters') {
+          const spacing = 0.35;
+          const numSpindles = Math.max(1, Math.floor((wide - postW * 2) / spacing));
+          const stepDist = (wide - postW * 2) / (numSpindles + 1);
+
+          for (const k of Array.from({length: numSpindles}, (_, i) => i + 1)) {
+            const uOffset = -wide / 2 + postW + k * stepDist;
+            const b = new THREE.Mesh(new THREE.BoxGeometry(balusterW, balusterH, balusterW), railMat);
+            const bPos = f.origin.clone()
+              .addScaledVector(f.right, uCenter + uOffset)
+              .addScaledVector(f.normal, landingDepth - postW / 2);
+            bPos.y = top + balusterH / 2 + 0.1;
+            b.position.copy(bPos);
+            b.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), f.right);
+            b.castShadow = true;
+            stepGroup.add(b);
+          }
+        } else if (balusterStyle === 'horizontal_cables') {
+          for (const hPct of [0.25, 0.50, 0.75]) {
+            const cable = new THREE.Mesh(new THREE.BoxGeometry(wide, 0.04, balusterW), railMat);
+            const cPos = f.origin.clone()
+              .addScaledVector(f.right, uCenter)
+              .addScaledVector(f.normal, landingDepth - postW / 2);
+            cPos.y = top + railH * hPct;
+            cable.position.copy(cPos);
+            cable.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), f.right);
+            stepGroup.add(cable);
+          }
+        }
       }
     }
 
