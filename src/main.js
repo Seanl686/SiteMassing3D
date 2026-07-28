@@ -25,6 +25,33 @@ const gizmo = new Gizmo(stage.homeGroup);
 stage.overlay = gizmo.group; // hidden during export — it is UI, not part of the render
 const $ = (id) => document.getElementById(id);
 
+/**
+ * Re-encode an uploaded image as a downscaled JPEG data URL. A phone photo
+ * straight off a camera can be 5-10MB base64-encoded, which alone blows the
+ * localStorage quota and gets silently stripped on the next save() — this
+ * keeps uploads well under that ceiling.
+ */
+function downscaleImage(file, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (Math.max(w, h) > maxDim) {
+        const s = maxDim / Math.max(w, h);
+        w = Math.round(w * s); h = Math.round(h * s);
+      }
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(c.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image decode failed')); };
+    img.src = url;
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Build / refresh
 // ---------------------------------------------------------------------------
@@ -518,14 +545,14 @@ function bind() {
     $('fileSitePhoto').addEventListener('change', (e) => {
       const f = e.target.files[0];
       if (!f) return;
-      const r = new FileReader();
-      r.onload = () => {
-        state.home.sitePhoto.src = r.result;
+      downscaleImage(f, 1600, 0.85).then((dataUrl) => {
+        state.home.sitePhoto.src = dataUrl;
         state.home.sitePhoto.show = true;
         if ($('sp_show')) $('sp_show').checked = true;
         rebuild();
-      };
-      r.readAsDataURL(f);
+      }).catch(() => {
+        alert('Could not read that image.');
+      });
     });
   }
   if ($('btnResetPhoto')) {
@@ -1048,11 +1075,15 @@ function addOpening(type, wall, u, v) {
 
 
 
+let warnedQuota = false;
+
 function save() {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(state));
   } catch {
-    // Plan plates are stored as data URLs and can blow the quota; drop it and retry.
+    // Plan/site-photo images are data URLs and can blow the quota; drop them
+    // from the persisted copy rather than fail the whole save, but tell the
+    // user once so the images don't just silently vanish on next reload.
     try {
       const lean = {
         ...state,
@@ -1064,6 +1095,10 @@ function save() {
       };
       localStorage.setItem(STORE_KEY, JSON.stringify(lean));
     } catch { /* give up quietly; the JSON export is the real save path */ }
+    if (!warnedQuota) {
+      warnedQuota = true;
+      alert('Storage is full, so the site photo / plan image could not be saved with this project. They will be missing after a reload — use "Export JSON" to keep a full copy, or upload a smaller image.');
+    }
   }
 }
 
