@@ -166,9 +166,17 @@ export function renderToCanvas(stage, w, h, alpha, sceneOpts, home) {
   return out;
 }
 
-export function caption(home, viewName) {
+export function getExportFilename(home, viewName) {
+  const modelSlug = slug(home?.name || 'home');
+  const viewSlug = slug(viewName || 'view');
+  return `${modelSlug}-${viewSlug}.png`;
+}
+
+export function caption(home, viewName, filename) {
   const d = home.dimensions;
-  return `${home.name}  ·  ${fmtFt(d.widthFt)} × ${fmtFt(d.lengthFt)}  ·  ${viewName}`;
+  const modelName = home?.name || 'Untitled Model';
+  const fname = filename || getExportFilename(home, viewName);
+  return `${modelName}  ·  File: ${fname}  ·  ${fmtFt(d.widthFt)} × ${fmtFt(d.lengthFt)}  ·  ${viewName}`;
 }
 
 function burnCaption(canvas, text) {
@@ -193,10 +201,6 @@ export function shoot(stage, home, sceneOpts, exportOpts, viewName) {
   const liveH = dom ? dom.height : 1080;
   const liveAspect = liveW / liveH;
 
-  // Default to the live canvas's own pixel size — a 1:1 replica of the viewport.
-  // Any other width is honoured, but the height always follows the live aspect:
-  // both cameras hold a fixed vertical extent, so a free height would change how
-  // much of the scene is in frame and the export would stop matching the screen.
   let targetW = liveW;
   let targetH = liveH;
 
@@ -205,9 +209,10 @@ export function shoot(stage, home, sceneOpts, exportOpts, viewName) {
     targetH = Math.max(1, Math.round(targetW / liveAspect));
   }
 
+  const filename = getExportFilename(home, viewName);
   const c = renderToCanvas(stage, targetW, targetH, exportOpts.alpha, sceneOpts, home);
-  if (exportOpts.burn && !exportOpts.alpha) burnCaption(c, caption(home, viewName));
-  download(c, `${slug(home.name)}-${slug(viewName)}-${targetW}x${targetH}.png`);
+  if (exportOpts.burn && !exportOpts.alpha) burnCaption(c, caption(home, viewName, filename));
+  download(c, filename);
   return c;
 }
 
@@ -244,8 +249,9 @@ export function contactSheet(stage, home, sceneOpts, exportOpts) {
   ctx.moveTo(0, ch); ctx.lineTo(sheet.width, ch);
   ctx.stroke();
 
-  burnCaption(sheet, caption(home, 'elevation set'));
+  const sheetFilename = `${slug(home?.name || 'home')}-elevation-set.png`;
+  burnCaption(sheet, caption(home, 'elevation set', sheetFilename));
   if (restoreView) stage.setView(restoreView, home.dimensions, sceneOpts);
-  download(sheet, `${slug(home.name)}-elevation-set.png`);
+  download(sheet, sheetFilename);
   return sheet;
 }
