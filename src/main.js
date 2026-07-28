@@ -87,12 +87,41 @@ function rebuild() {
   save();
 }
 
-/** CSS background-size for a plate mode. 'camera' locks the photo to the
- *  viewport height, which is the only mode that tracks the cameras exactly. */
-function plateBackgroundSize(mode) {
-  if (mode === 'cover') return 'cover';
-  if (mode === 'stretch' || mode === '100% 100%') return '100% 100%';
-  return 'auto 100%';
+/**
+ * Natural aspect of the plate image, cached by data URL. Sizing the plate in
+ * pixels needs the image's own proportions, which are only known once it has
+ * decoded — the first call returns null and re-runs the plate update on load.
+ */
+const plateAspects = new Map();
+function plateAspect(src, onReady) {
+  if (plateAspects.has(src)) return plateAspects.get(src);
+  const img = new Image();
+  img.onload = () => {
+    plateAspects.set(src, (img.naturalWidth || 1) / (img.naturalHeight || 1));
+    onReady();
+  };
+  img.onerror = () => plateAspects.set(src, null);
+  img.src = src;
+  return null;
+}
+
+/**
+ * Plate size in CSS pixels for a stage of w x h.
+ *
+ * 'camera' is height-locked: the photo is exactly `scale` times the stage
+ * height, which is the rule both cameras follow, so the plate and the model
+ * stay registered through any resize. Scale is applied HERE, to the image, not
+ * to the plate element — scaling the element shrank the window you look through
+ * instead of revealing the parts of the photo cropped at the stage edges.
+ */
+function plateSize(mode, w, h, aspect, scale) {
+  if (!aspect) return null;
+  if (mode === 'stretch' || mode === '100% 100%') return [w * scale, h * scale];
+  if (mode === 'cover') {
+    const coverH = Math.max(h, w / aspect);
+    return [coverH * aspect * scale, coverH * scale];
+  }
+  return [h * aspect * scale, h * scale];
 }
 
 function updateSitePhotoPlate() {
@@ -107,19 +136,26 @@ function updateSitePhotoPlate() {
   bg.style.display = 'block';
   bg.style.backgroundImage = `url("${sp.src}")`;
   bg.style.opacity = sp.opacity ?? 0.85;
-  // Both cameras keep a fixed VERTICAL extent — a perspective camera holds its
-  // vertical fov, and reframeOrtho() holds its half-height — so the model always
-  // occupies the same fraction of the viewport's height and a width change only
-  // reveals more scene at the sides. The plate has to obey the same rule or the
-  // two drift apart on every resize, so it is sized from the height alone and
-  // panned in pixels derived from the height, never from the width.
-  bg.style.backgroundSize = plateBackgroundSize(sp.fitMode);
+
   const scale = sp.scale ?? 1.0;
   const rot = sp.rotation ?? 0;
+  const w = canvas.clientWidth || 1;
   const h = canvas.clientHeight || 1;
+  // Pan is a fraction of HEIGHT on both axes, matching the cameras, which hold a
+  // fixed vertical extent and only reveal more scene sideways as the stage widens.
   const tx = ((sp.panX ?? 0) / 100) * h;
   const ty = ((sp.panY ?? 0) / 100) * h;
-  bg.style.transform = `translate(${tx}px, ${ty}px) scale(${scale}) rotate(${rot}deg)`;
+
+  const aspect = plateAspect(sp.src, updateSitePhotoPlate);
+  const size = plateSize(sp.fitMode, w, h, aspect, scale);
+  // Until the image reports its proportions, fall back to the height lock —
+  // 50% of the double-height plate box is one stage height.
+  bg.style.backgroundSize = size ? `${size[0]}px ${size[1]}px` : 'auto 50%';
+  bg.style.backgroundPosition = `calc(50% + ${tx}px) calc(50% + ${ty}px)`;
+  // The element only rotates. It is deliberately larger than the stage (see the
+  // stylesheet) so a rotated or zoomed-out photo has paint beyond the edges
+  // instead of blank corners.
+  bg.style.transform = `rotate(${rot}deg)`;
   stage.scene.background = null;
 }
 

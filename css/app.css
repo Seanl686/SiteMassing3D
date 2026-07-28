@@ -118,12 +118,18 @@ main.sidebar-collapsed #sidebar {
 }
 
 #stage { flex: 1 1 auto; position: relative; min-width: 0; overflow: hidden; }
+/* The plate is twice the stage in both directions and centred on it, so a
+   rotated or zoomed-out photo still has paint under the stage edges instead of
+   blank corners. #stage clips the overflow. Everything about where the photo
+   lands is set in JS as pixels: background-size is the zoom, background-position
+   is the pan, and the element itself only rotates. */
 .site-photo-bg {
   position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
   background-position: center;
   background-repeat: no-repeat;
-  background-size: contain;
+  background-size: auto 50%;
   pointer-events: none;
   z-index: 0;
   transform-origin: center center;
