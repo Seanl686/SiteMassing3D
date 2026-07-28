@@ -152,6 +152,7 @@ const dimFields = [
   ['f_width', 'widthFt'], ['f_length', 'lengthFt'], ['f_wallHeight', 'wallHeightFt'],
   ['f_floorHeight', 'floorHeightFt'], ['f_pitch', 'roofPitch'],
   ['f_eaveOverhang', 'eaveOverhangFt'], ['f_rakeOverhang', 'rakeOverhangFt'],
+  ['f_dormerWidth', 'dormerWidthFt'], ['f_dormerHeight', 'dormerHeightFt'],
 ];
 const colorFields = [
   ['c_siding', 'siding'], ['c_trim', 'trim'], ['c_roof', 'roof'],
@@ -169,8 +170,12 @@ const sceneChecks = [['s_grid', 'grid'], ['s_shadow', 'shadow'], ['s_steps', 'st
 
 function syncForm() {
   $('f_name').value = state.home.name;
-  for (const [id, key] of dimFields) $(id).value = state.home.dimensions[key];
+  for (const [id, key] of dimFields) $(id).value = state.home.dimensions[key] ?? 0;
   $('f_roofStyle').value = state.home.dimensions.roofStyle;
+  if ($('f_dormerCount')) $('f_dormerCount').value = state.home.dimensions.dormerCount ?? 0;
+  if ($('f_dormerStyle')) $('f_dormerStyle').value = state.home.dimensions.dormerStyle || 'gable';
+  if ($('f_dormerFalseEave')) $('f_dormerFalseEave').checked = state.home.dimensions.dormerFalseEave !== false;
+  if ($('f_dormerWindow')) $('f_dormerWindow').checked = state.home.dimensions.dormerWindow !== false;
   for (const [id, key] of colorFields) $(id).value = state.home.colors[key];
   for (const [id, key] of planFields) $(id).value = state.home.plan[key];
   $('p_op').value = state.home.plan.opacity;
@@ -232,6 +237,30 @@ function bind() {
     state.home.dimensions.roofStyle = e.target.value;
     rebuild();
   });
+  if ($('f_dormerCount')) {
+    $('f_dormerCount').addEventListener('change', (e) => {
+      state.home.dimensions.dormerCount = parseInt(e.target.value, 10) || 0;
+      rebuild(); save();
+    });
+  }
+  if ($('f_dormerStyle')) {
+    $('f_dormerStyle').addEventListener('change', (e) => {
+      state.home.dimensions.dormerStyle = e.target.value;
+      rebuild(); save();
+    });
+  }
+  if ($('f_dormerFalseEave')) {
+    $('f_dormerFalseEave').addEventListener('change', (e) => {
+      state.home.dimensions.dormerFalseEave = e.target.checked;
+      rebuild(); save();
+    });
+  }
+  if ($('f_dormerWindow')) {
+    $('f_dormerWindow').addEventListener('change', (e) => {
+      state.home.dimensions.dormerWindow = e.target.checked;
+      rebuild(); save();
+    });
+  }
   for (const [id, key] of colorFields) {
     $(id).addEventListener('input', (e) => { state.home.colors[key] = e.target.value; rebuild(); });
   }

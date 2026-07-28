@@ -163,3 +163,22 @@ test('8. Wireframe View Mode State Verification', () => {
 
   assert.ok(meshCount > 0, 'Meshes present to apply wireframe');
 });
+
+test('9. Roof Dormers & False Eaves Construction Verification', () => {
+  const home = defaultHome();
+  const scene = defaultScene();
+
+  home.dimensions.dormerCount = 2; // Double dormers
+  home.dimensions.dormerWidthFt = 12.0;
+  home.dimensions.dormerHeightFt = 5.0;
+  home.dimensions.dormerFalseEave = true;
+  home.dimensions.dormerWindow = true;
+
+  const root = buildHome(home, scene);
+  const roof = root.children.find((c) => c.name === 'roof');
+  assert.ok(roof, 'Roof group present');
+
+  const dormers = roof.children.find((c) => c.name === 'dormers');
+  assert.ok(dormers, 'Dormers group generated');
+  assert.equal(dormers.children.length, 2, 'Two dormer assemblies constructed for double dormers');
+});

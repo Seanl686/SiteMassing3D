@@ -243,6 +243,104 @@ function buildRoof(dim, materials) {
     g.add(fascia);
   }
 
+  const dormers = buildDormers(dim, materials);
+  if (dormers) g.add(dormers);
+
+  return g;
+}
+
+function buildDormers(dim, materials) {
+  const count = parseInt(dim.dormerCount, 10) || 0;
+  if (count <= 0 || dim.roofStyle === 'flat') return null;
+
+  const g = new THREE.Group();
+  g.name = 'dormers';
+
+  const dW = dim.dormerWidthFt ?? 10.0;
+  const dH = dim.dormerHeightFt ?? 4.5;
+  const { slope, eaveY } = derived(dim);
+  const frontZ = -dim.widthFt / 2;
+  const ov = dim.eaveOverhangFt ?? 1.0;
+  const dormerFrontZ = frontZ - ov * 0.4;
+
+  const xPositions = count === 1 ? [0] : [-dim.lengthFt * 0.25, dim.lengthFt * 0.25];
+
+  for (const posX of xPositions) {
+    const dormerGroup = new THREE.Group();
+
+    // 1. Dormer Gable Front Wall / Triangle
+    const shape = new THREE.Shape();
+    shape.moveTo(-dW / 2, 0);
+    shape.lineTo(dW / 2, 0);
+    shape.lineTo(0, dH);
+    shape.closePath();
+
+    const extrudeOpts = { depth: 0.2, bevelEnabled: false };
+    const frontGable = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, extrudeOpts), materials.siding);
+    frontGable.position.set(posX, eaveY, dormerFrontZ);
+    frontGable.castShadow = true;
+    dormerGroup.add(frontGable);
+
+    // 2. False Eave Return Band (if enabled)
+    if (dim.dormerFalseEave !== false) {
+      const falseEaveW = dW + 1.2;
+      const falseEave = new THREE.Mesh(
+        new THREE.BoxGeometry(falseEaveW, 0.55, 0.45),
+        materials.trim
+      );
+      falseEave.position.set(posX, eaveY - 0.28, dormerFrontZ + 0.1);
+      falseEave.castShadow = true;
+      dormerGroup.add(falseEave);
+    }
+
+    // 3. Dormer Roof Pitch Slopes
+    const dSlopeLen = Math.sqrt((dW / 2) * (dW / 2) + dH * dH);
+    const dPitchAngle = Math.atan2(dH, dW / 2);
+    const dormerDepth = (dH / (slope || 0.33)) + ov * 0.5;
+
+    // Left slope
+    const leftRoof = new THREE.Mesh(
+      new THREE.BoxGeometry(dSlopeLen, 0.35, dormerDepth),
+      materials.roof
+    );
+    leftRoof.position.set(posX - dW / 4, eaveY + dH / 2, dormerFrontZ + dormerDepth / 2);
+    leftRoof.rotation.z = dPitchAngle;
+    leftRoof.castShadow = true;
+    dormerGroup.add(leftRoof);
+
+    // Right slope
+    const rightRoof = new THREE.Mesh(
+      new THREE.BoxGeometry(dSlopeLen, 0.35, dormerDepth),
+      materials.roof
+    );
+    rightRoof.position.set(posX + dW / 4, eaveY + dH / 2, dormerFrontZ + dormerDepth / 2);
+    rightRoof.rotation.z = -dPitchAngle;
+    rightRoof.castShadow = true;
+    dormerGroup.add(rightRoof);
+
+    // 4. Accent Dormer Window (if enabled)
+    if (dim.dormerWindow !== false) {
+      const winW = Math.min(3.2, dW * 0.4);
+      const winH = Math.min(2.5, dH * 0.5);
+
+      const glass = new THREE.Mesh(
+        new THREE.BoxGeometry(winW, winH, 0.1),
+        materials.glass
+      );
+      glass.position.set(posX, eaveY + dH * 0.35, dormerFrontZ - 0.05);
+      dormerGroup.add(glass);
+
+      const frame = new THREE.Mesh(
+        new THREE.BoxGeometry(winW + 0.4, winH + 0.4, 0.08),
+        materials.trim
+      );
+      frame.position.set(posX, eaveY + dH * 0.35, dormerFrontZ - 0.03);
+      dormerGroup.add(frame);
+    }
+
+    g.add(dormerGroup);
+  }
+
   return g;
 }
 

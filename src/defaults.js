@@ -32,6 +32,12 @@ export function defaultHome() {
       eaveOverhangFt: 1.0,   // horizontal overhang past the long walls
       rakeOverhangFt: 0.75,  // horizontal overhang past the gable ends
       roofStyle: 'gable',
+      dormerCount: 0,         // 0 (none), 1 (single), 2 (double)
+      dormerStyle: 'gable',   // 'gable', 'shed', 'hip'
+      dormerWidthFt: 10.0,
+      dormerHeightFt: 4.5,
+      dormerFalseEave: true,
+      dormerWindow: true,
     },
     colors: {
       siding: '#8d9299',

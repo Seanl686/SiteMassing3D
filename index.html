@@ -61,6 +61,26 @@
           <select id="f_roofStyle"><option value="gable">Gable (ridge along length)</option><option value="flat">Flat / low slope</option></select>
         </label>
       </div>
+
+      <h3 style="margin:12px 0 6px;font-size:11px;color:#6fb2ff;font-weight:600;text-transform:uppercase;">Roof Dormers &amp; False Eaves</h3>
+      <div class="grid2">
+        <label><span>Dormer count</span>
+          <select id="f_dormerCount">
+            <option value="0">0 (None)</option>
+            <option value="1">1 (Single Dormer)</option>
+            <option value="2">2 (Double / Twin Dormers)</option>
+          </select>
+        </label>
+        <label><span>Dormer style</span>
+          <select id="f_dormerStyle">
+            <option value="gable">Gable Dormer</option>
+          </select>
+        </label>
+        <label><span>Dormer width (ft)</span><input id="f_dormerWidth" type="number" autocomplete="off" step="0.5" min="4" max="20"></label>
+        <label><span>Dormer height (ft)</span><input id="f_dormerHeight" type="number" autocomplete="off" step="0.5" min="2" max="10"></label>
+      </div>
+      <label class="row check" style="margin-top:6px;"><input id="f_dormerFalseEave" type="checkbox" autocomplete="off"><span>False eave return band</span></label>
+      <label class="row check"><input id="f_dormerWindow" type="checkbox" autocomplete="off"><span>Accent dormer window</span></label>
       <p class="hint" id="ratioHint"></p>
     </section>
 
