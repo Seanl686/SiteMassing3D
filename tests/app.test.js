@@ -5,6 +5,7 @@ import { defaultHome, defaultScene, defaultExport, migrate, WALLS } from '../src
 import { derived, wallFrames, fmtAllUnits, buildHome, getWallHeight, dormerSize, applyHeadAlign } from '../src/build.js';
 import { createSidingMaterial } from '../src/textures.js';
 import { History, describeChange } from '../src/history.js';
+import { buildProject, readProject, PROJECT_VERSION } from '../src/project.js';
 
 test('1. Defaults & State Initialization', () => {
   const home = defaultHome();
@@ -679,4 +680,67 @@ test('25. History Change Labels', () => {
   assert.equal(describeChange(base, scene), 'sun az scene');
 
   assert.equal(describeChange(base, clone()), 'edit', 'No difference falls back to a generic label');
+});
+
+
+test('26. Project File Round-Trips Home, Scene, View and Camera', () => {
+  const home = defaultHome();
+  home.name = 'Saved with a view';
+  home.sitePhoto = { ...home.sitePhoto, src: 'data:image/jpeg;base64,AAAA', rotation: 12, panX: -4, scale: 0.7 };
+  const scene = { ...defaultScene(), sunAz: 210, bg: '#101418', grid: false };
+  const exportOpts = { ...defaultExport(), w: 3000 };
+  const camera = {
+    type: 'ortho',
+    position: [0, 12, -300], quaternion: [0, 1, 0, 0], target: [0, 6, 0],
+    zoom: 1.4, fov: 42, orthoFit: { w: 56, h: 14, pad: 1.18 }, orthoHalfH: 9.2,
+    preset: 'front', userMoved: true,
+  };
+
+  const file = buildProject({
+    home, scene, exportOpts,
+    view: { preset: 'front', label: 'Front elev', camera },
+    savedAt: '2026-07-28T12:00:00.000Z',
+  });
+  assert.equal(file.version, PROJECT_VERSION);
+  assert.equal(file.savedAt, '2026-07-28T12:00:00.000Z');
+
+  // Survives serialisation — this is what actually lands on disk.
+  const read = readProject(JSON.parse(JSON.stringify(file)));
+
+  assert.equal(read.home.name, 'Saved with a view');
+  assert.equal(read.home.sitePhoto.src, 'data:image/jpeg;base64,AAAA', 'Background image travels with the project');
+  assert.equal(read.home.sitePhoto.rotation, 12, 'Photo orientation is preserved');
+  assert.equal(read.home.sitePhoto.panX, -4);
+  assert.equal(read.home.sitePhoto.scale, 0.7);
+  assert.equal(read.scene.sunAz, 210, 'Scene options are preserved');
+  assert.equal(read.scene.bg, '#101418');
+  assert.equal(read.scene.grid, false);
+  assert.equal(read.exportOpts.w, 3000, 'Export settings are preserved');
+  assert.equal(read.view.preset, 'front', 'View preset is preserved');
+  assert.equal(read.view.label, 'Front elev');
+  assert.deepEqual(read.view.camera, camera, 'Camera orientation is preserved verbatim');
+  assert.equal(read.restoredView, true);
+  assert.equal(read.version, PROJECT_VERSION);
+});
+
+test('27. Project Reader Accepts Older Bare-Home Files', () => {
+  // homes/*.json and anything saved before views existed are a bare home object.
+  const bare = defaultHome();
+  bare.name = 'Library spec';
+  const read = readProject(JSON.parse(JSON.stringify(bare)));
+
+  assert.equal(read.home.name, 'Library spec');
+  assert.equal(read.restoredView, false, 'No camera in an old file, so the app frames it itself');
+  assert.equal(read.view.camera, null);
+  assert.equal(read.version, 1);
+  assert.deepEqual(read.scene, defaultScene(), 'Missing scene falls back to defaults');
+  assert.deepEqual(read.exportOpts, defaultExport());
+
+  // A wrapped file with no view block is still readable.
+  const wrapped = readProject({ home: bare, scene: { ...defaultScene(), sunEl: 12 } });
+  assert.equal(wrapped.restoredView, false);
+  assert.equal(wrapped.scene.sunEl, 12);
+
+  assert.throws(() => readProject(null), /not a project file/);
+  assert.throws(() => readProject({ nothing: true }), /no home/);
 });

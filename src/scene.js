@@ -223,6 +223,64 @@ export class Stage {
     this.ortho.updateProjectionMatrix();
   }
 
+  /**
+   * Everything needed to put the camera back exactly where it is now: which
+   * camera is live, its transform, the orbit target, and the orthographic
+   * frustum's established half-height. Saved with a project so reopening it
+   * shows the framing it was saved at rather than a default preset.
+   */
+  cameraState() {
+    const isOrtho = this.camera === this.ortho;
+    const controls = isOrtho ? this.orthoControls : this.controls;
+    const p = this.camera.position, q = this.camera.quaternion, t = controls.target;
+    return {
+      type: isOrtho ? 'ortho' : 'persp',
+      position: [p.x, p.y, p.z],
+      quaternion: [q.x, q.y, q.z, q.w],
+      target: [t.x, t.y, t.z],
+      zoom: this.camera.zoom,
+      fov: this.persp.fov,
+      orthoFit: this._orthoFit ? { ...this._orthoFit } : null,
+      orthoHalfH: this._orthoHalfH ?? null,
+      preset: this._lastView || null,
+      userMoved: !!this.userMoved,
+    };
+  }
+
+  /** Restore a state produced by cameraState(). Returns false if it is unusable. */
+  applyCameraState(cs) {
+    if (!cs || !Array.isArray(cs.position) || !Array.isArray(cs.target)) return false;
+    const isOrtho = cs.type === 'ortho';
+    this.useOrtho(isOrtho);
+    const cam = isOrtho ? this.ortho : this.persp;
+    const controls = isOrtho ? this.orthoControls : this.controls;
+
+    if (!isOrtho && Number.isFinite(cs.fov)) {
+      this.persp.fov = cs.fov;
+    }
+    if (isOrtho) {
+      // Restore the frustum before the transform so the first render is framed
+      // correctly rather than snapping a frame later.
+      this._orthoFit = cs.orthoFit || this._orthoFit;
+      this._orthoHalfH = Number.isFinite(cs.orthoHalfH) ? cs.orthoHalfH : this._orthoHalfH;
+      this.reframeOrtho();
+    }
+
+    cam.position.set(cs.position[0], cs.position[1], cs.position[2]);
+    controls.target.set(cs.target[0], cs.target[1], cs.target[2]);
+    if (Array.isArray(cs.quaternion)) {
+      cam.quaternion.set(cs.quaternion[0], cs.quaternion[1], cs.quaternion[2], cs.quaternion[3]);
+    }
+    if (Number.isFinite(cs.zoom)) cam.zoom = cs.zoom;
+    cam.updateProjectionMatrix();
+    controls.update();
+
+    this._lastView = cs.preset || this._lastView;
+    // A restored framing is the user's own, so presets must not re-fit over it.
+    this.userMoved = cs.userMoved !== false;
+    return true;
+  }
+
   useOrtho(on) {
     this.camera = on ? this.ortho : this.persp;
     this.controls.enabled = !on;

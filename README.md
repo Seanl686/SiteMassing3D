@@ -69,8 +69,17 @@ background* gives you an alpha PNG to composite straight onto a lot plate.
 
 ## Home spec files
 
-`Save JSON` writes the whole home — dimensions, colors, every opening — to a file.
-Drop it in `homes/`, add a line to `homes/index.json`, and it shows up in the
+`Save JSON` writes the whole working state to a file: the home (dimensions,
+colors, every opening), the scene (sun, background, toggles), the site photo
+including its image and alignment, the export settings, and the view — which
+preset was active and exactly where the camera was pointing. Reopening the file
+puts you back in front of the same picture.
+
+Files are versioned (`"format": "sitemassing3d", "version": 2`). A bare home
+object — the `homes/*.json` library specs, and anything saved before views were
+stored — still opens; it simply gets framed by the default preset.
+
+Drop a file in `homes/`, add a line to `homes/index.json`, and it shows up in the
 **Library** dropdown.
 
 `homes/_TEMPLATE.json` is the starting point. Its dimensions are placeholders:

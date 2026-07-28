@@ -9,6 +9,7 @@ import { Gizmo, wallPlaneHit, applyDrag } from './gizmo.js';
 import { shoot, contactSheet, renderToCanvas } from './capture.js';
 import { defaultHome, defaultScene, defaultExport, nextId, OPENING_PRESETS, migrate } from './defaults.js';
 import { History, describeChange } from './history.js';
+import { buildProject, readProject } from './project.js';
 
 const STORE_KEY = 'sitemassing3d.v1';
 
@@ -521,8 +522,16 @@ function syncForm() {
 }
 
 /** Swap in a home spec from disk or the library and reframe on it. */
-function loadHome(raw) {
-  state.home = migrate(raw);
+/**
+ * Open a project file. A v2 file restores the scene, the export settings and
+ * the camera it was saved at; a bare home (the library's homes/*.json, or a file
+ * saved before views were stored) still loads and gets the default framing.
+ */
+function loadProject(raw) {
+  const p = readProject(raw);
+  state.home = p.home;
+  state.scene = p.scene;
+  state.export = p.exportOpts;
   selectedId = null;
   selectedIds.clear();
   gizmo.clear();
@@ -530,9 +539,21 @@ function loadHome(raw) {
   rebuild();
   refreshList();
   updatePlanPlate(stage, state.home.plan);
-  if (!stage.userMoved) {
-    stage.setView('hero-left', state.home.dimensions, state.scene);
+  updateSitePhotoPlate();
+
+  if (p.view.label) currentViewName = p.view.label;
+  // A saved camera wins over the preset — it is the framing the user chose.
+  const restored = p.restoredView && stage.applyCameraState(p.view.camera);
+  if (restored) {
+    // The frustum was rebuilt for the saved aspect; re-apply the live one.
+    fit();
+  } else {
+    // A file with no camera carries no framing intent, so frame it fresh —
+    // including after a project whose camera set userMoved.
+    stage.userMoved = false;
+    stage.setView(p.view.preset || 'hero-left', state.home.dimensions, state.scene);
   }
+  save();
 }
 
 function bind() {
@@ -969,7 +990,7 @@ function bind() {
     try {
       const res = await fetch(`homes/${file}`);
       if (!res.ok) throw new Error(res.statusText);
-      loadHome(await res.json());
+      loadProject(await res.json());
     } catch (err) {
       alert(`Could not load homes/${file}: ${err.message}`);
     }
@@ -987,7 +1008,14 @@ function bind() {
   });
 
   $('btnSave').addEventListener('click', () => {
-    const blob = new Blob([JSON.stringify(state.home, null, 2)], { type: 'application/json' });
+    const project = buildProject({
+      home: state.home,
+      scene: state.scene,
+      exportOpts: state.export,
+      view: { preset: stage._lastView || null, label: currentViewName, camera: stage.cameraState() },
+      savedAt: new Date().toISOString(),
+    });
+    const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `${(state.home.name || 'home').replace(/[^\w-]+/g, '_')}.json`;
@@ -1001,7 +1029,7 @@ function bind() {
     const r = new FileReader();
     r.onload = () => {
       try {
-        loadHome(JSON.parse(r.result));
+        loadProject(JSON.parse(r.result));
       } catch (err) {
         alert(`Could not read that JSON: ${err.message}`);
       }
