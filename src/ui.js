@@ -160,6 +160,12 @@ function buildSummaryPills(summaryEl, o, cb) {
       cb.onEdit(o, true);
     }));
 
+    const rPlacement = o.stepRailings || 'both';
+    summaryEl.appendChild(createPill('Railings', RAILINGS_LABELS[rPlacement] || rPlacement, () => {
+      o.stepRailings = cycleNext(RAILINGS_ARR, rPlacement);
+      cb.onEdit(o, true);
+    }));
+
     const rMat = o.railMat || 'pressure_treated';
     summaryEl.appendChild(createPill('Rail Mat', RAIL_MAT_LABELS[rMat] || rMat, () => {
       o.railMat = cycleNext(RAIL_MAT_ARR, rMat);
@@ -405,6 +411,11 @@ export function syncOpeningValues(container, home, selectedId, cb) {
     for (const input of el.querySelectorAll('input[data-key]')) {
       if (document.activeElement === input) continue; // never fight the user's cursor
       input.value = round(o[input.dataset.key]);
+    }
+    for (const sel of el.querySelectorAll('select[data-key]')) {
+      if (document.activeElement === sel) continue;
+      const key = sel.dataset.key;
+      if (o[key] !== undefined) sel.value = o[key];
     }
     const lbl = el.querySelector('input.lbl');
     if (lbl && document.activeElement !== lbl) lbl.value = o.label || '';

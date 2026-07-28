@@ -154,6 +154,7 @@ export function migrate(home) {
       headFree: !!o.headFree,   // opt this opening out of the global head alignment
       stepMat: o.stepMat,
       stepEgress: o.stepEgress,
+      stepRailings: o.stepRailings,
       railMat: o.railMat,
       balusterStyle: o.balusterStyle,
     })),
