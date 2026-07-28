@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { defaultHome, defaultScene, defaultExport, migrate, WALLS } from '../src/defaults.js';
-import { derived, wallFrames, fmtAllUnits, buildHome, getWallHeight } from '../src/build.js';
+import { derived, wallFrames, fmtAllUnits, buildHome, getWallHeight, dormerSize } from '../src/build.js';
 
 test('1. Defaults & State Initialization', () => {
   const home = defaultHome();
@@ -301,4 +301,143 @@ test('15. Connected Dormer Cap (Double-Wide Merged Shed Profile)', () => {
     if (child.name === 'innerFalseEave') innerEaves.push(child);
   });
   assert.equal(innerEaves.length, 2, 'Two inner false eave returns (one per side)');
+});
+
+test('16. Independent Per-Dormer Sizes', () => {
+  // Unlinked sizes: each dormer builds from its own width/height override.
+  const home = defaultHome();
+  home.dimensions.dormerCount = 2;
+  home.dimensions.dormerPositions = [-14, 12];
+  home.dimensions.dormerLinkSizes = false;
+  home.dimensions.dormerSizes = [
+    { widthFt: 16, heightFt: 6 },
+    { widthFt: 7, heightFt: 3.5 },
+  ];
+
+  assert.deepEqual(dormerSize(home.dimensions, 0), { dW: 16, dH: 6 });
+  assert.deepEqual(dormerSize(home.dimensions, 1), { dW: 7, dH: 3.5 });
+
+  const roof = buildHome(home, defaultScene()).children.find((c) => c.name === 'roof');
+  const dormers = roof.children.find((c) => c.name === 'dormers');
+  assert.equal(dormers.children.length, 2, 'Two independent dormer assemblies');
+
+  const gableWidth = (grp) => {
+    const g = grp.children[0].geometry;
+    g.computeBoundingBox();
+    const b = g.boundingBox;
+    return b.max.x - b.min.x;
+  };
+  const w0 = gableWidth(dormers.children[0]);
+  const w1 = gableWidth(dormers.children[1]);
+  assert.ok(Math.abs(w0 - 16) < 0.01, `Dormer 0 gable spans 16 ft (got ${w0})`);
+  assert.ok(Math.abs(w1 - 7) < 0.01, `Dormer 1 gable spans 7 ft (got ${w1})`);
+  assert.ok(w0 > w1, 'Adjusting one dormer does not resize the other');
+
+  // A missing override falls back to the global size.
+  home.dimensions.dormerSizes = [{ widthFt: 16 }, null];
+  assert.deepEqual(dormerSize(home.dimensions, 0), { dW: 16, dH: home.dimensions.dormerHeightFt });
+  assert.deepEqual(dormerSize(home.dimensions, 1), {
+    dW: home.dimensions.dormerWidthFt,
+    dH: home.dimensions.dormerHeightFt,
+  });
+
+  // Linked mode ignores the overrides entirely (legacy behaviour).
+  home.dimensions.dormerLinkSizes = true;
+  home.dimensions.dormerSizes = [{ widthFt: 16, heightFt: 6 }, { widthFt: 7, heightFt: 3.5 }];
+  assert.deepEqual(dormerSize(home.dimensions, 0), dormerSize(home.dimensions, 1));
+
+  // Connected cap uses each end's own width and the taller of the two heights.
+  home.dimensions.dormerLinkSizes = false;
+  home.dimensions.dormerConnected = true;
+  const cap = buildHome(home, defaultScene())
+    .children.find((c) => c.name === 'roof')
+    .children.find((c) => c.name === 'dormers').children[0];
+  assert.equal(cap.name, 'dormer:connected');
+  const wall = cap.children[0].geometry;
+  wall.computeBoundingBox();
+  const capWidth = wall.boundingBox.max.x - wall.boundingBox.min.x;
+  const expected = (12 + 7 / 2) - (-14 - 16 / 2);
+  assert.ok(Math.abs(capWidth - expected) < 0.01, `Cap spans ${expected} ft (got ${capWidth})`);
+});
+
+test('17. Migration Normalizes Per-Dormer Size Overrides', () => {
+  const migrated = migrate({
+    dimensions: {
+      dormerCount: 2,
+      dormerLinkSizes: false,
+      dormerSizes: [{ widthFt: '14', heightFt: 5 }, 'junk', { widthFt: -3 }],
+      dormerPositions: ['-10', 10, 'x'],
+    },
+  });
+  assert.deepEqual(migrated.dimensions.dormerSizes, [{ widthFt: 14, heightFt: 5 }, null, null]);
+  assert.deepEqual(migrated.dimensions.dormerPositions, [-10, 10]);
+  assert.equal(migrated.dimensions.dormerLinkSizes, false);
+
+  // Legacy saves with no dormer size data come back unlinked, which is visually
+  // identical because an empty dormerSizes array inherits the global size.
+  assert.equal(migrate({ dimensions: {} }).dimensions.dormerLinkSizes, false);
+  assert.equal(migrate({ dimensions: { dormerLinkSizes: true } }).dimensions.dormerLinkSizes, true);
+  assert.deepEqual(migrate({ dimensions: {} }).dimensions.dormerSizes, []);
+});
+
+test('18. Nested Dormer (Gable Inside Gable)', () => {
+  const home = defaultHome();
+  home.dimensions.dormerCount = 2;
+  home.dimensions.dormerNested = true;
+  home.dimensions.dormerLinkSizes = false;
+  home.dimensions.dormerPositions = [0, 0];
+  home.dimensions.dormerSizes = [
+    { widthFt: 18, heightFt: 6 },
+    { widthFt: 8, heightFt: 3.5 },
+  ];
+
+  const roof = buildHome(home, defaultScene()).children.find((c) => c.name === 'roof');
+  const dormers = roof.children.find((c) => c.name === 'dormers');
+  assert.equal(dormers.children.length, 2, 'Outer and inner gable assemblies');
+
+  const face = (grp) => {
+    const m = grp.children[0];
+    m.geometry.computeBoundingBox();
+    const b = m.geometry.boundingBox;
+    return { w: b.max.x - b.min.x, h: b.max.y - b.min.y, z: m.position.z, x: m.position.x };
+  };
+  const outer = face(dormers.children[0]);
+  const inner = face(dormers.children[1]);
+
+  assert.ok(Math.abs(outer.w - 18) < 0.01, `Outer gable 18 ft wide (got ${outer.w})`);
+  assert.ok(Math.abs(inner.w - 8) < 0.01, `Inner gable 8 ft wide (got ${inner.w})`);
+  assert.ok(inner.w < outer.w && inner.h < outer.h, 'Inner gable fits inside the outer one');
+  assert.ok(inner.z < outer.z, 'Inner gable projects forward of the outer face');
+
+  // The inner gable is clamped to stay inside the outer gable, both in size...
+  home.dimensions.dormerSizes[1] = { widthFt: 40, heightFt: 40 };
+  const clamped = face(
+    buildHome(home, defaultScene())
+      .children.find((c) => c.name === 'roof')
+      .children.find((c) => c.name === 'dormers').children[1]
+  );
+  assert.ok(Math.abs(clamped.w - 16.5) < 0.01, `Inner width clamped to outer - 1.5 (got ${clamped.w})`);
+  assert.ok(Math.abs(clamped.h - 5.5) < 0.01, `Inner height clamped to outer - 0.5 (got ${clamped.h})`);
+
+  // ...and in offset.
+  home.dimensions.dormerSizes[1] = { widthFt: 8, heightFt: 3.5 };
+  home.dimensions.dormerNestOffsetFt = 50;
+  const shoved = face(
+    buildHome(home, defaultScene())
+      .children.find((c) => c.name === 'roof')
+      .children.find((c) => c.name === 'dormers').children[1]
+  );
+  assert.ok(Math.abs(shoved.x - 4.5) < 0.01, `Offset clamped inside the outer face (got ${shoved.x})`);
+
+  // Resizing the inner gable leaves the outer one untouched.
+  const outerAfter = face(
+    buildHome(home, defaultScene())
+      .children.find((c) => c.name === 'roof')
+      .children.find((c) => c.name === 'dormers').children[0]
+  );
+  assert.deepEqual(
+    { w: outerAfter.w, h: outerAfter.h },
+    { w: outer.w, h: outer.h },
+    'Outer gable unchanged by inner gable edits'
+  );
 });

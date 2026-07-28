@@ -39,8 +39,12 @@ export function defaultHome() {
       dormerFalseEave: true,
       dormerInnerFalseEave: true,  // nested inner return band (double-wide)
       dormerConnected: false,      // merge double dormers into one continuous cap
+      dormerNested: false,         // dormer 2 sits inside dormer 1 (gable-in-gable)
+      dormerNestOffsetFt: 0,       // inner gable X offset from the outer gable center
       dormerWindow: true,
       dormerPositions: [],          // custom X offsets in ft; empty = auto-place
+      dormerLinkSizes: false,       // true = every dormer shares the global size
+      dormerSizes: [],              // per-dormer { widthFt, heightFt } overrides
     },
     colors: {
       siding: '#8d9299',
@@ -91,11 +95,31 @@ export function defaultExport() {
   return { w: 2400, h: 1600, alpha: false, burn: true };
 }
 
+/** Coerce the per-dormer size overrides into a clean array of partial specs.
+ *  A null entry (or a missing field) means "inherit the global dormer size". */
+function normalizeDormerSizes(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((s) => {
+    if (!s || typeof s !== 'object') return null;
+    const out = {};
+    if (Number.isFinite(+s.widthFt) && +s.widthFt > 0) out.widthFt = +s.widthFt;
+    if (Number.isFinite(+s.heightFt) && +s.heightFt > 0) out.heightFt = +s.heightFt;
+    return Object.keys(out).length ? out : null;
+  });
+}
+
 export function migrate(home) {
   const base = defaultHome();
+  const dimensions = { ...base.dimensions, ...(home.dimensions || {}) };
+  dimensions.dormerSizes = normalizeDormerSizes(dimensions.dormerSizes);
+  dimensions.dormerPositions = Array.isArray(dimensions.dormerPositions)
+    ? dimensions.dormerPositions.map((v) => +v).filter((v) => Number.isFinite(v))
+    : [];
+  // Sizes are independent unless a save explicitly asked for linked sizes.
+  dimensions.dormerLinkSizes = dimensions.dormerLinkSizes === true;
   const out = {
     name: home.name || base.name,
-    dimensions: { ...base.dimensions, ...(home.dimensions || {}) },
+    dimensions,
     colors: { ...base.colors, ...(home.colors || {}) },
     openings: (home.openings || []).map((o) => ({
       id: o.id || nextId('o'),

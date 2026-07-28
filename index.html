@@ -105,12 +105,16 @@
               <option value="gable">Gable Dormer</option>
             </select>
           </label>
-          <label><span>Dormer width (ft)</span><input id="f_dormerWidth" type="number" autocomplete="off" step="0.5" min="4" max="20"></label>
-          <label><span>Dormer height (ft)</span><input id="f_dormerHeight" type="number" autocomplete="off" step="0.5" min="2" max="10"></label>
+          <label id="row_dormerWidth"><span>Dormer width (ft)</span><input id="f_dormerWidth" type="number" autocomplete="off" step="0.5" min="4" max="20"></label>
+          <label id="row_dormerHeight"><span>Dormer height (ft)</span><input id="f_dormerHeight" type="number" autocomplete="off" step="0.5" min="2" max="10"></label>
         </div>
-        <label class="row check" style="margin-top:6px;"><input id="f_dormerFalseEave" type="checkbox" autocomplete="off"><span>False eave return band</span></label>
+        <label class="row check" style="margin-top:6px;"><input id="f_dormerLinkSizes" type="checkbox" autocomplete="off"><span>Link dormer sizes (all match)</span></label>
+        <div id="dormerSizeRows"></div>
+        <label class="row check"><input id="f_dormerFalseEave" type="checkbox" autocomplete="off"><span>False eave return band</span></label>
         <label class="row check"><input id="f_dormerInnerFalseEave" type="checkbox" autocomplete="off"><span>Inner false eave (double-wide)</span></label>
         <label class="row check"><input id="f_dormerConnected" type="checkbox" autocomplete="off"><span>Connected dormer cap</span></label>
+        <label class="row check"><input id="f_dormerNested" type="checkbox" autocomplete="off"><span>Nested dormer (2nd inside 1st)</span></label>
+        <label id="row_dormerNestOffset"><span>Nested offset (ft)</span><input id="f_dormerNestOffset" type="number" autocomplete="off" step="0.5" min="-10" max="10"></label>
         <label class="row check"><input id="f_dormerWindow" type="checkbox" autocomplete="off"><span>Accent dormer window</span></label>
         <p style="font-size:11px;color:#9aa;margin:6px 0 2px;line-height:1.3;">💡 Click &amp; drag dormers in the 3D view to reposition along the ridge.</p>
         <button id="btnResetDormerPos" type="button" style="font-size:11px;padding:3px 8px;">Reset positions</button>
