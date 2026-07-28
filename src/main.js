@@ -2,7 +2,7 @@
 
 import * as THREE from 'three';
 import { Stage } from './scene.js';
-import { buildHome, disposeTree, wallFrames, clampOpening, fmtFt, derived } from './build.js';
+import { buildHome, disposeTree, wallFrames, clampOpening, fmtFt, derived, dormerSize } from './build.js';
 import { renderOpeningList, syncOpeningValues, initAccordions } from './ui.js';
 import { updatePlanPlate, nearestWallHit } from './plan.js';
 import { Gizmo, wallPlaneHit, applyDrag } from './gizmo.js';
@@ -45,7 +45,7 @@ function rebuild() {
   stage.homeGroup.position.set(sp.posX || 0, baseY, sp.posZ || 0);
   stage.homeGroup.rotation.y = THREE.MathUtils.degToRad(sp.rotY || 0);
 
-  if (sp.camDist && isFinite(sp.camDist) && sp.camDist > 0) {
+  if (stage.camera === stage.persp && sp.camDist && isFinite(sp.camDist) && sp.camDist > 0) {
     stage.setCameraDistance(sp.camDist);
   }
 
@@ -170,6 +170,60 @@ const sceneNums = [['s_focal', 'focal'], ['s_eye', 'eye'], ['s_landingDepth', 'l
 const sceneRanges = [['s_sunAz', 'sunAz'], ['s_sunEl', 'sunEl'], ['s_flat', 'flat']];
 const sceneChecks = [['s_grid', 'grid'], ['s_shadow', 'shadow'], ['s_steps', 'steps'], ['s_stepLanding', 'stepLanding'], ['s_wireframe', 'wireframe'], ['s_blockLandscape', 'blockLandscape'], ['s_labels', 'labels'], ['s_dims', 'dims']];
 
+/** Per-dormer width/height rows. Hidden while sizes are linked; when unlinked
+ *  each dormer gets its own pair of inputs so one can be wide-and-low and the
+ *  other narrow-and-tall. */
+function renderDormerSizeRows() {
+  const host = $('dormerSizeRows');
+  if (!host) return;
+  const dim = state.home.dimensions;
+  const count = parseInt(dim.dormerCount, 10) || 0;
+  const linked = dim.dormerLinkSizes === true;
+  // The global width/height only mean anything while the sizes are linked.
+  if ($('row_dormerWidth')) $('row_dormerWidth').style.display = linked ? '' : 'none';
+  if ($('row_dormerHeight')) $('row_dormerHeight').style.display = linked ? '' : 'none';
+  if ($('row_dormerNestOffset')) {
+    $('row_dormerNestOffset').style.display = (count === 2 && dim.dormerNested) ? '' : 'none';
+  }
+  if (linked || count <= 0) {
+    host.innerHTML = '';
+    host.style.display = 'none';
+    return;
+  }
+  host.style.display = '';
+  let html = '';
+  for (let i = 0; i < count; i++) {
+    const { dW, dH } = dormerSize(dim, i);
+    const label = (count === 2 && dim.dormerNested)
+      ? (i === 0 ? 'Outer dormer' : 'Inner dormer')
+      : `Dormer ${i + 1}`;
+    html +=
+      `<div class="grid2">` +
+      `<label><span>${label} width (ft)</span>` +
+      `<input type="number" autocomplete="off" step="0.5" min="4" max="20" ` +
+      `data-dormer-idx="${i}" data-dormer-key="widthFt" value="${dW}"></label>` +
+      `<label><span>${label} height (ft)</span>` +
+      `<input type="number" autocomplete="off" step="0.5" min="2" max="10" ` +
+      `data-dormer-idx="${i}" data-dormer-key="heightFt" value="${dH}"></label>` +
+      `</div>`;
+  }
+  host.innerHTML = html;
+}
+
+/** Seed dormerSizes from the current global size so unlinking starts from the
+ *  shape already on screen instead of snapping every dormer back to defaults. */
+function seedDormerSizes() {
+  const dim = state.home.dimensions;
+  const count = parseInt(dim.dormerCount, 10) || 0;
+  const sizes = Array.isArray(dim.dormerSizes) ? dim.dormerSizes.slice() : [];
+  for (let i = 0; i < count; i++) {
+    if (!sizes[i]) {
+      sizes[i] = { widthFt: dim.dormerWidthFt ?? 10.0, heightFt: dim.dormerHeightFt ?? 4.5 };
+    }
+  }
+  dim.dormerSizes = sizes;
+}
+
 function syncForm() {
   $('f_name').value = state.home.name;
   for (const [id, key] of dimFields) {
@@ -182,6 +236,10 @@ function syncForm() {
   if ($('f_dormerInnerFalseEave')) $('f_dormerInnerFalseEave').checked = state.home.dimensions.dormerInnerFalseEave !== false;
   if ($('f_dormerConnected')) $('f_dormerConnected').checked = !!state.home.dimensions.dormerConnected;
   if ($('f_dormerWindow')) $('f_dormerWindow').checked = state.home.dimensions.dormerWindow !== false;
+  if ($('f_dormerLinkSizes')) $('f_dormerLinkSizes').checked = state.home.dimensions.dormerLinkSizes === true;
+  if ($('f_dormerNested')) $('f_dormerNested').checked = !!state.home.dimensions.dormerNested;
+  if ($('f_dormerNestOffset')) $('f_dormerNestOffset').value = state.home.dimensions.dormerNestOffsetFt ?? 0;
+  renderDormerSizeRows();
   for (const [id, key] of colorFields) $(id).value = state.home.colors[key];
   for (const [id, key] of planFields) $(id).value = state.home.plan[key];
   $('p_op').value = state.home.plan.opacity;
@@ -265,6 +323,28 @@ function bind() {
   if ($('f_dormerCount')) {
     $('f_dormerCount').addEventListener('change', (e) => {
       state.home.dimensions.dormerCount = parseInt(e.target.value, 10) || 0;
+      if (state.home.dimensions.dormerLinkSizes === false) seedDormerSizes();
+      renderDormerSizeRows();
+      rebuild(); save();
+    });
+  }
+  if ($('f_dormerLinkSizes')) {
+    $('f_dormerLinkSizes').addEventListener('change', (e) => {
+      state.home.dimensions.dormerLinkSizes = e.target.checked;
+      if (!e.target.checked) seedDormerSizes();
+      renderDormerSizeRows();
+      rebuild(); save();
+    });
+  }
+  if ($('dormerSizeRows')) {
+    $('dormerSizeRows').addEventListener('input', (e) => {
+      const idx = parseInt(e.target.dataset.dormerIdx ?? '', 10);
+      const key = e.target.dataset.dormerKey;
+      if (Number.isNaN(idx) || !key) return;
+      const v = parseFloat(e.target.value);
+      if (!Number.isFinite(v) || v <= 0) return; // let the field be empty mid-edit
+      seedDormerSizes();
+      state.home.dimensions.dormerSizes[idx] = { ...state.home.dimensions.dormerSizes[idx], [key]: v };
       rebuild(); save();
     });
   }
@@ -289,6 +369,37 @@ function bind() {
   if ($('f_dormerConnected')) {
     $('f_dormerConnected').addEventListener('change', (e) => {
       state.home.dimensions.dormerConnected = e.target.checked;
+      if (e.target.checked && $('f_dormerNested')) {
+        state.home.dimensions.dormerNested = false;
+        $('f_dormerNested').checked = false;
+      }
+      renderDormerSizeRows();
+      rebuild(); save();
+    });
+  }
+  if ($('f_dormerNested')) {
+    $('f_dormerNested').addEventListener('change', (e) => {
+      state.home.dimensions.dormerNested = e.target.checked;
+      if (e.target.checked) {
+        // Nested and connected are mutually exclusive arrangements.
+        state.home.dimensions.dormerConnected = false;
+        if ($('f_dormerConnected')) $('f_dormerConnected').checked = false;
+        seedDormerSizes();
+        // Give the inner gable a visibly smaller default so the nesting reads.
+        const sizes = state.home.dimensions.dormerSizes;
+        if (sizes[1] && sizes[0] && sizes[1].widthFt >= sizes[0].widthFt) {
+          sizes[1] = { widthFt: sizes[0].widthFt * 0.55, heightFt: sizes[0].heightFt * 0.7 };
+        }
+      }
+      renderDormerSizeRows();
+      rebuild(); save();
+    });
+  }
+  if ($('f_dormerNestOffset')) {
+    $('f_dormerNestOffset').addEventListener('input', (e) => {
+      const v = parseFloat(e.target.value);
+      if (!Number.isFinite(v)) return;
+      state.home.dimensions.dormerNestOffsetFt = v;
       rebuild(); save();
     });
   }
@@ -411,11 +522,15 @@ function bind() {
   function syncCameraStateToForm() {
     const cam = stage.camera;
 
-    // 1. Camera Distance
-    const dist = Math.round(stage.getCameraDistance() * 10) / 10;
-    state.home.sitePhoto.camDist = dist;
-    if ($('sp_camDist') && document.activeElement !== $('sp_camDist')) {
-      $('sp_camDist').value = dist;
+    // 1. Camera Distance — only meaningful for the perspective camera; an
+    // ortho-view change must not stomp the site-photo distance with a
+    // reading taken from the untouched persp camera.
+    if (cam === stage.persp) {
+      const dist = Math.round(stage.getCameraDistance() * 10) / 10;
+      state.home.sitePhoto.camDist = dist;
+      if ($('sp_camDist') && document.activeElement !== $('sp_camDist')) {
+        $('sp_camDist').value = dist;
+      }
     }
 
     // 2. Eye height
@@ -686,10 +801,14 @@ function onPick(ev) {
         if (!Array.isArray(dim.dormerPositions) || dim.dormerPositions.length !== count) {
           dim.dormerPositions = count === 1 ? [0] : [-dim.lengthFt * 0.25, dim.lengthFt * 0.25];
         }
+        // In nested mode the inner gable rides the outer one, so dragging it
+        // moves its nest offset rather than its own ridge position.
+        const nestedInner = count === 2 && dim.dormerNested && dormerIdx === 1;
         dormerDrag = {
           index: dormerIdx,
+          nestedInner,
           startClientX: ev.clientX,
-          startPosX: dim.dormerPositions[dormerIdx],
+          startPosX: nestedInner ? (+dim.dormerNestOffsetFt || 0) : dim.dormerPositions[dormerIdx],
         };
         stage.controls.enabled = false;
         stage.orthoControls.enabled = false;
@@ -757,7 +876,7 @@ function onMove(ev) {
   // Dormer drag — project screen-space delta onto the world X axis.
   if (dormerDrag) {
     const dim = state.home.dimensions;
-    const dW = dim.dormerWidthFt ?? 10;
+    const { dW } = dormerSize(dim, dormerDrag.index);
     const halfL = dim.lengthFt / 2 - dW / 2 - 1; // keep dormer inside the building
     // Approximate world-space feet per pixel from camera distance.
     const r = canvas.getBoundingClientRect();
@@ -770,6 +889,15 @@ function onMove(ev) {
     stage.camera.getWorldDirection(camRight);
     camRight.cross(stage.camera.up).normalize();
     const dx = screenDx * Math.sign(camRight.x || 1);
+    if (dormerDrag.nestedInner) {
+      const outerW = dormerSize(dim, 0).dW;
+      const lim = Math.max(0, (outerW - dW) / 2 - 0.5);
+      const v = Math.max(-lim, Math.min(lim, dormerDrag.startPosX + dx));
+      dim.dormerNestOffsetFt = Math.round(v * 12) / 12;
+      if ($('f_dormerNestOffset')) $('f_dormerNestOffset').value = dim.dormerNestOffsetFt;
+      queueRebuild();
+      return;
+    }
     const newX = Math.max(-halfL, Math.min(halfL, dormerDrag.startPosX + dx));
     dim.dormerPositions[dormerDrag.index] = Math.round(newX * 12) / 12; // snap to 1 inch
     queueRebuild();

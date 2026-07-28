@@ -125,17 +125,66 @@ export class Stage {
     this.setWireframe(o.wireframe);
   }
 
+  /**
+   * Hidden-line wireframe. Rather than `material.wireframe` — which draws every
+   * triangle edge, including the ones on the far side of the home — the solid
+   * geometry stays in place as an opaque depth mask painted in the background
+   * colour, and only the silhouette/crease edges are stroked on top. Edges
+   * behind the home are occluded by the mask, so the view reads like a line
+   * drawing instead of an x-ray.
+   */
   setWireframe(enabled) {
     if (!this.homeGroup) return;
-    const wf = !!enabled;
+
+    // Always tear the previous overlay down first: rebuild() hands us fresh
+    // geometry, and toggling off has to restore the real materials.
+    const stale = [];
     this.homeGroup.traverse((o) => {
-      if (o.isMesh && o.material) {
-        const list = Array.isArray(o.material) ? o.material : [o.material];
-        for (const m of list) {
-          m.wireframe = wf;
-        }
+      if (o.userData.hiddenLineEdge) { stale.push(o); return; }
+      if (!o.isMesh) return;
+      if (o.userData.solidMaterial) {
+        o.material = o.userData.solidMaterial;
+        o.userData.solidMaterial = null;
+      }
+      for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
+        if (m) m.wireframe = false;
       }
     });
+    for (const e of stale) {
+      e.parent?.remove(e);
+      e.geometry?.dispose();
+    }
+    if (!enabled) return;
+
+    const bg = this.scene.background instanceof THREE.Color
+      ? this.scene.background.clone()
+      : new THREE.Color(0x20242a);
+    // Stroke colour follows the background so the lines stay legible either way.
+    const lum = 0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b;
+    this._wfMask?.dispose();
+    this._wfEdge?.dispose();
+    this._wfMask = new THREE.MeshBasicMaterial({
+      color: bg,
+      polygonOffset: true,        // push the mask back so edges are not z-fought
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1,
+    });
+    this._wfEdge = new THREE.LineBasicMaterial({ color: lum > 0.5 ? 0x1b1e22 : 0xdfe6ee });
+
+    const meshes = [];
+    this.homeGroup.traverse((o) => {
+      if (!o.isMesh) return;
+      // Leave the resize gizmo alone — it is UI, not part of the model.
+      for (let p = o; p; p = p.parent) if (p === this.overlay) return;
+      meshes.push(o);
+    });
+    for (const m of meshes) {
+      m.userData.solidMaterial = m.material;
+      m.material = this._wfMask;
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, 25), this._wfEdge);
+      edges.userData.hiddenLineEdge = true;
+      m.add(edges);
+    }
   }
 
   resize(w, h) {
