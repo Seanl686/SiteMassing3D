@@ -89,21 +89,23 @@ function refreshList() {
     selectedId,
     onSelect: select,
     onEdit: (o, geometry) => {
-      if (geometry) { clampOpening(o, state.home.dimensions); rebuild(); }
-      else save();
+      if (geometry) clampOpening(o, state.home.dimensions);
+      rebuild();
+      save();
+      syncList();
     },
-    onRestructure: (id) => { rebuild(); refreshList(); select(id); },
+    onRestructure: (id) => { rebuild(); save(); refreshList(); select(id); },
     onDelete: (id) => {
       state.home.openings = state.home.openings.filter((o) => o.id !== id);
       if (selectedId === id) { selectedId = null; gizmo.clear(); }
-      rebuild(); refreshList();
+      rebuild(); save(); refreshList();
     },
     onDuplicate: (id) => {
       const src = state.home.openings.find((o) => o.id === id);
       if (!src) return;
       const copy = { ...src, id: nextId(src.type[0]), offsetFt: src.offsetFt + src.widthFt + 2 };
       state.home.openings.push(copy);
-      rebuild(); refreshList(); select(copy.id);
+      rebuild(); save(); refreshList(); select(copy.id);
     },
   });
   updateCounts();
@@ -111,7 +113,16 @@ function refreshList() {
 
 /** Cheap update: values and selection only, existing rows untouched. */
 function syncList() {
-  syncOpeningValues($('openingList'), state.home, selectedId);
+  syncOpeningValues($('openingList'), state.home, selectedId, {
+    selectedId,
+    onSelect: select,
+    onEdit: (o, geometry) => {
+      if (geometry) clampOpening(o, state.home.dimensions);
+      rebuild();
+      save();
+      syncList();
+    },
+  });
   updateCounts();
 }
 

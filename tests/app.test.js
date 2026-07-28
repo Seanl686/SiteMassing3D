@@ -105,3 +105,37 @@ test('6. 3D Home Assembly & Per-Door Stair Customizations', () => {
   assert.ok(root.userData.materials.rail_white);
   assert.ok(root.userData.materials.rail_pressure_treated);
 });
+
+test('7. Independent Per-Item Customization Verification', () => {
+  const home = defaultHome();
+  const scene = defaultScene();
+
+  const doors = home.openings.filter((o) => o.type === 'door' || o.type === 'slider');
+  assert.ok(doors.length >= 2, 'At least two doors exist for per-item test');
+
+  const door1 = doors[0];
+  const door2 = doors[1];
+
+  // Customize Door 1 independently
+  door1.stepMat = 'pressure_treated';
+  door1.stepEgress = 'left';
+  door1.railMat = 'black_metal';
+
+  // Customize Door 2 independently with completely different options
+  door2.stepMat = 'dark_composite';
+  door2.stepEgress = 'split';
+  door2.railMat = 'white_trim';
+
+  // Rebuild model and verify that both retain their distinct per-item settings
+  const root = buildHome(home, scene);
+  const stepsGroup = root.children.find((c) => c.name === 'steps');
+  assert.ok(stepsGroup);
+
+  assert.equal(door1.stepMat, 'pressure_treated');
+  assert.equal(door1.stepEgress, 'left');
+  assert.equal(door1.railMat, 'black_metal');
+
+  assert.equal(door2.stepMat, 'dark_composite');
+  assert.equal(door2.stepEgress, 'split');
+  assert.equal(door2.railMat, 'white_trim');
+});

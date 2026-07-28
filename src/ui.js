@@ -310,6 +310,7 @@ function row(o, cb) {
     const matSpan = document.createElement('span');
     matSpan.textContent = 'Stair Material';
     const matSelect = document.createElement('select');
+    matSelect.dataset.key = 'stepMat';
     matSelect.innerHTML = `
       <option value="concrete">Concrete (Masonry)</option>
       <option value="pressure_treated">Pressure-Treated Wood</option>
@@ -328,6 +329,7 @@ function row(o, cb) {
     const egressSpan = document.createElement('span');
     egressSpan.textContent = 'Egress Direction';
     const egressSelect = document.createElement('select');
+    egressSelect.dataset.key = 'stepEgress';
     egressSelect.innerHTML = `
       <option value="front">Front / Straight out</option>
       <option value="left">Left side egress</option>
@@ -347,6 +349,7 @@ function row(o, cb) {
     const railMatSpan = document.createElement('span');
     railMatSpan.textContent = 'Railing Material';
     const railMatSelect = document.createElement('select');
+    railMatSelect.dataset.key = 'railMat';
     railMatSelect.innerHTML = `
       <option value="pressure_treated">Pressure-Treated Wood</option>
       <option value="white_trim">Classic White Wood</option>
@@ -366,6 +369,7 @@ function row(o, cb) {
     const balusterSpan = document.createElement('span');
     balusterSpan.textContent = 'Balusters / Infill';
     const balusterSelect = document.createElement('select');
+    balusterSelect.dataset.key = 'balusterStyle';
     balusterSelect.innerHTML = `
       <option value="balusters">Vertical Balusters (4" spacing)</option>
       <option value="horizontal_cables">Horizontal Cable Railing</option>
