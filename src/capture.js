@@ -1,0 +1,139 @@
+// Offscreen-size rendering and PNG export.
+
+import * as THREE from 'three';
+import { fmtFt } from './build.js';
+
+function slug(s) {
+  return (s || 'home').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'home';
+}
+
+function download(canvas, filename) {
+  canvas.toBlob((blob) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }, 'image/png');
+}
+
+/**
+ * Render the current camera at an arbitrary pixel size and return a 2D canvas.
+ * The live viewport size is restored before returning.
+ */
+export function renderToCanvas(stage, w, h, alpha, sceneOpts) {
+  const prevSize = new THREE.Vector2();
+  stage.renderer.getSize(prevSize);
+  const prevRatio = stage.renderer.getPixelRatio();
+  const prevBg = stage.scene.background;
+
+  stage.renderer.setPixelRatio(1);
+  stage.renderer.setSize(w, h, false);
+  stage.persp.aspect = w / h;
+  stage.persp.updateProjectionMatrix();
+  const prevAspect = stage._aspect;
+  stage._aspect = w / h;
+  stage.reframeOrtho();
+  // A preset framed for the viewport does not fit a differently-shaped export,
+  // so re-solve it at the render aspect. Manual framing is left alone.
+  stage.refit();
+
+  if (alpha) {
+    stage.scene.background = null;
+    stage.renderer.setClearAlpha(0);
+    stage.grid.visible = false;
+  }
+
+  const overlayWas = stage.overlay?.visible;
+  if (stage.overlay) stage.overlay.visible = false;
+
+  stage.renderer.render(stage.scene, stage.camera);
+
+  if (stage.overlay) stage.overlay.visible = overlayWas;
+
+  const out = document.createElement('canvas');
+  out.width = w; out.height = h;
+  out.getContext('2d').drawImage(stage.renderer.domElement, 0, 0, w, h);
+
+  // Restore the viewport exactly as it was.
+  stage.scene.background = prevBg;
+  stage.renderer.setClearAlpha(1);
+  stage.grid.visible = sceneOpts.grid;
+  stage.renderer.setPixelRatio(prevRatio);
+  stage.renderer.setSize(prevSize.x, prevSize.y, false);
+  stage.persp.aspect = prevAspect;
+  stage.persp.updateProjectionMatrix();
+  stage._aspect = prevAspect;
+  stage.reframeOrtho();
+  stage.refit();
+
+  return out;
+}
+
+export function caption(home, viewName) {
+  const d = home.dimensions;
+  return `${home.name}  ·  ${fmtFt(d.widthFt)} × ${fmtFt(d.lengthFt)}  ·  ${viewName}`;
+}
+
+function burnCaption(canvas, text) {
+  const ctx = canvas.getContext('2d');
+  const fs = Math.max(16, Math.round(canvas.width / 62));
+  const pad = Math.round(fs * 0.7);
+  ctx.font = `600 ${fs}px ui-sans-serif, system-ui, sans-serif`;
+  const w = ctx.measureText(text).width + pad * 2;
+  const h = fs + pad * 1.4;
+  const x = pad, y = canvas.height - h - pad;
+  ctx.fillStyle = 'rgba(12,14,18,0.78)';
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x + pad, y + h / 2);
+  return canvas;
+}
+
+export function shoot(stage, home, sceneOpts, exportOpts, viewName) {
+  const c = renderToCanvas(stage, exportOpts.w, exportOpts.h, exportOpts.alpha, sceneOpts);
+  if (exportOpts.burn && !exportOpts.alpha) burnCaption(c, caption(home, viewName));
+  download(c, `${slug(home.name)}-${slug(viewName)}-${exportOpts.w}x${exportOpts.h}.png`);
+  return c;
+}
+
+const SHEET_VIEWS = [
+  ['front', 'Front elevation'],
+  ['right', 'Right end elevation'],
+  ['rear', 'Rear elevation'],
+  ['hero-left', 'Three-quarter, front-left'],
+];
+
+/** 2x2 contact sheet of the standard elevation set — the plate set for an image model. */
+export function contactSheet(stage, home, sceneOpts, exportOpts) {
+  const cw = Math.round(exportOpts.w / 2);
+  const ch = Math.round(exportOpts.h / 2);
+  const sheet = document.createElement('canvas');
+  sheet.width = cw * 2;
+  sheet.height = ch * 2;
+  const ctx = sheet.getContext('2d');
+  ctx.fillStyle = sceneOpts.bg;
+  ctx.fillRect(0, 0, sheet.width, sheet.height);
+
+  const restoreView = stage._lastView;
+
+  SHEET_VIEWS.forEach(([view, label], i) => {
+    stage.setView(view, home.dimensions, sceneOpts);
+    const tile = renderToCanvas(stage, cw, ch, false, sceneOpts);
+    burnCaption(tile, label);
+    ctx.drawImage(tile, (i % 2) * cw, Math.floor(i / 2) * ch);
+  });
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.beginPath();
+  ctx.moveTo(cw, 0); ctx.lineTo(cw, sheet.height);
+  ctx.moveTo(0, ch); ctx.lineTo(sheet.width, ch);
+  ctx.stroke();
+
+  burnCaption(sheet, caption(home, 'elevation set'));
+  if (restoreView) stage.setView(restoreView, home.dimensions, sceneOpts);
+  download(sheet, `${slug(home.name)}-elevation-set.png`);
+  return sheet;
+}

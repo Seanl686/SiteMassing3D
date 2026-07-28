@@ -1,0 +1,27 @@
+{
+  "_note": "Copy per model. Read widthFt/lengthFt off the spec sheet's W' x L' line — do not guess. Offsets are measured left-to-right as seen standing outside that wall.",
+  "name": "MODEL NAME HERE",
+  "dimensions": {
+    "widthFt": 27,
+    "lengthFt": 56,
+    "wallHeightFt": 8,
+    "floorHeightFt": 2.5,
+    "roofPitch": 4,
+    "eaveOverhangFt": 1,
+    "rakeOverhangFt": 0.75,
+    "roofStyle": "gable"
+  },
+  "colors": {
+    "siding": "#8d9299",
+    "trim": "#f2f2f0",
+    "roof": "#3a3d42",
+    "skirting": "#e6e6e1",
+    "door": "#f2f2f0",
+    "glass": "#4d6070"
+  },
+  "openings": [
+    { "id": "d1", "type": "door", "wall": "front", "offsetFt": 14, "widthFt": 3, "heightFt": 6.67, "sillFt": 0, "label": "Main entry" },
+    { "id": "d2", "type": "door", "wall": "back", "offsetFt": 38, "widthFt": 3, "heightFt": 6.67, "sillFt": 0, "label": "Rear / utility door" }
+  ],
+  "plan": { "src": null, "widthFt": 56, "offsetX": 0, "offsetZ": 0, "rotation": 0, "opacity": 0.65, "show": false }
+}

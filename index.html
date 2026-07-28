@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SiteMassing3D — double-wide massing &amp; elevation renderer</title>
+<!-- ?v= bust: plain static servers hand Chrome a cached stylesheet after edits -->
+<link rel="stylesheet" href="css/app.css?v=2">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.js",
+    "three/webgpu": "./vendor/three.module.js",
+    "three/tsl": "./vendor/three.module.js"
+  }
+}
+</script>
+</head>
+<body>
+
+<header id="topbar">
+  <div class="brand">SiteMassing3D</div>
+  <div class="views" id="viewPresets">
+    <button data-view="front">Front elev</button>
+    <button data-view="rear">Rear elev</button>
+    <button data-view="left">Left end</button>
+    <button data-view="right">Right end</button>
+    <button data-view="plan">Plan</button>
+    <span class="sep"></span>
+    <button data-view="hero-left">¾ front-L</button>
+    <button data-view="hero-right">¾ front-R</button>
+    <button data-view="rear-left">¾ rear-L</button>
+    <button data-view="eye">Eye level</button>
+  </div>
+  <div class="spacer"></div>
+  <div class="fileops">
+    <select id="library" title="Home library (homes/ folder)"><option value="">Library…</option></select>
+    <button id="btnNew">New</button>
+    <label class="btn" for="fileHome">Open JSON</label>
+    <input type="file" id="fileHome" accept="application/json" hidden>
+    <button id="btnSave">Save JSON</button>
+    <button id="btnShot" class="primary">Screenshot</button>
+  </div>
+</header>
+
+<main>
+  <aside id="sidebar">
+
+    <section class="panel">
+      <h2>Home</h2>
+      <label class="row"><span>Model name</span><input id="f_name" type="text" autocomplete="off"></label>
+      <div class="grid2">
+        <label><span>Width (ft)</span><input id="f_width" type="number" autocomplete="off" step="0.1" min="8"></label>
+        <label><span>Length (ft)</span><input id="f_length" type="number" autocomplete="off" step="0.1" min="8"></label>
+        <label><span>Wall height (ft)</span><input id="f_wallHeight" type="number" autocomplete="off" step="0.1" min="6"></label>
+        <label><span>Floor height (ft)</span><input id="f_floorHeight" type="number" autocomplete="off" step="0.05" min="0"></label>
+        <label><span>Roof pitch (/12)</span><input id="f_pitch" type="number" autocomplete="off" step="0.5" min="0" max="12"></label>
+        <label><span>Eave overhang (ft)</span><input id="f_eaveOverhang" type="number" autocomplete="off" step="0.1" min="0"></label>
+        <label><span>Rake overhang (ft)</span><input id="f_rakeOverhang" type="number" autocomplete="off" step="0.1" min="0"></label>
+        <label><span>Roof style</span>
+          <select id="f_roofStyle"><option value="gable">Gable (ridge along length)</option><option value="flat">Flat / low slope</option></select>
+        </label>
+      </div>
+      <p class="hint" id="ratioHint"></p>
+    </section>
+
+    <section class="panel">
+      <h2>Colors</h2>
+      <div class="grid2 colors">
+        <label><span>Siding</span><input id="c_siding" type="color" autocomplete="off"></label>
+        <label><span>Trim</span><input id="c_trim" type="color" autocomplete="off"></label>
+        <label><span>Roof</span><input id="c_roof" type="color" autocomplete="off"></label>
+        <label><span>Skirting</span><input id="c_skirting" type="color" autocomplete="off"></label>
+        <label><span>Door</span><input id="c_door" type="color" autocomplete="off"></label>
+        <label><span>Glass</span><input id="c_glass" type="color" autocomplete="off"></label>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Openings <span class="count" id="openCount"></span></h2>
+      <div class="btnrow">
+        <button id="btnAddDoor">+ Door</button>
+        <button id="btnAddSlider">+ Slider</button>
+        <button id="btnAddWindow">+ Window</button>
+      </div>
+      <p class="hint">Click a wall to add at that spot. Click a door or window to select it, drag to move, drag a blue handle to resize. <b>Shift</b> locks to one axis, <b>Alt</b> disables the 1&Prime; snap, <b>Del</b> removes. Offset is measured left&rarr;right as seen from outside that wall.</p>
+      <div id="openingList"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Floor plan plate</h2>
+      <label class="btn block" for="filePlan">Load plan image (PNG/JPG)</label>
+      <input type="file" id="filePlan" accept="image/*" hidden>
+      <div class="grid2">
+        <label><span>Plate width (ft)</span><input id="p_width" type="number" autocomplete="off" step="0.5"></label>
+        <label><span>Rotation (deg)</span><input id="p_rot" type="number" autocomplete="off" step="1"></label>
+        <label><span>Offset X (ft)</span><input id="p_x" type="number" autocomplete="off" step="0.25"></label>
+        <label><span>Offset Z (ft)</span><input id="p_z" type="number" autocomplete="off" step="0.25"></label>
+        <label><span>Opacity</span><input id="p_op" type="range" autocomplete="off" min="0" max="1" step="0.05"></label>
+        <label><span>Show</span><input id="p_show" type="checkbox" autocomplete="off"></label>
+      </div>
+      <label class="row check"><input id="p_pick" type="checkbox" autocomplete="off"><span>Plan-pick mode: click plan to drop a door on nearest wall</span></label>
+      <p class="hint">Scale the plate so its printed footprint matches the white outline, then trace door positions off it.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Scene &amp; lighting</h2>
+      <div class="grid2">
+        <label><span>Sun azimuth</span><input id="s_sunAz" type="range" autocomplete="off" min="0" max="360" step="1"></label>
+        <label><span>Sun elevation</span><input id="s_sunEl" type="range" autocomplete="off" min="5" max="89" step="1"></label>
+        <label><span>Overcast mix</span><input id="s_flat" type="range" autocomplete="off" min="0" max="1" step="0.05"></label>
+        <label><span>Focal (mm)</span><input id="s_focal" type="number" autocomplete="off" step="1" min="10" max="200"></label>
+        <label><span>Eye height (ft)</span><input id="s_eye" type="number" autocomplete="off" step="0.5"></label>
+        <label><span>Background</span><input id="s_bg" type="color" autocomplete="off"></label>
+      </div>
+      <label class="row check"><input id="s_grid" type="checkbox" autocomplete="off"><span>Ground grid</span></label>
+      <label class="row check"><input id="s_shadow" type="checkbox" autocomplete="off"><span>Cast shadow</span></label>
+      <label class="row check"><input id="s_steps" type="checkbox" autocomplete="off"><span>Steps at exterior doors</span></label>
+      <label class="row check"><input id="s_labels" type="checkbox" autocomplete="off"><span>Door callout markers</span></label>
+      <label class="row check"><input id="s_dims" type="checkbox" autocomplete="off"><span>Dimension outline on ground</span></label>
+    </section>
+
+    <section class="panel">
+      <h2>Screenshot</h2>
+      <div class="grid2">
+        <label><span>Width (px)</span><input id="x_w" type="number" autocomplete="off" step="16"></label>
+        <label><span>Height (px)</span><input id="x_h" type="number" autocomplete="off" step="16"></label>
+      </div>
+      <label class="row check"><input id="x_alpha" type="checkbox" autocomplete="off"><span>Transparent background (for compositing)</span></label>
+      <label class="row check"><input id="x_burn" type="checkbox" autocomplete="off"><span>Burn in model name + W×L caption</span></label>
+      <button id="btnFitPx" class="block">Fit pixel aspect to current view</button>
+      <button id="btnShot2" class="primary block">Render PNG</button>
+      <button id="btnSheet" class="block">Render 4-view contact sheet</button>
+    </section>
+
+  </aside>
+
+  <div id="stage">
+    <canvas id="view"></canvas>
+    <div id="hud"></div>
+  </div>
+</main>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

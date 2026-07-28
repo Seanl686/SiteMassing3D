@@ -1,0 +1,148 @@
+:root {
+  --bg: #16181c;
+  --panel: #1e2126;
+  --panel2: #262a31;
+  --line: #343a43;
+  --text: #e6e8ec;
+  --dim: #9aa2ad;
+  --accent: #6fb2ff;
+  --accent2: #2b6cb0;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+}
+
+body { display: flex; flex-direction: column; }
+
+/* ---------- top bar ---------- */
+
+#topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+}
+
+.brand { font-weight: 700; letter-spacing: .04em; }
+.spacer { flex: 1 1 auto; }
+.views, .fileops { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.views .sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
+
+button, .btn, select, input[type=text], input[type=number] {
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 5px 9px;
+  font: inherit;
+  cursor: pointer;
+}
+
+input[type=text], input[type=number], select { cursor: text; width: 100%; }
+select { cursor: pointer; }
+/* The library picker sits in the flex top bar, where width:100% would wrap it. */
+#library { width: auto; max-width: 200px; }
+
+button:hover, .btn:hover { border-color: var(--accent); }
+button.primary { background: var(--accent2); border-color: var(--accent2); }
+button.primary:hover { background: #3a7fc4; }
+button.block, .btn.block { display: block; width: 100%; text-align: center; margin-top: 6px; }
+button.danger:hover { border-color: #e06c6c; color: #ffb3b3; }
+
+/* ---------- layout ---------- */
+
+main { flex: 1 1 auto; display: flex; min-height: 0; }
+
+#sidebar {
+  width: 330px;
+  flex: 0 0 330px;
+  overflow-y: auto;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  padding-bottom: 40px;
+}
+
+#stage { flex: 1 1 auto; position: relative; min-width: 0; }
+#view { width: 100%; height: 100%; display: block; }
+
+#hud {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #cfd6e0;
+  background: rgba(0,0,0,.45);
+  padding: 6px 9px;
+  border-radius: 5px;
+  pointer-events: none;
+  white-space: pre;
+}
+
+/* ---------- panels ---------- */
+
+.panel { border-bottom: 1px solid var(--line); padding: 10px 12px 14px; }
+.panel h2 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  color: var(--dim);
+}
+.panel h2 .count { color: var(--accent); }
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; }
+.grid2 label, .row { display: flex; flex-direction: column; gap: 3px; }
+.grid2 label span, .row > span { font-size: 11px; color: var(--dim); }
+.row { margin-bottom: 6px; }
+.row.check, label.check { flex-direction: row; align-items: center; gap: 7px; margin-top: 6px; }
+.row.check span { font-size: 12px; color: var(--text); }
+.btnrow { display: flex; gap: 5px; margin-bottom: 8px; }
+.btnrow button { flex: 1; }
+
+.colors input[type=color] {
+  width: 100%; height: 26px; padding: 0;
+  background: none; border: 1px solid var(--line); border-radius: 5px; cursor: pointer;
+}
+
+input[type=range] { width: 100%; accent-color: var(--accent); }
+input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; }
+
+.hint { color: var(--dim); font-size: 11px; margin: 8px 0 0; }
+
+/* ---------- opening rows ---------- */
+
+.opening {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 8px;
+  margin-bottom: 7px;
+  background: var(--panel2);
+}
+.opening.sel { border-color: var(--accent); }
+.opening header {
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 6px; font-size: 12px;
+}
+.opening header .tag {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
+  background: var(--accent2); border-radius: 3px; padding: 1px 5px;
+}
+.opening header .tag.window { background: #4a5568; }
+.opening header input.lbl { flex: 1; padding: 3px 6px; font-size: 12px; }
+.opening .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+.opening .grid4 label { display: flex; flex-direction: column; gap: 2px; }
+.opening .grid4 span { font-size: 10px; color: var(--dim); }
+.opening .grid4 input, .opening select { padding: 3px 5px; font-size: 12px; }
+.opening .foot { display: flex; gap: 5px; margin-top: 6px; align-items: center; }
+.opening .foot select { flex: 1; }
