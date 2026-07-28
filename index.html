@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SiteMassing3D — double-wide massing &amp; elevation renderer</title>
 <!-- ?v= bust: plain static servers hand Chrome a cached stylesheet after edits -->
-<link rel="stylesheet" href="css/app.css?v=10">
+<link rel="stylesheet" href="css/app.css?v=11">
 <script type="importmap">
 {
   "imports": {
@@ -35,6 +35,10 @@
   </div>
   <div class="spacer"></div>
   <div class="fileops">
+    <div class="history-group">
+      <button id="btnUndo" title="Nothing to undo" disabled>&#8630; Undo</button>
+      <button id="btnRedo" title="Nothing to redo" disabled>&#8631; Redo</button>
+    </div>
     <select id="library" title="Home library (homes/ folder)"><option value="">Library…</option></select>
     <button id="btnNew">New</button>
     <label class="btn" for="fileHome">Open JSON</label>

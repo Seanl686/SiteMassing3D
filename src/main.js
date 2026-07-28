@@ -8,6 +8,7 @@ import { updatePlanPlate, nearestWallHit } from './plan.js';
 import { Gizmo, wallPlaneHit, applyDrag } from './gizmo.js';
 import { shoot, contactSheet, renderToCanvas } from './capture.js';
 import { defaultHome, defaultScene, defaultExport, nextId, OPENING_PRESETS, migrate } from './defaults.js';
+import { History, describeChange } from './history.js';
 
 const STORE_KEY = 'sitemassing3d.v1';
 
@@ -821,13 +822,17 @@ function bind() {
 
   function syncCameraStateToForm() {
     const cam = stage.camera;
+    let changed = false;
 
     // 1. Camera Distance — only meaningful for the perspective camera; an
     // ortho-view change must not stomp the site-photo distance with a
     // reading taken from the untouched persp camera.
     if (cam === stage.persp) {
       const dist = Math.round(stage.getCameraDistance() * 10) / 10;
-      state.home.sitePhoto.camDist = dist;
+      if (dist !== state.home.sitePhoto.camDist) {
+        state.home.sitePhoto.camDist = dist;
+        changed = true;
+      }
       if ($('sp_camDist') && document.activeElement !== $('sp_camDist')) {
         $('sp_camDist').value = dist;
       }
@@ -835,13 +840,19 @@ function bind() {
 
     // 2. Eye height
     const eyeY = Math.round(cam.position.y * 10) / 10;
-    state.scene.eye = eyeY;
+    if (eyeY !== state.scene.eye) {
+      state.scene.eye = eyeY;
+      changed = true;
+    }
     if ($('s_eye') && document.activeElement !== $('s_eye')) {
       $('s_eye').value = eyeY;
     }
 
     updateHud();
-    save();
+    // OrbitControls damping keeps firing 'change' for as long as the camera is
+    // easing, so saving unconditionally here wrote to localStorage several times
+    // a second and, once history existed, filled the undo stack with camera drift.
+    if (changed) save();
   }
 
   stage.controls.addEventListener('change', syncCameraStateToForm);
@@ -1030,7 +1041,22 @@ function bind() {
   // Move/up live on the window so a drag survives the pointer leaving the canvas.
   addEventListener('pointermove', onMove);
   addEventListener('pointerup', onUp);
+  if ($('btnUndo')) $('btnUndo').addEventListener('click', doUndo);
+  if ($('btnRedo')) $('btnRedo').addEventListener('click', doRedo);
+
   addEventListener('keydown', (e) => {
+    // Ctrl/Cmd+Z and Ctrl+Shift+Z (or Ctrl+Y) drive the project history. Text
+    // fields keep their own undo — retyping a label should not roll the model
+    // back — but number fields and selects belong to the model, so they don't.
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z' || e.key === 'y' || e.key === 'Y')) {
+      const inText = e.target instanceof HTMLInputElement && e.target.type === 'text';
+      if (!inText) {
+        e.preventDefault();
+        const redo = e.key === 'y' || e.key === 'Y' || e.shiftKey;
+        if (redo) doRedo(); else doUndo();
+        return;
+      }
+    }
     if (e.key === 'Escape') { pendingAdd = null; canvas.style.cursor = ''; }
     if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIds.size && e.target === document.body) {
       state.home.openings = state.home.openings.filter((o) => !selectedIds.has(o.id));
@@ -1355,7 +1381,127 @@ function addOpening(type, wall, u, v) {
 
 let warnedQuota = false;
 
+// ---------------------------------------------------------------------------
+// Undo / redo
+// ---------------------------------------------------------------------------
+
+const history = new History({ limit: 80, coalesceMs: 600 });
+
+/**
+ * Image data URLs are megabytes each, so they never go into a snapshot. The pool
+ * holds one copy of every distinct plan / site-photo image and the snapshot
+ * carries its key; entries no longer reachable from the stack are dropped.
+ */
+const imagePool = new Map();
+let imageSeq = 0;
+
+function poolKey(src) {
+  if (!src) return null;
+  for (const [key, value] of imagePool) if (value === src) return key;
+  const key = `img${++imageSeq}`;
+  imagePool.set(key, src);
+  return key;
+}
+
+function pruneImagePool() {
+  const live = new Set();
+  for (const snap of history.snapshots()) {
+    if (snap.home?.plan?.srcKey) live.add(snap.home.plan.srcKey);
+    if (snap.home?.sitePhoto?.srcKey) live.add(snap.home.sitePhoto.srcKey);
+  }
+  if (state.home.plan?.src) live.add(poolKey(state.home.plan.src));
+  if (state.home.sitePhoto?.src) live.add(poolKey(state.home.sitePhoto.src));
+  for (const key of [...imagePool.keys()]) if (!live.has(key)) imagePool.delete(key);
+}
+
+/** Project state worth undoing: the home and the scene, images held by key. */
+function snapshotState() {
+  const home = { ...state.home };
+  home.plan = { ...home.plan, src: undefined, srcKey: poolKey(home.plan?.src) };
+  // camDist and scene.eye are readings taken off the live camera, so orbiting
+  // would otherwise queue undo steps. Where the camera is pointing is
+  // navigation; undo should not drag it back.
+  home.sitePhoto = { ...home.sitePhoto, src: undefined, camDist: undefined, srcKey: poolKey(home.sitePhoto?.src) };
+  const scene = { ...state.scene, eye: undefined };
+  return JSON.parse(JSON.stringify({ home, scene }));
+}
+
+let applyingHistory = false;
+
+function applySnapshot(snap) {
+  applyingHistory = true;
+  try {
+    const home = migrate(snap.home);
+    home.plan.src = snap.home.plan?.srcKey ? imagePool.get(snap.home.plan.srcKey) ?? null : null;
+    home.sitePhoto.src = snap.home.sitePhoto?.srcKey ? imagePool.get(snap.home.sitePhoto.srcKey) ?? null : null;
+    // Carry the camera readings across untouched — they are not part of history.
+    home.sitePhoto.camDist = state.home.sitePhoto?.camDist ?? home.sitePhoto.camDist;
+    state.home = home;
+    state.scene = { ...defaultScene(), ...snap.scene, eye: state.scene.eye };
+
+    // Keep whatever of the selection still exists after the state swap.
+    const ids = new Set(state.home.openings.map((o) => o.id));
+    selectedIds = new Set([...selectedIds].filter((id) => ids.has(id)));
+    if (!ids.has(selectedId)) selectedId = selectedIds.values().next().value ?? null;
+
+    syncForm();
+    rebuild();
+    refreshList();
+    updatePlanPlate(stage, state.home.plan);
+    updateSitePhotoPlate();
+  } finally {
+    applyingHistory = false;
+  }
+  save();
+  updateHistoryButtons();
+}
+
+let historyTimer = null;
+
+/**
+ * Every mutation already funnels through save(), so that is where history is
+ * taken. It is debounced because a drag calls save() on every frame — only the
+ * state the pointer came to rest in is worth an undo step.
+ */
+function scheduleHistory() {
+  if (applyingHistory) return;
+  clearTimeout(historyTimer);
+  historyTimer = setTimeout(() => {
+    const snap = snapshotState();
+    const label = describeChange(history.current, snap);
+    if (history.record(snap, label)) {
+      pruneImagePool();
+      updateHistoryButtons();
+    }
+  }, 350);
+}
+
+function updateHistoryButtons() {
+  const undo = $('btnUndo'), redo = $('btnRedo');
+  if (undo) {
+    undo.disabled = !history.canUndo;
+    undo.title = history.canUndo ? `Undo ${history.peekUndo()} (Ctrl+Z)` : 'Nothing to undo';
+  }
+  if (redo) {
+    redo.disabled = !history.canRedo;
+    redo.title = history.canRedo ? `Redo ${history.peekRedo()} (Ctrl+Shift+Z)` : 'Nothing to redo';
+  }
+}
+
+function doUndo() {
+  clearTimeout(historyTimer);
+  const step = history.undo();
+  if (step) applySnapshot(step.snapshot);
+}
+
+function doRedo() {
+  clearTimeout(historyTimer);
+  const step = history.redo();
+  if (step) applySnapshot(step.snapshot);
+}
+
 function save() {
+  scheduleHistory();
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(state));
   } catch {
@@ -1440,6 +1586,15 @@ if (window.ResizeObserver && canvas.parentElement) {
   ro.observe(canvas.parentElement);
 }
 addEventListener('resize', fit);
+
+// Seed the undo stack once boot has settled — the initial rebuild, the site
+// photo pan conversion and the opening view preset all write state, and none of
+// them is an edit the user made.
+requestAnimationFrame(() => {
+  clearTimeout(historyTimer);
+  history.reset(snapshotState(), 'opened');
+  updateHistoryButtons();
+});
 
 // Debug handle: lets you poke at state/stage from the console without a build step.
 window.__app = { state, stage, rebuild, refreshList, renderToCanvas };

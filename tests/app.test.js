@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { defaultHome, defaultScene, defaultExport, migrate, WALLS } from '../src/defaults.js';
 import { derived, wallFrames, fmtAllUnits, buildHome, getWallHeight, dormerSize, applyHeadAlign } from '../src/build.js';
 import { createSidingMaterial } from '../src/textures.js';
+import { History, describeChange } from '../src/history.js';
 
 test('1. Defaults & State Initialization', () => {
   const home = defaultHome();
@@ -585,3 +586,97 @@ test('23. Split Double Side Egress Stair Railings Verification', () => {
 });
 
 
+
+
+test('24. Undo / Redo History Stack', () => {
+  let clock = 0;
+  const h = new History({ limit: 4, coalesceMs: 100, now: () => clock });
+
+  h.reset({ home: { name: 'a' } }, 'opened');
+  assert.equal(h.canUndo, false, 'Nothing to undo at the opening state');
+  assert.equal(h.canRedo, false, 'Nothing to redo at the opening state');
+
+  // An identical snapshot is not a step — save() fires on no-op changes too.
+  assert.equal(h.record({ home: { name: 'a' } }, 'dimensions'), false, 'Unchanged state is ignored');
+  assert.equal(h.size, 1, 'Stack unchanged by a no-op record');
+
+  clock = 1000;
+  h.record({ home: { name: 'b' } }, 'dimensions');
+  clock = 2000;
+  h.record({ home: { name: 'c' } }, 'openings');
+  assert.equal(h.size, 3);
+  assert.equal(h.peekUndo(), 'openings', 'Undo reports the step it will take back');
+
+  const back = h.undo();
+  assert.equal(back.snapshot.home.name, 'b', 'Undo returns the previous state');
+  assert.equal(h.peekRedo(), 'openings', 'Redo reports the step it will re-apply');
+  const fwd = h.redo();
+  assert.equal(fwd.snapshot.home.name, 'c', 'Redo returns the state that was undone');
+
+  // Recording after an undo drops the redo tail.
+  h.undo();
+  clock = 3000;
+  h.record({ home: { name: 'd' } }, 'colours');
+  assert.equal(h.canRedo, false, 'A new edit after undo clears the redo tail');
+  assert.equal(h.current.home.name, 'd');
+
+  // Rapid same-label edits coalesce into one step (slider drags).
+  clock = 3010;
+  h.record({ home: { name: 'd2' } }, 'colours');
+  clock = 3020;
+  h.record({ home: { name: 'd3' } }, 'colours');
+  assert.equal(h.size, 3, 'Same-label edits inside the window merge into one entry');
+  assert.equal(h.undo().snapshot.home.name, 'b', 'The merged step undoes back past all of them');
+  h.redo();
+
+  // A different label always starts a new step, however fast it arrives.
+  clock = 3025;
+  h.record({ home: { name: 'e' } }, 'openings');
+  assert.equal(h.size, 4, 'A different label is never merged');
+
+  // The limit drops the oldest entries, never the newest.
+  clock = 4000;
+  h.record({ home: { name: 'f' } }, 'dimensions');
+  assert.equal(h.size, 4, 'Stack is capped at the limit');
+  assert.equal(h.current.home.name, 'f', 'Newest state survives the cap');
+
+  // Snapshots are copies: mutating the caller's object cannot corrupt the stack.
+  const live = { home: { name: 'g' } };
+  clock = 5000;
+  h.record(live, 'dimensions');
+  live.home.name = 'mutated';
+  assert.equal(h.current.home.name, 'g', 'Stored snapshots are deep copies');
+});
+
+test('25. History Change Labels', () => {
+  const base = { home: defaultHome(), scene: defaultScene() };
+  const clone = () => JSON.parse(JSON.stringify(base));
+
+  const openings = clone();
+  openings.home.openings[0].widthFt = 9;
+  assert.equal(describeChange(base, openings), 'openings');
+
+  // Labels name the field, so two different fields never merge into one step.
+  const dims = clone();
+  dims.home.dimensions.roofPitch = 6;
+  assert.equal(describeChange(base, dims), 'roof pitch');
+
+  const width = clone();
+  width.home.dimensions.widthFt = 30;
+  assert.equal(describeChange(base, width), 'width');
+  assert.notEqual(describeChange(base, dims), describeChange(base, width));
+
+  const colors = clone();
+  colors.home.colors.roof = '#123456';
+  assert.equal(describeChange(base, colors), 'roof colour');
+
+  const photo = clone();
+  photo.home.sitePhoto.panX = 12;
+  assert.equal(describeChange(base, photo), 'pan x site photo');
+
+  const scene = clone();
+  scene.scene.sunAz = 200;
+  assert.equal(describeChange(base, scene), 'sun az scene');
+
+  assert.equal(describeChange(base, clone()), 'edit', 'No difference falls back to a generic label');
+});
