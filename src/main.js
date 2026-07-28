@@ -6,7 +6,7 @@ import { buildHome, disposeTree, wallFrames, clampOpening, fmtFt, derived, dorme
 import { renderOpeningList, syncOpeningValues, initAccordions } from './ui.js';
 import { updatePlanPlate, nearestWallHit } from './plan.js';
 import { Gizmo, wallPlaneHit, applyDrag } from './gizmo.js';
-import { shoot, contactSheet, renderToCanvas } from './capture.js';
+import { shoot, contactSheet, renderToCanvas, saveWithPicker } from './capture.js';
 import { defaultHome, defaultScene, defaultExport, nextId, OPENING_PRESETS, migrate } from './defaults.js';
 import { History, describeChange } from './history.js';
 import { buildProject, readProject } from './project.js';
@@ -1007,7 +1007,7 @@ function bind() {
     stage.setView('hero-left', state.home.dimensions, state.scene);
   });
 
-  $('btnSave').addEventListener('click', () => {
+  $('btnSave').addEventListener('click', async () => {
     const project = buildProject({
       home: state.home,
       scene: state.scene,
@@ -1015,12 +1015,16 @@ function bind() {
       view: { preset: stage._lastView || null, label: currentViewName, camera: stage.cameraState() },
       savedAt: new Date().toISOString(),
     });
+    const filename = `${(state.home.name || 'home').replace(/[^\w-]+/g, '_')}.json`;
     const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${(state.home.name || 'home').replace(/[^\w-]+/g, '_')}.json`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    const saved = await saveWithPicker(blob, filename, 'SiteMassing3D Project File', 'application/json', '.json');
+    if (!saved) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    }
   });
 
   $('fileHome').addEventListener('change', (e) => {

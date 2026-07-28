@@ -7,14 +7,42 @@ function slug(s) {
   return (s || 'home').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'home';
 }
 
+export async function saveWithPicker(blob, suggestedName, typeDescription, mimeType, fileExtension) {
+  if (typeof window.showSaveFilePicker === 'function') {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: suggestedName,
+        types: [{
+          description: typeDescription,
+          accept: { [mimeType]: [fileExtension] }
+        }]
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return true;
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        return true;
+      }
+      console.warn('FilePicker error, using standard download fallback:', err);
+    }
+  }
+  return false;
+}
+
 function download(canvas, filename) {
-  canvas.toBlob((blob) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  canvas.toBlob(async (blob) => {
+    if (!blob) return;
+    const saved = await saveWithPicker(blob, filename, 'PNG Image', 'image/png', '.png');
+    if (!saved) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    }
   }, 'image/png');
 }
 
