@@ -558,6 +558,11 @@ test('22. Continuous Wall Siding & Drip Edge Removal Verification', () => {
   const dormer0 = dormers.children[0];
   const frontGable = dormer0.children[0];
   assert.equal(frontGable.material, materials.siding, 'Dormer inherits main wall siding material for seamless wall continuation');
+
+  // Verify main roof front fascia is split into segments so no fascia runs through under the dormer baseline
+  const frontFascia = roof.children.find((c) => c.name === 'fasciaFront');
+  assert.ok(frontFascia, 'Front fascia cut out into segments under dormers in continuous wall mode');
+  assert.equal(frontFascia.children.length, 2, '2 front fascia segments on outer sides of single dormer');
 });
 
 

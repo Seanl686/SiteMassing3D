@@ -367,3 +367,28 @@ input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; }
 .opening .grid4 input, .opening select { padding: 3px 5px; font-size: 12px; }
 .opening .foot { display: flex; gap: 5px; margin-top: 6px; align-items: center; }
 .opening .foot select { flex: 1; }
+.opening header input.pick { width: 13px; height: 13px; flex: 0 0 auto; cursor: pointer; }
+.opening.ingroup { border-color: #ffd479; background: rgba(255, 212, 121, 0.06); }
+.opening.ingroup.sel { border-color: var(--accent); }
+
+/* ---------- group edit card ---------- */
+
+.group-card { border: 1px solid rgba(255, 212, 121, 0.45); border-radius: 6px; padding: 8px; background: rgba(255, 212, 121, 0.06); }
+.group-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  font-size: 11px; font-weight: 600; color: #e2e7ee; margin-bottom: 6px;
+}
+.group-card .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+.group-card .grid4 label { display: flex; flex-direction: column; gap: 2px; }
+.group-card .grid4 span { font-size: 10px; color: var(--dim); }
+.group-card .grid4 input, .group-card select { padding: 3px 5px; font-size: 12px; }
+.group-card .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; }
+.group-card .grid2 label { display: flex; flex-direction: column; gap: 2px; }
+.group-card .grid2 span { font-size: 10px; color: var(--dim); }
+.group-card .foot { display: flex; gap: 5px; margin-top: 6px; align-items: center; }
+.group-card .foot select { flex: 1; min-width: 0; }
+.group-nudge { display: flex; align-items: center; gap: 4px; margin-top: 5px; }
+.group-nudge > span { font-size: 10px; color: var(--dim); min-width: 62px; }
+.group-nudge button { flex: 1; padding: 2px 0; font-size: 11px; }
+.group-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 7px; }
+.group-actions button { padding: 4px 2px; font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -16,7 +16,11 @@ const state = load() || {
   scene: defaultScene(),
   export: defaultExport(),
 };
+// `selectedId` is the anchor (last clicked) — alignment and match operations
+// measure against it. `selectedIds` is the full multi-selection and always
+// contains the anchor.
 let selectedId = null;
+let selectedIds = new Set();
 let pendingAdd = null;
 
 const canvas = document.getElementById('view');
@@ -77,7 +81,7 @@ function rebuild() {
   }
 
   stage.applySceneOpts(state.scene, state.home.dimensions);
-  gizmo.show(state.home.openings.find((o) => o.id === selectedId), state.home.dimensions);
+  showGizmo();
   updateHud();
   updateSitePhotoPlate();
   save();
@@ -104,9 +108,44 @@ function updateSitePhotoPlate() {
   stage.scene.background = null;
 }
 
-function select(id) {
-  selectedId = id;
-  gizmo.show(state.home.openings.find((o) => o.id === id), state.home.dimensions);
+/** Openings in the multi-selection, in list order. */
+function selectedOpenings() {
+  return state.home.openings.filter((o) => selectedIds.has(o.id));
+}
+
+function showGizmo() {
+  const anchor = state.home.openings.find((o) => o.id === selectedId);
+  gizmo.show(anchor, state.home.dimensions, selectedIds.size > 1 ? selectedOpenings() : []);
+}
+
+function clearSelection() {
+  selectedId = null;
+  selectedIds.clear();
+  gizmo.clear();
+  refreshList();
+}
+
+/**
+ * `mode` is 'replace' (plain click), 'toggle' (ctrl/cmd/shift click, or the row
+ * checkbox), or 'anchor' (focusing a field inside a row — re-anchors without
+ * throwing away a group the row already belongs to).
+ */
+function select(id, mode = 'replace') {
+  if (mode === 'toggle') {
+    if (selectedIds.has(id) && selectedIds.size > 1) {
+      selectedIds.delete(id);
+      if (selectedId === id) selectedId = selectedIds.values().next().value ?? null;
+    } else {
+      selectedIds.add(id);
+      selectedId = id;
+    }
+  } else if (mode === 'anchor' && selectedIds.has(id)) {
+    selectedId = id;
+  } else {
+    selectedId = id;
+    selectedIds = new Set(id ? [id] : []);
+  }
+  showGizmo();
   refreshList();
 }
 
@@ -114,6 +153,7 @@ function select(id) {
 function refreshList() {
   renderOpeningList($('openingList'), state.home, {
     selectedId,
+    selectedIds,
     onSelect: select,
     onEdit: (o, geometry) => {
       if (geometry) clampOpening(o, state.home.dimensions);
@@ -124,8 +164,9 @@ function refreshList() {
     onRestructure: (id) => { rebuild(); save(); refreshList(); select(id); },
     onDelete: (id) => {
       state.home.openings = state.home.openings.filter((o) => o.id !== id);
-      if (selectedId === id) { selectedId = null; gizmo.clear(); }
-      rebuild(); save(); refreshList();
+      selectedIds.delete(id);
+      if (selectedId === id) { selectedId = selectedIds.values().next().value ?? null; }
+      rebuild(); save(); showGizmo(); refreshList();
     },
     onDuplicate: (id) => {
       const src = state.home.openings.find((o) => o.id === id);
@@ -134,6 +175,18 @@ function refreshList() {
       state.home.openings.push(copy);
       rebuild(); save(); refreshList(); select(copy.id);
     },
+    onClearSelection: clearSelection,
+    onGroupEdit: (fn, geometry) => {
+      const list = selectedOpenings();
+      for (const o of list) fn(o);
+      if (geometry) for (const o of list) clampOpening(o, state.home.dimensions);
+      rebuild(); save(); syncList();
+    },
+    onGroupRestructure: (fn) => {
+      for (const o of selectedOpenings()) fn(o);
+      rebuild(); save(); refreshList();
+    },
+    onGroupAction: groupAction,
   });
   updateCounts();
 }
@@ -142,6 +195,7 @@ function refreshList() {
 function syncList() {
   syncOpeningValues($('openingList'), state.home, selectedId, {
     selectedId,
+    selectedIds,
     onSelect: select,
     onEdit: (o, geometry) => {
       if (geometry) clampOpening(o, state.home.dimensions);
@@ -151,6 +205,82 @@ function syncList() {
     },
   });
   updateCounts();
+}
+
+/** Bulk alignment / distribution / duplicate / delete for the selection. */
+function groupAction(name) {
+  const list = selectedOpenings();
+  if (!list.length) return;
+  const anchor = state.home.openings.find((o) => o.id === selectedId) || list[0];
+
+  if (name === 'delete') {
+    state.home.openings = state.home.openings.filter((o) => !selectedIds.has(o.id));
+    clearSelection();
+    rebuild(); save();
+    return;
+  }
+
+  if (name === 'duplicate') {
+    const copies = list.map((src) => ({
+      ...src,
+      id: nextId(src.type[0]),
+      offsetFt: src.offsetFt + src.widthFt + 2,
+    }));
+    state.home.openings.push(...copies);
+    selectedIds = new Set(copies.map((c) => c.id));
+    selectedId = copies[copies.length - 1].id;
+    rebuild(); save(); showGizmo(); refreshList();
+    return;
+  }
+
+  switch (name) {
+    case 'alignTop': {
+      const head = anchor.sillFt + anchor.heightFt;
+      for (const o of list) o.sillFt = Math.max(0, head - o.heightFt);
+      break;
+    }
+    case 'alignSill':
+      for (const o of list) o.sillFt = anchor.sillFt;
+      break;
+    case 'alignLeft':
+      for (const o of list) o.offsetFt = anchor.offsetFt;
+      break;
+    case 'alignCenter': {
+      const c = anchor.offsetFt + anchor.widthFt / 2;
+      for (const o of list) o.offsetFt = c - o.widthFt / 2;
+      break;
+    }
+    case 'matchWidth':
+      for (const o of list) o.widthFt = anchor.widthFt;
+      break;
+    case 'matchHeight':
+      for (const o of list) o.heightFt = anchor.heightFt;
+      break;
+    case 'distribute': {
+      // Offsets only mean the same thing within one wall, so spread per wall.
+      const byWall = new Map();
+      for (const o of list) {
+        if (!byWall.has(o.wall)) byWall.set(o.wall, []);
+        byWall.get(o.wall).push(o);
+      }
+      for (const units of byWall.values()) {
+        if (units.length < 3) continue; // two units already define the span
+        units.sort((a, b) => a.offsetFt - b.offsetFt);
+        const first = units[0], last = units[units.length - 1];
+        const span = (last.offsetFt + last.widthFt) - first.offsetFt;
+        const solid = units.reduce((s, o) => s + o.widthFt, 0);
+        const gap = (span - solid) / (units.length - 1);
+        let x = first.offsetFt;
+        for (const o of units) { o.offsetFt = x; x += o.widthFt + gap; }
+      }
+      break;
+    }
+    default:
+      return;
+  }
+
+  for (const o of list) clampOpening(o, state.home.dimensions);
+  rebuild(); save(); syncList(); showGizmo();
 }
 
 function updateCounts() {
@@ -325,6 +455,7 @@ function syncForm() {
 function loadHome(raw) {
   state.home = migrate(raw);
   selectedId = null;
+  selectedIds.clear();
   gizmo.clear();
   syncForm();
   rebuild();
@@ -767,6 +898,7 @@ function bind() {
     if (!confirm('Discard the current home and start a new one?')) return;
     state.home = defaultHome();
     selectedId = null;
+    selectedIds.clear();
     gizmo.clear();
     syncForm(); rebuild(); refreshList();
     updatePlanPlate(stage, state.home.plan);
@@ -825,9 +957,16 @@ function bind() {
   addEventListener('pointerup', onUp);
   addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { pendingAdd = null; canvas.style.cursor = ''; }
-    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId && e.target === document.body) {
-      state.home.openings = state.home.openings.filter((o) => o.id !== selectedId);
-      selectedId = null; gizmo.clear(); rebuild(); refreshList();
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIds.size && e.target === document.body) {
+      state.home.openings = state.home.openings.filter((o) => !selectedIds.has(o.id));
+      clearSelection(); rebuild(); save();
+    }
+    // Ctrl/Cmd+A selects every opening for a whole-house edit.
+    if ((e.key === 'a' || e.key === 'A') && (e.ctrlKey || e.metaKey) && e.target === document.body) {
+      e.preventDefault();
+      selectedIds = new Set(state.home.openings.map((o) => o.id));
+      selectedId = selectedId && selectedIds.has(selectedId) ? selectedId : (state.home.openings[0]?.id ?? null);
+      showGizmo(); refreshList();
     }
   });
 }
@@ -950,22 +1089,28 @@ function onPick(ev) {
   const hitId = hits.map((h) => findOpeningId(h.object)).find(Boolean);
   if (hitId) {
     const o = state.home.openings.find((x) => x.id === hitId);
-    select(hitId);
+    // Ctrl/Cmd extends the selection. Shift is reserved for the axis lock and
+    // the site-photo drag, so it is not a modifier here.
+    const additive = ev.ctrlKey || ev.metaKey;
+    select(hitId, additive ? 'toggle' : (selectedIds.has(hitId) ? 'anchor' : 'replace'));
     scrollToSelected();
+    if (additive) return; // building a selection, not moving it
     return beginDrag(o, 'move');
   }
 
-  if (selectedId) { selectedId = null; gizmo.clear(); refreshList(); }
+  if (selectedIds.size) clearSelection();
 }
 
 function beginDrag(o, mode) {
   const hit = wallPlaneHit(ray, o.wall, state.home.dimensions, stage.homeGroup);
   if (!hit) return;
+  // Every selected unit rides the same (du, dv) travel, each from its own start.
+  const group = selectedIds.has(o.id) && selectedIds.size > 1 ? selectedOpenings() : [o];
   drag = {
     id: o.id,
     mode,
     origin: hit,
-    start: { offsetFt: o.offsetFt, widthFt: o.widthFt, heightFt: o.heightFt, sillFt: o.sillFt },
+    starts: group.map((u) => [u.id, { offsetFt: u.offsetFt, widthFt: u.widthFt, heightFt: u.heightFt, sillFt: u.sillFt }]),
   };
   stage.controls.enabled = false;
   stage.orthoControls.enabled = false;
@@ -1047,8 +1192,12 @@ function onMove(ev) {
   // Shift locks the drag to the dominant axis; Alt turns off the 1" snap.
   if (ev.shiftKey && !photoDrag) { if (Math.abs(du) >= Math.abs(dv)) dv = 0; else du = 0; }
 
-  applyDrag(o, drag.mode, drag.start, { du, dv }, state.home.dimensions, ev.altKey);
-  clampOpening(o, state.home.dimensions);
+  for (const [id, start] of drag.starts) {
+    const u = state.home.openings.find((x) => x.id === id);
+    if (!u) continue;
+    applyDrag(u, drag.mode, start, { du, dv }, state.home.dimensions, ev.altKey);
+    clampOpening(u, state.home.dimensions);
+  }
   queueRebuild();
 }
 
@@ -1116,6 +1265,7 @@ function addOpening(type, wall, u, v) {
   clampOpening(o, state.home.dimensions);
   state.home.openings.push(o);
   selectedId = o.id;
+  selectedIds = new Set([o.id]);
   pendingAdd = null;
   canvas.style.cursor = '';
   rebuild();

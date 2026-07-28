@@ -1,7 +1,8 @@
-// Selection outline and drag handles for a single opening.
+// Selection outline and drag handles for the anchor opening, plus faint
+// outlines for the rest of a multi-selection.
 //
-// The gizmo lives on the wall plane in wall-local (u, v) coordinates and is
-// rebuilt whenever the opening changes, so it always tracks the geometry.
+// Each outline lives on its own wall plane in wall-local (u, v) coordinates and
+// is rebuilt whenever the opening changes, so it always tracks the geometry.
 
 import * as THREE from 'three';
 import { wallFrames } from './build.js';
@@ -22,6 +23,8 @@ export class Gizmo {
     this.opening = null;
 
     this.outlineMat = new THREE.LineBasicMaterial({ color: 0x6fb2ff, depthTest: false, transparent: true });
+    // Companions in a multi-selection read as dimmer outlines with no handles.
+    this.ghostMat = new THREE.LineBasicMaterial({ color: 0xffd479, depthTest: false, transparent: true, opacity: 0.75 });
     this.handleMat = new THREE.MeshBasicMaterial({ color: 0x6fb2ff, depthTest: false, transparent: true });
     this.handleHotMat = new THREE.MeshBasicMaterial({ color: 0xffd479, depthTest: false, transparent: true });
   }
@@ -29,29 +32,26 @@ export class Gizmo {
   clear() {
     while (this.group.children.length) {
       const c = this.group.children.pop();
+      c.traverse?.((n) => n.geometry?.dispose());
       c.geometry?.dispose();
     }
     this.handles = [];
     this.opening = null;
   }
 
-  /** Rebuild the gizmo for `o` on the home described by `dim`. */
-  show(o, dim) {
-    this.clear();
-    if (!o) return;
-    this.opening = o;
-
+  /** Sub-group parked on `wall`'s plane, holding one outline rectangle. */
+  _addOutline(o, dim, mat) {
     const f = wallFrames(dim)[o.wall];
-    if (!f) return;
+    if (!f) return null;
 
+    const g = new THREE.Group();
     const m = new THREE.Matrix4().makeBasis(
       f.right.clone(),
       new THREE.Vector3(0, 1, 0),
       f.normal.clone(),
     ).setPosition(f.origin.clone().addScaledVector(f.normal, PROUD));
-    this.group.matrix.copy(m);
-    this.group.matrixAutoUpdate = false;
-    this.group.updateMatrixWorld(true);
+    g.matrix.copy(m);
+    g.matrixAutoUpdate = false;
 
     const x0 = o.offsetFt, x1 = o.offsetFt + o.widthFt;
     const y0 = o.sillFt, y1 = o.sillFt + o.heightFt;
@@ -60,22 +60,49 @@ export class Gizmo {
       new THREE.Vector3(x1, y1, 0), new THREE.Vector3(x0, y1, 0),
       new THREE.Vector3(x0, y0, 0),
     ];
-    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), this.outlineMat);
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
     line.renderOrder = 900;
-    this.group.add(line);
+    g.add(line);
+    this.group.add(g);
+    g.updateMatrixWorld(true);
+    return g;
+  }
 
+  /**
+   * Rebuild the gizmo for anchor `o`, optionally outlining the `others` that
+   * share the current multi-selection. Only the anchor gets drag handles.
+   */
+  show(o, dim, others = []) {
+    this.clear();
+    if (!o) return;
+    this.opening = o;
+
+    this.group.matrix.identity();
+    this.group.matrixAutoUpdate = false;
+    this.group.updateMatrixWorld(true);
+
+    for (const other of others) {
+      if (other && other.id !== o.id) this._addOutline(other, dim, this.ghostMat);
+    }
+
+    const g = this._addOutline(o, dim, this.outlineMat);
+    if (!g) return;
+
+    const x0 = o.offsetFt, x1 = o.offsetFt + o.widthFt;
+    const y0 = o.sillFt, y1 = o.sillFt + o.heightFt;
     const add = (mode, x, y) => {
       const h = new THREE.Mesh(new THREE.BoxGeometry(HANDLE, HANDLE, HANDLE), this.handleMat);
       h.position.set(x, y, 0);
       h.renderOrder = 901;
       h.userData.handle = mode;
-      this.group.add(h);
+      g.add(h);
       this.handles.push(h);
     };
     add('left',   x0, (y0 + y1) / 2);
     add('right',  x1, (y0 + y1) / 2);
     add('top',    (x0 + x1) / 2, y1);
     add('bottom', (x0 + x1) / 2, y0);
+    g.updateMatrixWorld(true);
   }
 
   /** Handle mesh under the pointer, if any. */

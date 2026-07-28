@@ -266,6 +266,90 @@ function buildOpening(o, materials) {
 // Roof, skirting, steps
 // ---------------------------------------------------------------------------
 
+function getDormerXSpans(dim) {
+  const count = parseInt(dim.dormerCount, 10) || 0;
+  if (count <= 0 || dim.roofStyle === 'flat') return [];
+
+  const customPos = Array.isArray(dim.dormerPositions) && dim.dormerPositions.length === count
+    ? dim.dormerPositions
+    : null;
+  const xPositions = customPos
+    || (count === 1 ? [0] : [-dim.lengthFt * 0.25, dim.lengthFt * 0.25]);
+
+  if (count === 2 && dim.dormerConnected) {
+    const sizeL = dormerSize(dim, 0);
+    const sizeR = dormerSize(dim, 1);
+    const capLeft  = Math.min(xPositions[0] - sizeL.dW / 2, xPositions[1] - sizeR.dW / 2);
+    const capRight = Math.max(xPositions[0] + sizeL.dW / 2, xPositions[1] + sizeR.dW / 2);
+    return [{ left: capLeft, right: capRight }];
+  }
+
+  const spans = [];
+  for (let i = 0; i < count; i++) {
+    const { dW } = dormerSize(dim, i);
+    const posX = xPositions[i] ?? 0;
+    spans.push({ left: posX - dW / 2, right: posX + dW / 2 });
+  }
+  spans.sort((a, b) => a.left - b.left);
+  return spans;
+}
+
+function buildFascia(dim, materials, sign, run) {
+  const { lengthFt: L, rakeOverhangFt: rake, eaveOverhangFt: ov } = dim;
+  const { slope, eaveY } = derived(dim);
+  const totalSpan = L + 2 * rake;
+  const minX = -totalSpan / 2;
+  const maxX = totalSpan / 2;
+  const posY = eaveY - ov * slope - FASCIA_H / 2 + 0.05;
+  const posZ = sign * run;
+
+  // Cut out the front fascia board (sign === -1) under dormers when dormerContinuousWall is active
+  if (sign === -1 && dim.dormerCount > 0 && dim.dormerContinuousWall) {
+    const g = new THREE.Group();
+    g.name = 'fasciaFront';
+    const dormerSpans = getDormerXSpans(dim);
+    let curX = minX;
+
+    for (const span of dormerSpans) {
+      if (span.left > curX + 0.01) {
+        const segW = span.left - curX;
+        const segCenterX = curX + segW / 2;
+        const seg = new THREE.Mesh(
+          new THREE.BoxGeometry(segW, FASCIA_H, 0.16),
+          materials.trim
+        );
+        seg.position.set(segCenterX, posY, posZ);
+        seg.castShadow = true;
+        g.add(seg);
+      }
+      curX = Math.max(curX, span.right);
+    }
+
+    if (curX < maxX - 0.01) {
+      const segW = maxX - curX;
+      const segCenterX = curX + segW / 2;
+      const seg = new THREE.Mesh(
+        new THREE.BoxGeometry(segW, FASCIA_H, 0.16),
+        materials.trim
+      );
+      seg.position.set(segCenterX, posY, posZ);
+      seg.castShadow = true;
+      g.add(seg);
+    }
+
+    return g;
+  }
+
+  // Uninterrupted full-length fascia
+  const fascia = new THREE.Mesh(
+    new THREE.BoxGeometry(totalSpan, FASCIA_H, 0.16),
+    materials.trim
+  );
+  fascia.position.set(0, posY, posZ);
+  fascia.castShadow = true;
+  return fascia;
+}
+
 function buildRoof(dim, materials) {
   const { widthFt: W, lengthFt: L, eaveOverhangFt: ov, rakeOverhangFt: rake } = dim;
   const { slope, eaveY, angle } = derived(dim);
@@ -308,13 +392,8 @@ function buildRoof(dim, materials) {
 
   // Fascia boards at each drip edge.
   for (const sign of [-1, 1]) {
-    const fascia = new THREE.Mesh(
-      new THREE.BoxGeometry(L + 2 * rake, FASCIA_H, 0.16),
-      materials.trim,
-    );
-    fascia.position.set(0, eaveY - ov * slope - FASCIA_H / 2 + 0.05, sign * run);
-    fascia.castShadow = true;
-    g.add(fascia);
+    const fascia = buildFascia(dim, materials, sign, run);
+    if (fascia) g.add(fascia);
   }
 
   const dormers = buildDormers(dim, materials);
