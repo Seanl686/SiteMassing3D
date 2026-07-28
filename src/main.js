@@ -290,13 +290,50 @@ function bind() {
     });
   }
 
-  stage.controls.addEventListener('change', () => {
+  function syncCameraStateToForm() {
+    const cam = stage.camera;
+    const controls = cam === stage.ortho ? stage.orthoControls : stage.controls;
+    const target = controls.target;
+
+    // 1. Camera Distance
     const dist = Math.round(stage.getCameraDistance() * 10) / 10;
     state.home.sitePhoto.camDist = dist;
     if ($('sp_camDist') && document.activeElement !== $('sp_camDist')) {
       $('sp_camDist').value = dist;
     }
-  });
+
+    // 2. Eye height
+    const eyeY = Math.round(cam.position.y * 10) / 10;
+    state.scene.eye = eyeY;
+    if ($('s_eye') && document.activeElement !== $('s_eye')) {
+      $('s_eye').value = eyeY;
+    }
+
+    // 3. Ground / Target Baseline Y
+    const baseY = Math.round(target.y * 10) / 10;
+    state.home.sitePhoto.baselineY = baseY;
+    if ($('sp_baselineY') && document.activeElement !== $('sp_baselineY')) {
+      $('sp_baselineY').value = baseY;
+    }
+
+    // 4. House / Target Pan offset
+    const posX = Math.round(-target.x * 10) / 10;
+    const posZ = Math.round(-target.z * 10) / 10;
+    state.home.sitePhoto.posX = posX;
+    state.home.sitePhoto.posZ = posZ;
+    if ($('sp_posX') && document.activeElement !== $('sp_posX')) $('sp_posX').value = posX;
+    if ($('sp_posZ') && document.activeElement !== $('sp_posZ')) $('sp_posZ').value = posZ;
+
+    // Keep 3D ground & home group in sync with site photo alignment
+    stage.setGroundBaseline(baseY);
+    stage.homeGroup.position.set(posX, baseY, posZ);
+
+    updateHud();
+    save();
+  }
+
+  stage.controls.addEventListener('change', syncCameraStateToForm);
+  stage.orthoControls.addEventListener('change', syncCameraStateToForm);
 
   for (const [id, key] of [...sceneNums, ...sceneRanges]) {
     if ($(id)) {
