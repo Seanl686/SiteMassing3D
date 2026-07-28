@@ -221,5 +221,60 @@ function row(o, cb) {
   foot.appendChild(del);
 
   el.appendChild(foot);
+
+  if (o.type === 'door' || o.type === 'slider') {
+    const sub = document.createElement('div');
+    sub.className = 'stair-custom-sub';
+    sub.style.cssText = 'margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.08);';
+
+    const subTitle = document.createElement('div');
+    subTitle.style.cssText = 'font-size:10px;color:#6fb2ff;font-weight:600;margin-bottom:4px;text-transform:uppercase;';
+    subTitle.textContent = 'Individual Stair & Deck Settings';
+    sub.appendChild(subTitle);
+
+    const subGrid = document.createElement('div');
+    subGrid.className = 'grid2';
+
+    const matLabel = document.createElement('label');
+    const matSpan = document.createElement('span');
+    matSpan.textContent = 'Stair Material';
+    const matSelect = document.createElement('select');
+    matSelect.innerHTML = `
+      <option value="concrete">Concrete (Masonry)</option>
+      <option value="pressure_treated">Pressure-Treated Wood</option>
+      <option value="dark_composite">Dark Composite</option>
+    `;
+    matSelect.value = o.stepMat || 'concrete';
+    matSelect.addEventListener('focus', () => cb.onSelect(o.id));
+    matSelect.addEventListener('change', () => {
+      o.stepMat = matSelect.value;
+      cb.onEdit(o, true);
+    });
+    matLabel.append(matSpan, matSelect);
+    subGrid.appendChild(matLabel);
+
+    const egressLabel = document.createElement('label');
+    const egressSpan = document.createElement('span');
+    egressSpan.textContent = 'Egress Direction';
+    const egressSelect = document.createElement('select');
+    egressSelect.innerHTML = `
+      <option value="front">Front / Straight out</option>
+      <option value="left">Left side egress</option>
+      <option value="right">Right side egress</option>
+      <option value="split">Split (Both sides)</option>
+    `;
+    egressSelect.value = o.stepEgress || 'front';
+    egressSelect.addEventListener('focus', () => cb.onSelect(o.id));
+    egressSelect.addEventListener('change', () => {
+      o.stepEgress = egressSelect.value;
+      cb.onEdit(o, true);
+    });
+    egressLabel.append(egressSpan, egressSelect);
+    subGrid.appendChild(egressLabel);
+
+    sub.appendChild(subGrid);
+    el.appendChild(sub);
+  }
+
   return el;
 }

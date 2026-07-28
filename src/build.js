@@ -268,11 +268,6 @@ function buildSteps(home, materials, sceneOpts = {}) {
   const doors = home.openings.filter((o) => (o.type === 'door' || o.type === 'slider') && o.sillFt < 0.75);
   if (!doors.length || sceneOpts.steps === false) return g;
 
-  const hasLanding = sceneOpts.stepLanding !== false;
-  const landingDepth = hasLanding ? Math.max(2.0, sceneOpts.landingDepthFt ?? 3.5) : 1.0;
-  const railings = sceneOpts.stepRailings ?? 'both'; // 'none', 'left', 'right', 'both'
-  const egress = sceneOpts.stepEgress || 'front'; // 'front', 'left', 'right', 'split'
-
   const railH = 3.0; // 36" railing height
   const postW = 0.12; // post thickness
 
@@ -281,6 +276,16 @@ function buildSteps(home, materials, sceneOpts = {}) {
     if (!f) continue;
     const top = dim.floorHeightFt + o.sillFt;
     if (top < 0.4) continue;
+
+    const doorMatType = o.stepMat || sceneOpts.stepMat || 'concrete';
+    const egress = o.stepEgress || sceneOpts.stepEgress || 'front';
+    const hasLanding = (o.stepLanding ?? sceneOpts.stepLanding) !== false;
+    const landingDepth = hasLanding ? Math.max(2.0, o.landingDepthFt ?? sceneOpts.landingDepthFt ?? 3.5) : 1.0;
+    const railings = o.stepRailings ?? sceneOpts.stepRailings ?? 'both';
+
+    let stepMat = materials.concrete;
+    if (doorMatType === 'pressure_treated') stepMat = materials.pressure_treated;
+    else if (doorMatType === 'dark_composite') stepMat = materials.dark_composite;
 
     const count = Math.max(1, Math.round(top / 0.62));
     const rise = top / count;
@@ -293,7 +298,7 @@ function buildSteps(home, materials, sceneOpts = {}) {
     // 1. Top Landing Platform
     const landing = new THREE.Mesh(
       new THREE.BoxGeometry(wide, rise, landingDepth),
-      materials.skirting
+      stepMat
     );
     const pLand = f.origin.clone()
       .addScaledVector(f.right, uCenter)
@@ -311,7 +316,7 @@ function buildSteps(home, materials, sceneOpts = {}) {
         const depthFromWall = landingDepth + tread * (count - i);
         const step = new THREE.Mesh(
           new THREE.BoxGeometry(wide, rise, depthFromWall),
-          materials.skirting
+          stepMat
         );
         const p = f.origin.clone()
           .addScaledVector(f.right, uCenter)
@@ -334,7 +339,7 @@ function buildSteps(home, materials, sceneOpts = {}) {
           const runLength = wide / 2 + tread * (count - i);
           const step = new THREE.Mesh(
             new THREE.BoxGeometry(runLength, rise, landingDepth),
-            materials.skirting
+            stepMat
           );
           const p = f.origin.clone()
             .addScaledVector(f.right, uCenter + dir * (runLength / 2))
@@ -513,6 +518,9 @@ export function buildHome(home, sceneOpts) {
     trim: mat(home.colors.trim, { roughness: 0.75 }),
     roof: mat(home.colors.roof, { roughness: 0.85 }),
     skirting: mat(home.colors.skirting, { roughness: 0.95 }),
+    concrete: mat('#b4bcc6', { roughness: 0.95 }),
+    pressure_treated: mat('#a87442', { roughness: 0.78 }),
+    dark_composite: mat('#383c42', { roughness: 0.70 }),
     door: mat(home.colors.door, { roughness: 0.7 }),
     glass: mat(home.colors.glass, { roughness: 0.18, metalness: 0.15 }),
   };
