@@ -95,6 +95,10 @@ export function defaultExport() {
   return { w: 2400, h: 1600, alpha: false, burn: true };
 }
 
+/** Dormer sizes live on a quarter-foot grid so the spinner steps land on whole
+ *  feet; saves written before that grid existed get snapped on load. */
+const quarterFt = (v) => Math.max(0.25, Math.round(v * 4) / 4);
+
 /** Coerce the per-dormer size overrides into a clean array of partial specs.
  *  A null entry (or a missing field) means "inherit the global dormer size". */
 function normalizeDormerSizes(raw) {
@@ -102,8 +106,8 @@ function normalizeDormerSizes(raw) {
   return raw.map((s) => {
     if (!s || typeof s !== 'object') return null;
     const out = {};
-    if (Number.isFinite(+s.widthFt) && +s.widthFt > 0) out.widthFt = +s.widthFt;
-    if (Number.isFinite(+s.heightFt) && +s.heightFt > 0) out.heightFt = +s.heightFt;
+    if (Number.isFinite(+s.widthFt) && +s.widthFt > 0) out.widthFt = quarterFt(+s.widthFt);
+    if (Number.isFinite(+s.heightFt) && +s.heightFt > 0) out.heightFt = quarterFt(+s.heightFt);
     return Object.keys(out).length ? out : null;
   });
 }

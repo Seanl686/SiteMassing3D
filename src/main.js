@@ -170,8 +170,8 @@ const sceneNums = [['s_focal', 'focal'], ['s_eye', 'eye'], ['s_landingDepth', 'l
 const sceneRanges = [['s_sunAz', 'sunAz'], ['s_sunEl', 'sunEl'], ['s_flat', 'flat']];
 const sceneChecks = [['s_grid', 'grid'], ['s_shadow', 'shadow'], ['s_steps', 'steps'], ['s_stepLanding', 'stepLanding'], ['s_wireframe', 'wireframe'], ['s_blockLandscape', 'blockLandscape'], ['s_labels', 'labels'], ['s_dims', 'dims']];
 
-/** Round to the nearest 1/12 ft (1 inch) and drop float noise from the field. */
-const round12 = (v) => +(Math.round(v * 12) / 12).toFixed(4);
+/** Snap to the nearest quarter foot (3 in) so the steps land on whole feet. */
+const roundQuarter = (v) => Math.round(v * 4) / 4;
 
 /** Per-dormer width/height rows. Hidden while sizes are linked; when unlinked
  *  each dormer gets its own pair of inputs so one can be wide-and-low and the
@@ -204,11 +204,11 @@ function renderDormerSizeRows() {
       `<div class="grid2">` +
       `<label><span>${label} width (ft)</span>` +
       // step 1/12 ft = 1 inch, so the arrows walk the gable an inch at a time.
-      `<input type="number" autocomplete="off" step="0.0833" min="0.5" max="40" ` +
-      `data-dormer-idx="${i}" data-dormer-key="widthFt" value="${round12(dW)}"></label>` +
+      `<input type="number" autocomplete="off" step="0.25" min="0.25" max="40" ` +
+      `data-dormer-idx="${i}" data-dormer-key="widthFt" value="${roundQuarter(dW)}"></label>` +
       `<label><span>${label} height (ft)</span>` +
-      `<input type="number" autocomplete="off" step="0.0833" min="0.25" max="20" ` +
-      `data-dormer-idx="${i}" data-dormer-key="heightFt" value="${round12(dH)}"></label>` +
+      `<input type="number" autocomplete="off" step="0.25" min="0.25" max="20" ` +
+      `data-dormer-idx="${i}" data-dormer-key="heightFt" value="${roundQuarter(dH)}"></label>` +
       `</div>`;
   }
   host.innerHTML = html;
@@ -897,13 +897,13 @@ function onMove(ev) {
       const outerW = dormerSize(dim, 0).dW;
       const lim = Math.max(0, (outerW - dW) / 2 - 0.5);
       const v = Math.max(-lim, Math.min(lim, dormerDrag.startPosX + dx));
-      dim.dormerNestOffsetFt = Math.round(v * 12) / 12;
+      dim.dormerNestOffsetFt = roundQuarter(v);
       if ($('f_dormerNestOffset')) $('f_dormerNestOffset').value = dim.dormerNestOffsetFt;
       queueRebuild();
       return;
     }
     const newX = Math.max(-halfL, Math.min(halfL, dormerDrag.startPosX + dx));
-    dim.dormerPositions[dormerDrag.index] = Math.round(newX * 12) / 12; // snap to 1 inch
+    dim.dormerPositions[dormerDrag.index] = roundQuarter(newX); // snap to 3 in
     queueRebuild();
     return;
   }

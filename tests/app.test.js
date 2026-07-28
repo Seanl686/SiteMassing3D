@@ -441,3 +441,16 @@ test('18. Nested Dormer (Gable Inside Gable)', () => {
     'Outer gable unchanged by inner gable edits'
   );
 });
+
+test('19. Dormer Sizes Snap to the Quarter-Foot Grid', () => {
+  const m = migrate({
+    dimensions: {
+      dormerCount: 2,
+      dormerSizes: [{ widthFt: 9.9962, heightFt: 4.0833 }, { widthFt: 0.05, heightFt: 3 }],
+    },
+  }).dimensions;
+  // Quarter feet divide evenly into a foot, so the spinner lands on whole numbers.
+  assert.deepEqual(m.dormerSizes[0], { widthFt: 10, heightFt: 4 });
+  // ...and nothing collapses to a zero-size gable.
+  assert.deepEqual(m.dormerSizes[1], { widthFt: 0.25, heightFt: 3 });
+});
