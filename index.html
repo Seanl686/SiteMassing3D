@@ -122,6 +122,7 @@
         <label><span>Photo angle (&deg;)</span><input id="sp_rot" type="number" autocomplete="off" step="1" min="-180" max="180"></label>
       </div>
       <label class="row check"><input id="sp_show" type="checkbox" autocomplete="off"><span>Show site photo background</span></label>
+      <label class="row check" style="margin-top:8px;background:rgba(111,178,255,0.12);padding:5px 8px;border-radius:4px;border:1px solid rgba(111,178,255,0.3);"><input id="sp_dragMode" type="checkbox" autocomplete="off"><span style="color:#6fb2ff;font-weight:600;">🖱️ Mouse Photo Drag: Pan &amp; Zoom photo with mouse</span></label>
 
       <h3 style="margin:10px 0 6px;font-size:10px;color:#858d98;text-transform:uppercase;">Ground Horizon &amp; Camera Distance</h3>
       <div class="grid2">
@@ -200,6 +201,7 @@
   </aside>
 
   <div id="stage">
+    <div id="photoDragBadge" class="photo-drag-badge" style="display:none;">🖱️ Photo Mouse Drag Active (Drag: Pan, Scroll: Zoom, Alt+Drag: Rotate)</div>
     <div id="sitePhotoBg" class="site-photo-bg"></div>
     <canvas id="view"></canvas>
     <div id="hud"></div>

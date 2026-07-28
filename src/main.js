@@ -245,12 +245,39 @@ function bind() {
     r.readAsDataURL(f);
   });
 
-  if ($('sp_fitMode')) {
-    $('sp_fitMode').addEventListener('change', (e) => {
-      state.home.sitePhoto.fitMode = e.target.value;
-      rebuild();
+  function setPhotoDragMode(active) {
+    const badge = $('photoDragBadge');
+    if (active) {
+      stage.controls.enabled = false;
+      stage.orthoControls.enabled = false;
+      canvas.style.cursor = 'grab';
+      if (badge) badge.style.display = 'block';
+    } else {
+      stage.controls.enabled = stage.camera !== stage.ortho;
+      stage.orthoControls.enabled = stage.camera === stage.ortho;
+      canvas.style.cursor = '';
+      if (badge) badge.style.display = 'none';
+    }
+  }
+
+  if ($('sp_dragMode')) {
+    $('sp_dragMode').addEventListener('change', (e) => {
+      setPhotoDragMode(e.target.checked);
     });
   }
+
+  canvas.addEventListener('wheel', (ev) => {
+    const isPhotoDrag = $('sp_dragMode')?.checked || ev.shiftKey;
+    if (isPhotoDrag && state.home.sitePhoto?.show && state.home.sitePhoto?.src) {
+      ev.preventDefault();
+      const sp = state.home.sitePhoto;
+      const delta = ev.deltaY < 0 ? 0.05 : -0.05;
+      sp.scale = Math.max(0.2, Math.min(5.0, Math.round(((sp.scale || 1.0) + delta) * 100) / 100));
+      if ($('sp_scale')) $('sp_scale').value = sp.scale;
+      updateSitePhotoPlate();
+      save();
+    }
+  }, { passive: false });
   for (const [id, key] of photoFields) {
     if ($(id)) {
       $(id).addEventListener('input', (e) => {
@@ -506,7 +533,26 @@ const findOpeningId = (obj) => {
   return null;
 };
 
+let photoDrag = null;
+
 function onPick(ev) {
+  const isPhotoDrag = $('sp_dragMode')?.checked || (ev.shiftKey && state.home.sitePhoto?.show && state.home.sitePhoto?.src);
+  if (isPhotoDrag) {
+    photoDrag = {
+      startX: ev.clientX,
+      startY: ev.clientY,
+      startPanX: state.home.sitePhoto.panX ?? 0,
+      startPanY: state.home.sitePhoto.panY ?? 0,
+      startRot: state.home.sitePhoto.rotation ?? 0,
+      button: ev.button,
+    };
+    stage.controls.enabled = false;
+    stage.orthoControls.enabled = false;
+    canvas.style.cursor = 'grabbing';
+    ev.preventDefault();
+    return;
+  }
+
   if (ev.button !== 0) return;
   setRay(ev);
   const planPick = $('p_pick').checked;
@@ -563,13 +609,35 @@ function beginDrag(o, mode) {
 }
 
 function onMove(ev) {
+  if (photoDrag) {
+    const r = canvas.getBoundingClientRect();
+    const dx = ev.clientX - photoDrag.startX;
+    const dy = ev.clientY - photoDrag.startY;
+    const sp = state.home.sitePhoto;
+
+    if (photoDrag.button === 0 && !ev.altKey) {
+      const percentX = (dx / r.width) * 100 * (sp.scale || 1);
+      const percentY = (dy / r.height) * 100 * (sp.scale || 1);
+      sp.panX = Math.round((photoDrag.startPanX + percentX) * 10) / 10;
+      sp.panY = Math.round((photoDrag.startPanY + percentY) * 10) / 10;
+      if ($('sp_panX')) $('sp_panX').value = sp.panX;
+      if ($('sp_panY')) $('sp_panY').value = sp.panY;
+    } else if (photoDrag.button === 2 || ev.altKey) {
+      sp.rotation = Math.round((photoDrag.startRot + dx * 0.5) % 360);
+      if ($('sp_rot')) $('sp_rot').value = sp.rotation;
+    }
+    updateSitePhotoPlate();
+    save();
+    return;
+  }
+
   if (!drag) {
     if (!selectedId || ev.target !== canvas) return;
     setRay(ev);
     const mode = gizmo.pick(ray);
     gizmo.highlight(mode);
     if (mode) canvas.style.cursor = (mode === 'left' || mode === 'right') ? 'ew-resize' : 'ns-resize';
-    else if (!pendingAdd) canvas.style.cursor = '';
+    else if (!pendingAdd && !$('sp_dragMode')?.checked) canvas.style.cursor = '';
     return;
   }
 
@@ -582,7 +650,7 @@ function onMove(ev) {
   let du = hit.u - drag.origin.u;
   let dv = hit.v - drag.origin.v;
   // Shift locks the drag to the dominant axis; Alt turns off the 1" snap.
-  if (ev.shiftKey) { if (Math.abs(du) >= Math.abs(dv)) dv = 0; else du = 0; }
+  if (ev.shiftKey && !photoDrag) { if (Math.abs(du) >= Math.abs(dv)) dv = 0; else du = 0; }
 
   applyDrag(o, drag.mode, drag.start, { du, dv }, state.home.dimensions, ev.altKey);
   clampOpening(o, state.home.dimensions);
@@ -590,6 +658,19 @@ function onMove(ev) {
 }
 
 function onUp() {
+  if (photoDrag) {
+    photoDrag = null;
+    if ($('sp_dragMode')?.checked) {
+      canvas.style.cursor = 'grab';
+    } else {
+      stage.controls.enabled = stage.camera !== stage.ortho;
+      stage.orthoControls.enabled = stage.camera === stage.ortho;
+      canvas.style.cursor = '';
+    }
+    save();
+    return;
+  }
+
   if (!drag) return;
   drag = null;
   stage.controls.enabled = stage.camera !== stage.ortho;
