@@ -39,8 +39,14 @@ function rebuild() {
   stage.homeGroup.add(buildHome(state.home, state.scene));
 
   const sp = state.home.sitePhoto || {};
-  stage.homeGroup.position.set(sp.posX || 0, 0, sp.posZ || 0);
+  const baseY = sp.baselineY || 0;
+  stage.setGroundBaseline(baseY);
+  stage.homeGroup.position.set(sp.posX || 0, baseY, sp.posZ || 0);
   stage.homeGroup.rotation.y = THREE.MathUtils.degToRad(sp.rotY || 0);
+
+  if (sp.camDist && isFinite(sp.camDist) && sp.camDist > 0) {
+    stage.setCameraDistance(sp.camDist);
+  }
 
   stage.applySceneOpts(state.scene, state.home.dimensions);
   gizmo.show(state.home.openings.find((o) => o.id === selectedId), state.home.dimensions);
@@ -61,6 +67,7 @@ function updateSitePhotoPlate() {
   bg.style.display = 'block';
   bg.style.backgroundImage = `url("${sp.src}")`;
   bg.style.opacity = sp.opacity ?? 0.85;
+  bg.style.backgroundSize = sp.fitMode || 'contain';
   const scale = sp.scale ?? 1.0;
   const panX = sp.panX ?? 0;
   const panY = sp.panY ?? 0;
@@ -141,8 +148,8 @@ const colorFields = [
 const planFields = [['p_width', 'widthFt'], ['p_rot', 'rotation'], ['p_x', 'offsetX'], ['p_z', 'offsetZ']];
 const photoFields = [
   ['sp_op', 'opacity'], ['sp_scale', 'scale'], ['sp_panX', 'panX'],
-  ['sp_panY', 'panY'], ['sp_rot', 'rotation'], ['sp_posX', 'posX'],
-  ['sp_posZ', 'posZ'], ['sp_rotY', 'rotY'],
+  ['sp_panY', 'panY'], ['sp_rot', 'rotation'], ['sp_baselineY', 'baselineY'],
+  ['sp_camDist', 'camDist'], ['sp_posX', 'posX'], ['sp_posZ', 'posZ'], ['sp_rotY', 'rotY'],
 ];
 const sceneNums = [['s_focal', 'focal'], ['s_eye', 'eye'], ['s_landingDepth', 'landingDepthFt']];
 const sceneRanges = [['s_sunAz', 'sunAz'], ['s_sunEl', 'sunEl'], ['s_flat', 'flat']];
@@ -157,6 +164,7 @@ function syncForm() {
   $('p_op').value = state.home.plan.opacity;
   $('p_show').checked = state.home.plan.show;
   const sp = state.home.sitePhoto || {};
+  if ($('sp_fitMode')) $('sp_fitMode').value = sp.fitMode || 'contain';
   for (const [id, key] of photoFields) {
     if ($(id)) $(id).value = sp[key] ?? 0;
   }
@@ -237,6 +245,12 @@ function bind() {
     r.readAsDataURL(f);
   });
 
+  if ($('sp_fitMode')) {
+    $('sp_fitMode').addEventListener('change', (e) => {
+      state.home.sitePhoto.fitMode = e.target.value;
+      rebuild();
+    });
+  }
   for (const [id, key] of photoFields) {
     if ($(id)) {
       $(id).addEventListener('input', (e) => {
@@ -269,12 +283,20 @@ function bind() {
     $('btnResetPhoto').addEventListener('click', () => {
       state.home.sitePhoto = {
         ...state.home.sitePhoto,
-        scale: 1.0, panX: 0, panY: 0, rotation: 0, posX: 0, posZ: 0, rotY: 0, show: true
+        fitMode: 'contain', scale: 1.0, panX: 0, panY: 0, rotation: 0, baselineY: 0, camDist: 60, posX: 0, posZ: 0, rotY: 0, show: true
       };
       syncForm();
       rebuild();
     });
   }
+
+  stage.controls.addEventListener('change', () => {
+    const dist = Math.round(stage.getCameraDistance() * 10) / 10;
+    state.home.sitePhoto.camDist = dist;
+    if ($('sp_camDist') && document.activeElement !== $('sp_camDist')) {
+      $('sp_camDist').value = dist;
+    }
+  });
 
   for (const [id, key] of [...sceneNums, ...sceneRanges]) {
     if ($(id)) {

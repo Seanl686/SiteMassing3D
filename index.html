@@ -108,21 +108,35 @@
       <label class="btn block" for="fileSitePhoto">Load site photo (PNG/JPG)</label>
       <input type="file" id="fileSitePhoto" accept="image/*" hidden>
       <div class="grid2">
+        <label><span>Photo fit mode</span>
+          <select id="sp_fitMode">
+            <option value="contain">Full photo (contain)</option>
+            <option value="cover">Fill stage (cover)</option>
+            <option value="100% 100%">Stretch to fit</option>
+          </select>
+        </label>
         <label><span>Photo opacity</span><input id="sp_op" type="range" autocomplete="off" min="0.1" max="1" step="0.05"></label>
-        <label><span>Photo scale</span><input id="sp_scale" type="range" autocomplete="off" min="0.5" max="3" step="0.05"></label>
+        <label><span>Photo zoom</span><input id="sp_scale" type="range" autocomplete="off" min="0.5" max="3" step="0.05"></label>
         <label><span>Pan X (%)</span><input id="sp_panX" type="number" autocomplete="off" step="1" min="-100" max="100"></label>
-        <label><span>Pan Y (%)</span><input id="sp_panY" type="number" autocomplete="off" step="1" min="-100" max="100"></label>
+        <label><span>Pan Y / Baseline (%)</span><input id="sp_panY" type="number" autocomplete="off" step="1" min="-100" max="100"></label>
         <label><span>Photo angle (&deg;)</span><input id="sp_rot" type="number" autocomplete="off" step="1" min="-180" max="180"></label>
-        <label><span>Show photo</span><input id="sp_show" type="checkbox" autocomplete="off"></label>
       </div>
+      <label class="row check"><input id="sp_show" type="checkbox" autocomplete="off"><span>Show site photo background</span></label>
+
+      <h3 style="margin:10px 0 6px;font-size:10px;color:#858d98;text-transform:uppercase;">Ground Horizon &amp; Camera Distance</h3>
+      <div class="grid2">
+        <label><span>Ground baseline Y (ft)</span><input id="sp_baselineY" type="number" autocomplete="off" step="0.5" min="-50" max="50"></label>
+        <label><span>Cam distance (ft)</span><input id="sp_camDist" type="number" autocomplete="off" step="1" min="5" max="500"></label>
+      </div>
+
       <h3 style="margin:10px 0 6px;font-size:10px;color:#858d98;text-transform:uppercase;">House Realignment / Lot Offset</h3>
       <div class="grid2">
         <label><span>House X (ft)</span><input id="sp_posX" type="number" autocomplete="off" step="0.5"></label>
         <label><span>House Z (ft)</span><input id="sp_posZ" type="number" autocomplete="off" step="0.5"></label>
         <label><span>Heading (&deg;)</span><input id="sp_rotY" type="number" autocomplete="off" step="1"></label>
-        <button id="btnResetPhoto" style="margin-top: auto;">Reset align</button>
+        <button id="btnResetPhoto" style="margin-top: auto;">Reset all align</button>
       </div>
-      <p class="hint">Upload a photo of the property, then adjust photo scale/pan and house position/rotation to align the render's perspective proportionally onto the site photo.</p>
+      <p class="hint">Full photo displays uncropped. Adjust photo pan/zoom, ground baseline Y, and camera distance to align perspective independently of house lot position.</p>
     </section>
 
     <section class="panel">

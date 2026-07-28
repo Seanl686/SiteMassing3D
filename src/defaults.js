@@ -51,7 +51,7 @@ export function defaultHome() {
       { id: nextId('w'), type: 'window', wall: 'right', offsetFt: 9,  widthFt: 3, heightFt: 3.5, sillFt: 3.5, label: 'Bedroom 3' },
     ],
     plan: { src: null, widthFt: 56, offsetX: 0, offsetZ: 0, rotation: 0, opacity: 0.65, show: true },
-    sitePhoto: { src: null, show: true, opacity: 0.85, scale: 1.0, panX: 0, panY: 0, rotation: 0, posX: 0, posZ: 0, rotY: 0 },
+    sitePhoto: { src: null, show: true, fitMode: 'contain', opacity: 0.85, scale: 1.0, panX: 0, panY: 0, rotation: 0, baselineY: 0, camDist: 60, posX: 0, posZ: 0, rotY: 0 },
   };
 }
 

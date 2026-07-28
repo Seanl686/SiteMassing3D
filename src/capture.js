@@ -84,11 +84,17 @@ export function renderToCanvas(stage, w, h, alpha, sceneOpts, home) {
       ctx.rotate(rot);
       ctx.scale(scale, scale);
 
+      const fitMode = sp.fitMode || 'contain';
       const imgAspect = (img.naturalWidth || img.width) / (img.naturalHeight || img.height || 1);
       const canvasAspect = w / h;
       let drawW = w, drawH = h;
-      if (imgAspect > canvasAspect) { drawW = h * imgAspect; }
-      else { drawH = w / imgAspect; }
+      if (fitMode === 'cover') {
+        if (imgAspect > canvasAspect) { drawW = h * imgAspect; }
+        else { drawH = w / imgAspect; }
+      } else if (fitMode === 'contain') {
+        if (imgAspect > canvasAspect) { drawH = w / imgAspect; }
+        else { drawW = h * imgAspect; }
+      }
 
       ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
       ctx.restore();

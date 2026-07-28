@@ -265,6 +265,27 @@ export class Stage {
     this._lastView = name;
   }
 
+  setCameraDistance(distFt) {
+    if (!isFinite(distFt) || distFt <= 0) return;
+    const target = this.controls.target;
+    const dir = this.persp.position.clone().sub(target);
+    if (dir.lengthSq() < 1e-4) dir.set(0, 5, 20);
+    dir.normalize();
+    this.persp.position.copy(target).addScaledVector(dir, distFt);
+    this.controls.update();
+  }
+
+  getCameraDistance() {
+    return this.persp.position.distanceTo(this.controls.target);
+  }
+
+  setGroundBaseline(offsetY) {
+    const y = offsetY || 0;
+    this.ground.position.y = y;
+    this.grid.position.y = -0.005 + y;
+    this.planGroup.position.y = y;
+  }
+
   render() {
     (this.camera === this.ortho ? this.orthoControls : this.controls).update();
     this.renderer.render(this.scene, this.camera);
