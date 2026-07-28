@@ -87,7 +87,11 @@ export function clampOpening(o, dim) {
   const maxW = Math.max(0.5, f.span - 2 * TRIM_W);
   o.widthFt = Math.min(Math.max(0.5, o.widthFt), maxW);
   o.heightFt = Math.min(Math.max(0.5, o.heightFt), dim.wallHeightFt - 0.4);
-  o.sillFt = Math.min(Math.max(0, o.sillFt), dim.wallHeightFt - o.heightFt - 0.2);
+  if (o.type === 'door' || o.type === 'slider') {
+    o.sillFt = 0;
+  } else {
+    o.sillFt = Math.min(Math.max(0, o.sillFt), dim.wallHeightFt - o.heightFt - 0.2);
+  }
   o.offsetFt = Math.min(Math.max(TRIM_W, o.offsetFt), f.span - o.widthFt - TRIM_W);
   return o;
 }

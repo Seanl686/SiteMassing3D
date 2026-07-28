@@ -3,7 +3,7 @@
 // drag would destroy the element the user is currently interacting with, which
 // is what makes selects refuse to open and number fields refuse to accept input.
 
-import { WALLS, WALL_LABEL } from './defaults.js';
+import { WALLS, WALL_LABEL, OPENING_PRESETS } from './defaults.js';
 
 const TYPES = [['door', 'Door'], ['slider', 'Slider'], ['window', 'Window']];
 const NUMS = [
@@ -92,6 +92,11 @@ function row(o, cb) {
     i.step = '0.25';
     i.autocomplete = 'off';
     i.dataset.key = key;
+    if (key === 'heightFt') {
+      i.setAttribute('list', 'heightPresets');
+    } else if (key === 'widthFt') {
+      i.setAttribute('list', 'widthPresets');
+    }
     i.value = round(o[key]);
     i.addEventListener('focus', () => cb.onSelect(o.id));
     i.addEventListener('input', () => {
@@ -125,7 +130,21 @@ function row(o, cb) {
     if (v === o.type) opt.selected = true;
     tsel.appendChild(opt);
   }
-  tsel.addEventListener('change', () => { o.type = tsel.value; cb.onRestructure(o.id); });
+  tsel.addEventListener('change', () => {
+    const oldPreset = OPENING_PRESETS[o.type];
+    const newType = tsel.value;
+    const newPreset = OPENING_PRESETS[newType];
+    o.type = newType;
+    if (newPreset) {
+      o.widthFt = newPreset.widthFt;
+      o.heightFt = newPreset.heightFt;
+      o.sillFt = newPreset.sillFt;
+      if (!o.label || (oldPreset && o.label === oldPreset.label)) {
+        o.label = newPreset.label;
+      }
+    }
+    cb.onRestructure(o.id);
+  });
   foot.appendChild(tsel);
 
   const dup = document.createElement('button');
