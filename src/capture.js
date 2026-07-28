@@ -115,7 +115,11 @@ export function renderToCanvas(stage, w, h, alpha, sceneOpts, home) {
 
   // Restore live viewport size, aspect ratio, camera position, and target
   stage.scene.background = prevBg;
-  stage.renderer.setClearAlpha(1);
+  if (prevBg === null || useBgPhoto) {
+    stage.renderer.setClearAlpha(0);
+  } else {
+    stage.renderer.setClearAlpha(1);
+  }
   stage.grid.visible = sceneOpts.grid;
   stage.renderer.setPixelRatio(prevRatio);
   stage.renderer.setSize(prevSize.x, prevSize.y, false);
@@ -159,9 +163,18 @@ function burnCaption(canvas, text) {
 }
 
 export function shoot(stage, home, sceneOpts, exportOpts, viewName) {
-  const c = renderToCanvas(stage, exportOpts.w, exportOpts.h, exportOpts.alpha, sceneOpts, home);
+  const dom = stage.renderer?.domElement;
+  const liveAspect = (dom && dom.clientHeight > 0)
+    ? (dom.clientWidth / dom.clientHeight)
+    : (exportOpts.w / (exportOpts.h || 1));
+
+  // Match live screen aspect ratio for 1-to-1 exact viewport replica
+  const targetW = exportOpts.w || 1200;
+  const targetH = Math.round(targetW / liveAspect);
+
+  const c = renderToCanvas(stage, targetW, targetH, exportOpts.alpha, sceneOpts, home);
   if (exportOpts.burn && !exportOpts.alpha) burnCaption(c, caption(home, viewName));
-  download(c, `${slug(home.name)}-${slug(viewName)}-${exportOpts.w}x${exportOpts.h}.png`);
+  download(c, `${slug(home.name)}-${slug(viewName)}-${targetW}x${targetH}.png`);
   return c;
 }
 
