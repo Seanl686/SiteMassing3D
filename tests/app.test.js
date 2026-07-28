@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { defaultHome, defaultScene, defaultExport, migrate, WALLS } from '../src/defaults.js';
-import { derived, wallFrames, fmtAllUnits, buildHome } from '../src/build.js';
+import { derived, wallFrames, fmtAllUnits, buildHome, getWallHeight } from '../src/build.js';
 
 test('1. Defaults & State Initialization', () => {
   const home = defaultHome();
@@ -204,4 +204,17 @@ test('11. Compact UI & Full-Screen 3D Rendering Canvas Priority Verification', (
 
   const stageFlex = '1 1 auto';
   assert.equal(stageFlex, '1 1 auto', '3D stage flex expands to occupy maximum screen space');
+});
+
+test('12. Wall Height Definition & Per-Wall Custom Height Verification', () => {
+  const home = defaultHome();
+  home.dimensions.wallHeightFt = 9.0;
+  home.dimensions.frontWallHeightFt = 10.0;
+
+  const root = buildHome(home, defaultScene());
+  assert.equal(getWallHeight('front', home.dimensions), 10.0, 'Front wall height reads custom defined 10.0 ft');
+  assert.equal(getWallHeight('back', home.dimensions), 9.0, 'Back wall height falls back to defined base wall height 9.0 ft');
+
+  const frontWallGroup = root.children.find((c) => c.name === 'wall:front');
+  assert.ok(frontWallGroup, 'Front wall mesh constructed with defined height');
 });

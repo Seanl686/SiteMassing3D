@@ -153,6 +153,8 @@ const dimFields = [
   ['f_floorHeight', 'floorHeightFt'], ['f_pitch', 'roofPitch'],
   ['f_eaveOverhang', 'eaveOverhangFt'], ['f_rakeOverhang', 'rakeOverhangFt'],
   ['f_dormerWidth', 'dormerWidthFt'], ['f_dormerHeight', 'dormerHeightFt'],
+  ['f_frontWallHeight', 'frontWallHeightFt'], ['f_backWallHeight', 'backWallHeightFt'],
+  ['f_leftWallHeight', 'leftWallHeightFt'], ['f_rightWallHeight', 'rightWallHeightFt'],
 ];
 const colorFields = [
   ['c_siding', 'siding'], ['c_trim', 'trim'], ['c_roof', 'roof'],
@@ -170,7 +172,9 @@ const sceneChecks = [['s_grid', 'grid'], ['s_shadow', 'shadow'], ['s_steps', 'st
 
 function syncForm() {
   $('f_name').value = state.home.name;
-  for (const [id, key] of dimFields) $(id).value = state.home.dimensions[key] ?? 0;
+  for (const [id, key] of dimFields) {
+    if ($(id)) $(id).value = state.home.dimensions[key] ?? '';
+  }
   $('f_roofStyle').value = state.home.dimensions.roofStyle;
   if ($('f_dormerCount')) $('f_dormerCount').value = state.home.dimensions.dormerCount ?? 0;
   if ($('f_dormerStyle')) $('f_dormerStyle').value = state.home.dimensions.dormerStyle || 'gable';

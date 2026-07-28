@@ -58,7 +58,14 @@
         <div class="grid2">
           <label><span>Width (ft)</span><input id="f_width" type="number" autocomplete="off" step="0.1" min="8"></label>
           <label><span>Length (ft)</span><input id="f_length" type="number" autocomplete="off" step="0.1" min="8"></label>
-          <label><span>Wall height (ft)</span><input id="f_wallHeight" type="number" autocomplete="off" step="0.1" min="6"></label>
+          <label><span>Wall height (ft)</span><input id="f_wallHeight" type="number" autocomplete="off" step="0.1" min="6" list="wallHeightPresets"></label>
+          <datalist id="wallHeightPresets">
+            <option value="8.0" label="8'-0&quot; (Standard 8ft Wall)"></option>
+            <option value="8.5" label="8'-6&quot; (8.5ft Wall)"></option>
+            <option value="9.0" label="9'-0&quot; (9ft Ceilings)"></option>
+            <option value="10.0" label="10'-0&quot; (10ft Vaulted Wall)"></option>
+            <option value="12.0" label="12'-0&quot; (12ft High Wall)"></option>
+          </datalist>
           <label><span>Floor height (ft)</span><input id="f_floorHeight" type="number" autocomplete="off" step="0.05" min="0"></label>
           <label><span>Roof pitch (/12)</span><input id="f_pitch" type="number" autocomplete="off" step="0.5" min="0" max="12"></label>
           <label><span>Eave overhang (ft)</span><input id="f_eaveOverhang" type="number" autocomplete="off" step="0.1" min="0"></label>
@@ -66,6 +73,14 @@
           <label><span>Roof style</span>
             <select id="f_roofStyle"><option value="gable">Gable (ridge along length)</option><option value="flat">Flat / low slope</option></select>
           </label>
+        </div>
+
+        <h3 style="margin:10px 0 4px;font-size:10px;color:#6fb2ff;font-weight:600;text-transform:uppercase;">Per-Wall Custom Heights (Optional)</h3>
+        <div class="grid2">
+          <label><span>Front wall (ft)</span><input id="f_frontWallHeight" type="number" autocomplete="off" step="0.1" placeholder="Auto"></label>
+          <label><span>Back wall (ft)</span><input id="f_backWallHeight" type="number" autocomplete="off" step="0.1" placeholder="Auto"></label>
+          <label><span>Left wall (ft)</span><input id="f_leftWallHeight" type="number" autocomplete="off" step="0.1" placeholder="Auto"></label>
+          <label><span>Right wall (ft)</span><input id="f_rightWallHeight" type="number" autocomplete="off" step="0.1" placeholder="Auto"></label>
         </div>
         <p class="hint" id="ratioHint"></p>
       </div>

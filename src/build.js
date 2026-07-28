@@ -80,17 +80,27 @@ function mat(color, opts = {}) {
   });
 }
 
+export function getWallHeight(name, dim) {
+  if (!dim) return 8.0;
+  const customKey = `${name}WallHeightFt`;
+  if (typeof dim[customKey] === 'number' && !Number.isNaN(dim[customKey]) && dim[customKey] > 0) {
+    return dim[customKey];
+  }
+  return dim.wallHeightFt || 8.0;
+}
+
 /** Clamp an opening so it always fits inside its wall and under the eave. */
 export function clampOpening(o, dim) {
   const frames = wallFrames(dim);
   const f = frames[o.wall] || frames.front;
   const maxW = Math.max(0.5, f.span - 2 * TRIM_W);
+  const wallH = getWallHeight(o.wall, dim);
   o.widthFt = Math.min(Math.max(0.5, o.widthFt), maxW);
-  o.heightFt = Math.min(Math.max(0.5, o.heightFt), dim.wallHeightFt - 0.4);
+  o.heightFt = Math.min(Math.max(0.5, o.heightFt), wallH - 0.4);
   if (o.type === 'door' || o.type === 'slider') {
     o.sillFt = 0;
   } else {
-    o.sillFt = Math.min(Math.max(0, o.sillFt), dim.wallHeightFt - o.heightFt - 0.2);
+    o.sillFt = Math.min(Math.max(0, o.sillFt), wallH - o.heightFt - 0.2);
   }
   o.offsetFt = Math.min(Math.max(TRIM_W, o.offsetFt), f.span - o.widthFt - TRIM_W);
   return o;
@@ -103,7 +113,7 @@ export function clampOpening(o, dim) {
 function buildWall(name, frame, home, materials) {
   const dim = home.dimensions;
   const { slope } = derived(dim);
-  const H = dim.wallHeightFt;
+  const H = getWallHeight(name, dim);
   const span = frame.span;
 
   const shape = new THREE.Shape();
