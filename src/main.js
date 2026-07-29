@@ -7,6 +7,9 @@ import { renderOpeningList, syncOpeningValues, initAccordions } from './ui.js';
 import { updatePlanPlate, nearestWallHit } from './plan.js';
 import { Gizmo, wallPlaneHit, applyDrag } from './gizmo.js';
 import { shoot, contactSheet, renderToCanvas, saveWithPicker } from './capture.js';
+import {
+  supportsOutputFolder, chooseOutputFolder, clearOutputFolder, outputFolderName,
+} from './outdir.js';
 import { defaultHome, defaultScene, defaultExport, nextId, OPENING_PRESETS, migrate } from './defaults.js';
 import { History, describeChange } from './history.js';
 import { buildProject, readProject } from './project.js';
@@ -174,9 +177,15 @@ function updateSitePhotoPlate() {
   const sp = state.home.sitePhoto;
   if (!sp || !sp.src || !sp.show || panoShowing || state.scene.blockLandscape) {
     bg.style.display = 'none';
-    if (state.scene) stage.scene.background = state.scene.bgVisible === false ? null : new THREE.Color(state.scene.bg);
+    stage.plateBackdrop = false;
+    if (state.scene) {
+      stage.setBackground(state.scene.bgVisible === false ? null : new THREE.Color(state.scene.bg));
+    }
     return;
   }
+  // Claim the backdrop: applySceneOpts leaves the background alone while this is
+  // set, so any scene toggle can fire without wiping the photo.
+  stage.plateBackdrop = true;
   bg.style.display = 'block';
   bg.style.backgroundImage = `url("${sp.src}")`;
   bg.style.opacity = sp.opacity ?? 0.85;
@@ -200,7 +209,7 @@ function updateSitePhotoPlate() {
   // stylesheet) so a rotated or zoomed-out photo has paint beyond the edges
   // instead of blank corners.
   bg.style.transform = `rotate(${rot}deg)`;
-  stage.scene.background = null;
+  stage.setBackground(null);
 }
 
 /** Openings in the multi-selection, in list order. */
@@ -1373,6 +1382,44 @@ function loadSlotPhoto(key, dataUrl) {
   setPackageStatus(`Loaded the ${slot.name} lot photo. Align the model to it — this slot keeps the alignment and the camera.`);
 }
 
+/**
+ * The output-folder controls. The folder itself lives in IndexedDB rather than
+ * in state: it is a live handle to a place on this machine, not part of the
+ * project, and a project JSON opened on another machine has no business
+ * pointing anywhere.
+ */
+async function updateOutDirStatus() {
+  const el = $('outDirStatus');
+  if (!el) return;
+  if (!supportsOutputFolder()) {
+    el.textContent = 'This browser cannot write to a folder directly — exports go to your downloads. '
+      + 'Chrome, Edge or Opera can.';
+    for (const id of ['btnPickOutDir', 'btnClearOutDir']) if ($(id)) $(id).disabled = true;
+    return;
+  }
+  const name = await outputFolderName();
+  el.textContent = name
+    ? `Exports are written to “${name}”.`
+    : 'No folder set — exports go to your downloads.';
+}
+
+function bindOutputFolder() {
+  if ($('btnPickOutDir')) {
+    $('btnPickOutDir').addEventListener('click', async () => {
+      const name = await chooseOutputFolder();
+      await updateOutDirStatus();
+      if (name) setPackageStatus(`Exports will be written to “${name}”.`);
+    });
+  }
+  if ($('btnClearOutDir')) {
+    $('btnClearOutDir').addEventListener('click', async () => {
+      await clearOutputFolder();
+      await updateOutDirStatus();
+    });
+  }
+  updateOutDirStatus();
+}
+
 function updateSiteViewBadge() {
   const bar = $('siteViewBar');
   const badge = $('siteViewBadge');
@@ -2375,8 +2422,20 @@ function bind() {
     if ($(id)) {
       $(id).addEventListener('change', (e) => {
         state.scene[key] = e.target.checked;
+        // The toolbar button is the same switch as the checkbox; keep them level.
+        if (key === 'wireframe' && $('btnWireframe')) {
+          $('btnWireframe').classList.toggle('active', e.target.checked);
+        }
         if (['steps', 'stepLanding', 'labels', 'dims'].includes(key)) rebuild();
-        else { stage.applySceneOpts(state.scene, state.home.dimensions); save(); }
+        else if (key === 'blockLandscape') rebuild();   // takes the panorama with it
+        else {
+          stage.applySceneOpts(state.scene, state.home.dimensions);
+          // The backdrop has to be re-decided after any scene change: the plate
+          // owns the background while it is up, and "block landscape" is the
+          // toggle that puts it up or takes it down.
+          updateSitePhotoPlate();
+          save();
+        }
       });
     }
   }
@@ -2413,9 +2472,11 @@ function bind() {
   $('s_bg').addEventListener('input', (e) => {
     state.scene.bg = e.target.value;
     stage.applySceneOpts(state.scene, state.home.dimensions);
-    syncStageBackdrop();
+    updateSitePhotoPlate();
     save();
   });
+
+  bindOutputFolder();
 
   for (const [id, key] of [['x_w', 'w'], ['x_h', 'h']]) {
     $(id).addEventListener('change', (e) => { state.export[key] = parseInt(e.target.value, 10) || 1200; save(); });

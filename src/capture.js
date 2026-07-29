@@ -2,12 +2,20 @@
 
 import * as THREE from 'three';
 import { fmtFt } from './build.js';
+import { writeToOutputFolder } from './outdir.js';
 
 export function slug(s) {
   return (s || 'home').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'home';
 }
 
+/**
+ * Save a blob, best route first: the project's output folder if one is set (no
+ * dialog at all), then a Save-As dialog, then a plain download. Returns true if
+ * the file was written or the user cancelled a dialog on purpose — false only
+ * when the caller still has to fall back to an <a download>.
+ */
 export async function saveWithPicker(blob, suggestedName, typeDescription, mimeType, fileExtension) {
+  if (await writeToOutputFolder(blob, suggestedName)) return true;
   if (typeof window.showSaveFilePicker === 'function') {
     try {
       const handle = await window.showSaveFilePicker({
@@ -101,10 +109,7 @@ export function renderToCanvas(stage, w, h, alpha, sceneOpts, home) {
   // are two answers to the same question and would paint over each other.
   const useBgPhoto = sp && sp.src && sp.show && !alpha && !panoShowing && !sceneOpts?.blockLandscape;
 
-  if (alpha || useBgPhoto) {
-    stage.scene.background = null;
-    stage.renderer.setClearAlpha(0);
-  }
+  if (alpha || useBgPhoto) stage.setBackground(null);
   // The ground grid is part of the view, not an overlay, so it is exported when
   // it is switched on. A cutout (alpha) export is the exception: it exists to be
   // composited elsewhere, where a baked-in grid would be in the way.
@@ -168,13 +173,10 @@ export function renderToCanvas(stage, w, h, alpha, sceneOpts, home) {
 
   ctx.drawImage(stage.renderer.domElement, 0, 0, w, h);
 
-  // Restore live viewport state
-  stage.scene.background = prevBg;
-  if (prevBg === null || useBgPhoto) {
-    stage.renderer.setClearAlpha(0);
-  } else {
-    stage.renderer.setClearAlpha(1);
-  }
+  // Restore live viewport state. The clear alpha rides with the background —
+  // restoring the colour but leaving the alpha at 1 left the next photo plate
+  // hidden behind an opaque canvas.
+  stage.setBackground(prevBg);
   stage.grid.visible = !!sceneOpts.grid && !sceneOpts.blockLandscape;
 
   if (!isLiveSize) {

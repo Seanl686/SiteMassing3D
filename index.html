@@ -504,6 +504,14 @@
         <span class="chevron">▼</span>
       </div>
       <div class="panel-body">
+        <h3 class="subhead">Project output folder</h3>
+        <p class="hint" id="outDirStatus">No folder set — exports go to your downloads.</p>
+        <div class="grid2">
+          <button id="btnPickOutDir" class="block">Choose folder…</button>
+          <button id="btnClearOutDir" class="block">Use downloads</button>
+        </div>
+        <p class="hint">Pick the project's folder once and every render, brief, project JSON and package is written straight into it — no Save-As dialog each time. The browser asks permission once per session before the first write.</p>
+
         <h3 class="subhead">Lighting &amp; Environment</h3>
         <div class="grid2">
           <label><span>Sun azimuth</span><input id="s_sunAz" type="range" autocomplete="off" min="0" max="360" step="1"></label>

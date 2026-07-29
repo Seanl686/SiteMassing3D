@@ -138,11 +138,43 @@ export class Stage {
     const blockLandscape = !!o.blockLandscape;
     this.ground.visible = o.grid && !blockLandscape;
     this.grid.visible = o.grid && !blockLandscape;
-    this.scene.background = o.bgVisible === false ? null : new THREE.Color(o.bg);
+    // `plateBackdrop` is set while the lot photo is showing behind the canvas.
+    // Painting a background then hides the photo, and this runs on EVERY scene
+    // change — wireframe, grid, sun, background colour — so without the guard a
+    // toggle that has nothing to do with the backdrop wipes the loaded photo.
+    if (!this.plateBackdrop) {
+      this.setBackground(o.bgVisible === false ? null : new THREE.Color(o.bg));
+    }
     this.persp.fov = focalToFov(o.focal);
     this.persp.updateProjectionMatrix();
     this.setTrueColor(o.trueColor);
     this.setWireframe(o.wireframe);
+  }
+
+  /**
+   * Scene background and the canvas clear alpha, which have to move together.
+   *
+   * A null background means something behind the canvas is meant to show
+   * through — the lot photo plate — and that only works while the buffer is
+   * cleared transparent. An export leaves the clear alpha at 1, so setting the
+   * background alone used to hand back an opaque black canvas the next time a
+   * photo was loaded.
+   */
+  setBackground(color) {
+    this.scene.background = color || null;
+    this.renderer.setClearAlpha(color ? 1 : 0);
+    // Wireframe strokes are picked for contrast against the backdrop, and the
+    // backdrop can change under a live wireframe (a lot photo loads, the colour
+    // is edited). Re-tint rather than rebuild — the geometry has not moved.
+    if (this._wfEdge) this._wfEdge.color.setHex(this.wireframeStroke());
+  }
+
+  /** Stroke colour for hidden-line mode: dark on light backdrops, light on dark.
+   *  No background means a photo is behind the canvas, and photos read light. */
+  wireframeStroke() {
+    const bg = this.scene.background instanceof THREE.Color ? this.scene.background : null;
+    const lum = bg ? 0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b : 1;
+    return lum > 0.5 ? 0x1b1e22 : 0xdfe6ee;
   }
 
   /**
@@ -169,7 +201,11 @@ export class Stage {
     if (!this.homeGroup) return;
     this.homeGroup.traverse((o) => {
       if (!o.isMesh) return;
-      for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
+      // While wireframe is on the mesh wears the depth mask and the real
+      // material is parked in userData; edit that one or the change is lost the
+      // moment wireframe is switched off.
+      const live = o.userData.solidMaterial || o.material;
+      for (const m of (Array.isArray(live) ? live : [live])) {
         if (!m || m.metalness === undefined) continue;
         if (on) {
           if (m.userData.litMetalness === undefined) m.userData.litMetalness = m.metalness;
@@ -185,10 +221,10 @@ export class Stage {
   /**
    * Hidden-line wireframe. Rather than `material.wireframe` — which draws every
    * triangle edge, including the ones on the far side of the home — the solid
-   * geometry stays in place as an opaque depth mask painted in the background
-   * colour, and only the silhouette/crease edges are stroked on top. Edges
-   * behind the home are occluded by the mask, so the view reads like a line
-   * drawing instead of an x-ray.
+   * geometry stays in place as a depth-only mask and only the silhouette/crease
+   * edges are stroked on top. Edges behind the home are occluded by the mask, so
+   * the view reads like a line drawing instead of an x-ray, and whatever backdrop
+   * is loaded still shows through the silhouette.
    */
   setWireframe(enabled) {
     if (!this.homeGroup) return;
@@ -211,22 +247,36 @@ export class Stage {
       e.parent?.remove(e);
       e.geometry?.dispose();
     }
-    if (!enabled) return;
+    if (!enabled) {
+      this._wfMask?.dispose();
+      this._wfEdge?.dispose();
+      this._wfMask = this._wfEdge = null;
+      return;
+    }
 
-    const bg = this.scene.background instanceof THREE.Color
-      ? this.scene.background.clone()
-      : new THREE.Color(0x20242a);
-    // Stroke colour follows the background so the lines stay legible either way.
-    const lum = 0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b;
+    // The mask ERASES: NoBlending with a zero alpha writes straight over the
+    // framebuffer and clears the home's silhouette to transparent.
+    //
+    // Painting it in the background colour instead — the obvious version — works
+    // only when there IS a background. Over a lot photo, which is a plate behind
+    // the canvas, it covered the photo with a flat slab, and a backdrop the user
+    // loaded is the one thing wireframe must not throw away. Writing no colour at
+    // all is no good either: the grid and the ground are drawn before the mask,
+    // so they showed through the home like an x-ray. Erasing does both jobs —
+    // scene geometry behind the home is wiped, and whatever sits behind the
+    // canvas (photo plate, background colour, export composite) shows through.
     this._wfMask?.dispose();
     this._wfEdge?.dispose();
     this._wfMask = new THREE.MeshBasicMaterial({
-      color: bg,
+      color: 0x000000,
+      opacity: 0,
+      transparent: false,         // stay in the opaque pass, before the lines
+      blending: THREE.NoBlending, // overwrite the pixel rather than mix with it
       polygonOffset: true,        // push the mask back so edges are not z-fought
       polygonOffsetFactor: 1,
       polygonOffsetUnits: 1,
     });
-    this._wfEdge = new THREE.LineBasicMaterial({ color: lum > 0.5 ? 0x1b1e22 : 0xdfe6ee });
+    this._wfEdge = new THREE.LineBasicMaterial({ color: this.wireframeStroke() });
 
     const meshes = [];
     this.homeGroup.traverse((o) => {
@@ -240,6 +290,10 @@ export class Stage {
       m.material = this._wfMask;
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, 25), this._wfEdge);
       edges.userData.hiddenLineEdge = true;
+      // Every mask has to be in the depth buffer before any line is stroked. A
+      // colour-writing mask could paint over a line drawn too early; this one
+      // cannot, so the order is made explicit instead of left to the sort.
+      edges.renderOrder = 10;
       m.add(edges);
     }
   }
@@ -304,7 +358,17 @@ export class Stage {
       THREE.MathUtils.degToRad(+pano.yawDeg || 0),
       0,
     );
-    this.panoMesh.material.opacity = pano.opacity ?? 1;
+    const opacity = pano.opacity ?? 1;
+    this.panoMesh.material.opacity = opacity;
+    // A fully opaque panorama belongs in the OPAQUE pass, where renderOrder -1
+    // puts it first and every later draw sits on top of it. Left transparent it
+    // renders after the home, which meant a depth-only wireframe mask punched a
+    // hole in it instead of letting the panorama show through the silhouette.
+    const transparent = opacity < 1;
+    if (this.panoMesh.material.transparent !== transparent) {
+      this.panoMesh.material.transparent = transparent;
+      this.panoMesh.material.needsUpdate = true;
+    }
     this.panoMesh.material.color.setScalar(pano.brightness ?? 1);
     return true;
   }
