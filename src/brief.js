@@ -578,6 +578,16 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   w();
   w(`### Paste this`);
   w();
+  w(`> **CRITICAL — LOCK GEOMETRY AND POSITION BEFORE ANYTHING ELSE:**`);
+  w(`> The house you are polishing is ALREADY at its correct final size, angle and`);
+  w(`> site position — do not regenerate the composition. It occupies the EXACT`);
+  w(`> 1-to-1 bounding box **X = ${x1} to ${x2}**, ground line at **Y = ${yBottom}**, nearest`);
+  w(`> corner (${nearCorner}) at **X = ${cornerX}, Y = ${cornerY}**, front wall ${ratio}× as long as`);
+  w(`> the gable end is wide. **DO NOT MOVE, SLIDE, RESIZE, ROTATE, RE-SITE OR`);
+  w(`> RE-FRAME THE HOUSE, AND DO NOT CHANGE THE CAMERA PERSPECTIVE.** This turn`);
+  w(`> touches lighting and edges only — pixel position and viewing angle carry`);
+  w(`> over unchanged from the last image.`);
+  w(`>`);
   w(`> Final realism pass. Blend the home into the site so the result reads as a`);
   w(`> single photograph rather than a composite:`);
   w(`>`);
@@ -594,8 +604,9 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   w(`> - Match the photograph's own grain, sharpness and depth of field.`);
   w(`>`);
   w(`> Change nothing about the home's geometry, proportions, openings, colours,`);
-  w(`> placement, angle or size, and change nothing about the site. This is a`);
-  w(`> lighting and integration pass only.`);
+  w(`> placement, angle, size or camera perspective, and change nothing about the`);
+  w(`> site. This is a lighting and integration pass only — position and`);
+  w(`> perspective are locked, repeated above, not up for reinterpretation.`);
   w();
   w(`### If the polish drifts`);
   w();
