@@ -2693,44 +2693,6 @@ function load() {
   }
 }
 
-function loadProject(raw) {
-  const proj = readProject(raw);
-  state.home = proj.home;
-  state.scene = proj.scene;
-  state.export = proj.exportOpts;
-
-  selectedId = null;
-  selectedIds.clear();
-  if (gizmo) gizmo.clear();
-
-  syncForm();
-  rebuild();
-  refreshList();
-
-  if (typeof renderSlotList === 'function') renderSlotList();
-  if (typeof renderSiteViewList === 'function') renderSiteViewList();
-  if (typeof renderHomePhotoList === 'function') renderHomePhotoList();
-
-  updatePlanPlate(stage, state.home.plan);
-  updateSitePhotoPlate();
-
-  if (proj.restoredView && proj.view?.camera) {
-    stage.applyCameraState(proj.view.camera);
-  } else if (proj.view?.preset) {
-    stage.setView(proj.view.preset, state.home.dimensions, state.scene);
-  } else {
-    stage.setView('hero-left', state.home.dimensions, state.scene);
-  }
-
-  if (proj.view?.label) currentViewName = proj.view.label;
-  updateFramingReadout();
-  save();
-
-  clearTimeout(historyTimer);
-  history.reset(snapshotState(), 'loaded project');
-  updateHistoryButtons();
-}
-
 // ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
