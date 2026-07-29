@@ -533,13 +533,25 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   w();
   w(`> You moved or re-sited the house to a different spot on the lot. The house MUST be rendered at the exact 1-to-1 position and bounding box shown in 20-massing-hero.png (spanning X=${x1} to ${x2}, with ground contact base line at Y=${yBottom}, nearest corner ${nearCorner} at X=${cornerX}, Y=${cornerY}). Re-render keeping the house in that EXACT 1-to-1 position without moving it.`);
   w();
-  w(`**Fidelity** — when the finish drifts from the specification`);
+  w(`**Fidelity** — when the finish drifts`);
   w();
-  w(`> The home no longer matches its specification. It must be`);
-  w(`> ${sidingLabel(d.sidingTexture)} in ${describeColor(c.siding)}, with`);
-  w(`> ${describeColor(c.trim)} trim and window surrounds, a ${describeColor(c.roof)} roof`);
-  w(`> and ${describeColor(c.door)} doors. Correct the finish and change nothing else`);
-  w(`> in the image.`);
+  if (shot.length) {
+    w(`> The home's finish no longer matches the attached home photographs`);
+    w(`> (\`40-home-*.jpg\`). **The photographs are the authority here, not this`);
+    w(`> text** — re-match the exact siding profile and colour, trim colour, roof`);
+    w(`> texture and colour, door design and fixtures shown in them, wall by wall.`);
+    w(`> Use the written specification below only for any wall no photograph`);
+    w(`> covers: ${sidingLabel(d.sidingTexture)} in ${describeColor(c.siding)}, with`);
+    w(`> ${describeColor(c.trim)} trim and window surrounds, a ${describeColor(c.roof)} roof`);
+    w(`> and ${describeColor(c.door)} doors. Correct the finish and change nothing else`);
+    w(`> in the image.`);
+  } else {
+    w(`> The home no longer matches its specification. It must be`);
+    w(`> ${sidingLabel(d.sidingTexture)} in ${describeColor(c.siding)}, with`);
+    w(`> ${describeColor(c.trim)} trim and window surrounds, a ${describeColor(c.roof)} roof`);
+    w(`> and ${describeColor(c.door)} doors. Correct the finish and change nothing else`);
+    w(`> in the image.`);
+  }
   w();
 
   // ---- the polish pass ---------------------------------------------------
