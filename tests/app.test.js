@@ -17,6 +17,8 @@ import { derived, wallFrames, fmtAllUnits, buildHome, getWallHeight, dormerSize,
 import { createSidingMaterial } from '../src/textures.js';
 import { History, describeChange } from '../src/history.js';
 import { buildProject, readProject, PROJECT_VERSION } from '../src/project.js';
+import { validateHomeSpec, applySpecToHome, parseHexColor } from '../src/homespec.js';
+import { AI_PROVIDERS, loadApiKeys, saveApiKeys } from '../src/readplan.js';
 
 test('1. Defaults & State Initialization', () => {
   const home = defaultHome();
@@ -1149,4 +1151,73 @@ test('43. The Brief Enforces Exact 1-to-1 Position Mandate and Coordinates', () 
   assert.ok(md.includes('renders/'));
   assert.ok(md.includes('CLI Output Directory Instructions'));
 });
+
+test('44. Multi-Provider AI API Key Management (OpenAI, Grok, Gemini, Anthropic)', () => {
+  assert.equal(AI_PROVIDERS.length, 4);
+  assert.deepEqual(
+    AI_PROVIDERS.map((p) => p.id),
+    ['anthropic', 'openai', 'grok', 'gemini'],
+  );
+
+  saveApiKeys({
+    activeProvider: 'openai',
+    openai: 'sk-test-openai-123',
+    grok: 'xai-test-grok-456',
+    gemini: 'AIzaSyTest789',
+    anthropic: 'sk-ant-test-000',
+  }, false);
+
+  const keys = loadApiKeys();
+  assert.equal(keys.activeProvider, 'openai');
+  assert.equal(keys.openai, 'sk-test-openai-123');
+  assert.equal(keys.grok, 'xai-test-grok-456');
+  assert.equal(keys.gemini, 'AIzaSyTest789');
+  assert.equal(keys.anthropic, 'sk-ant-test-000');
+});
+
+test('45. AI Vision Auto-Extraction & Assignment of Openings and Siding/Trim Colors', () => {
+  const rawResponse = {
+    modelName: 'Redmond 25610 Vision',
+    confidence: 'high',
+    readings: { dimensionLine: '27\' x 56\'', notes: 'Read directly' },
+    dimensions: {
+      widthFt: 27, lengthFt: 56, wallHeightFt: 9, floorHeightFt: 2.5,
+      roofPitch: 5, eaveOverhangFt: 1, rakeOverhangFt: 0.75, roofStyle: 'gable',
+    },
+    openings: [
+      { type: 'door', wall: 'front', offsetFt: 10, widthFt: 3, heightFt: 6.67, sillFt: 0, label: 'Main Entry' },
+      { type: 'window', wall: 'front', offsetFt: 20, widthFt: 3, heightFt: 4, sillFt: 3, label: 'Living' },
+    ],
+    finishes: {
+      sidingTexture: 'board-batten',
+      sidingColor: 'navy blue',
+      trimColor: '#ffffff',
+      roofColor: 'charcoal',
+      doorColor: 'barn red',
+    },
+  };
+
+  const { ok, spec } = validateHomeSpec(rawResponse);
+  assert.ok(ok);
+  assert.equal(spec.finishes.sidingTexture, 'board-batten');
+  assert.equal(spec.finishes.sidingColor, '#2b3a55'); // mapped from navy blue
+  assert.equal(spec.finishes.trimColor, '#ffffff');
+  assert.equal(spec.finishes.roofColor, '#3a3d42'); // mapped from charcoal
+  assert.equal(spec.finishes.doorColor, '#8c3a33'); // mapped from barn red
+
+  const home = defaultHome();
+  let idSeq = 0;
+  const applied = applySpecToHome(home, spec, (t) => `${t}${++idSeq}`);
+
+  assert.equal(applied.name, 'Redmond 25610 Vision');
+  assert.equal(applied.colors.siding, '#2b3a55');
+  assert.equal(applied.colors.trim, '#ffffff');
+  assert.equal(applied.colors.roof, '#3a3d42');
+  assert.equal(applied.colors.door, '#8c3a33');
+  assert.equal(applied.dimensions.sidingTexture, 'board-batten');
+  assert.equal(applied.openings.length, 2);
+  assert.equal(applied.openings[0].wall, 'front');
+  assert.equal(applied.openings[0].type, 'door');
+});
+
 

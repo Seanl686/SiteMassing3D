@@ -346,11 +346,36 @@ export function validateHomeSpec(raw) {
     note('warn', 'The model reported LOW confidence in its own reading. Treat every number as unverified.');
   }
 
+  const finishes = {};
+  if (raw.finishes && typeof raw.finishes === 'object') {
+    const tex = raw.finishes.sidingTexture;
+    if (['lap', 'board-batten', 'panel', 'shingle'].includes(tex)) finishes.sidingTexture = tex;
+
+    const parseColor = (c) => parseHexColor(c);
+    if (raw.finishes.sidingColor) {
+      const col = parseColor(raw.finishes.sidingColor);
+      if (col) finishes.sidingColor = col;
+    }
+    if (raw.finishes.trimColor) {
+      const col = parseColor(raw.finishes.trimColor);
+      if (col) finishes.trimColor = col;
+    }
+    if (raw.finishes.roofColor) {
+      const col = parseColor(raw.finishes.roofColor);
+      if (col) finishes.roofColor = col;
+    }
+    if (raw.finishes.doorColor) {
+      const col = parseColor(raw.finishes.doorColor);
+      if (col) finishes.doorColor = col;
+    }
+  }
+
   const spec = {
     name: typeof raw.modelName === 'string' && raw.modelName.trim() ? raw.modelName.trim() : 'Untitled double-wide',
     dimensions: dim,
     openings,
     confidence,
+    finishes: Object.keys(finishes).length > 0 ? finishes : null,
     readings: {
       dimensionLine: typeof raw.readings?.dimensionLine === 'string' ? raw.readings.dimensionLine : '',
       notes: typeof raw.readings?.notes === 'string' ? raw.readings.notes : '',
@@ -361,9 +386,29 @@ export function validateHomeSpec(raw) {
   const summary =
     `${spec.name} — ${round2(dim.widthFt)} × ${round2(dim.lengthFt)} ft, `
     + `${dim.roofStyle === 'flat' ? 'flat roof' : `${dim.roofPitch}/12 gable`}, `
-    + `${doors} door${doors === 1 ? '' : 's'} and ${openings.length - doors} window${openings.length - doors === 1 ? '' : 's'}`;
+    + `${doors} door${doors === 1 ? '' : 's'} and ${openings.length - doors} window${openings.length - doors === 1 ? '' : 's'}`
+    + `${spec.finishes?.sidingColor ? `, ${spec.finishes.sidingTexture || 'lap'} siding (${spec.finishes.sidingColor})` : ''}`;
 
   return { ok: true, spec, issues, summary };
+}
+
+const COLOR_MAP = {
+  white: '#f5f5f2', 'off-white': '#e9e7df', 'light grey': '#c7ccd1', grey: '#8d9299',
+  'medium grey': '#8d9299', 'slate grey': '#5b636d', charcoal: '#3a3d42', black: '#17191c',
+  'warm beige': '#d8c9ab', beige: '#d8c9ab', tan: '#b99f72', brown: '#6d543a',
+  'barn red': '#8c3a33', red: '#8c3a33', terracotta: '#b5603f', 'sage green': '#8a9a7b',
+  green: '#3c5140', 'forest green': '#3c5140', 'navy blue': '#2b3a55', blue: '#2b3a55',
+  'sky blue': '#7d9dc0', 'steel blue': '#4d6070', cream: '#f0e6cf',
+};
+
+export function parseHexColor(c) {
+  if (!c || typeof c !== 'string') return null;
+  const str = c.trim().toLowerCase();
+  if (/^#[0-9a-f]{6}$/i.test(str)) return str;
+  if (/^#[0-9a-f]{3}$/i.test(str)) {
+    return `#${str[1]}${str[1]}${str[2]}${str[2]}${str[3]}${str[3]}`;
+  }
+  return COLOR_MAP[str] || null;
 }
 
 /** Pull the JSON object out of a paste that may be wrapped in prose or a fence. */
@@ -386,10 +431,22 @@ export function extractJson(text) {
  * `nextId` is passed in so this stays pure.
  */
 export function applySpecToHome(home, spec, nextId) {
+  const colors = { ...home.colors };
+  const dimensions = { ...home.dimensions, ...spec.dimensions };
+
+  if (spec.finishes) {
+    if (spec.finishes.sidingColor) colors.siding = spec.finishes.sidingColor;
+    if (spec.finishes.trimColor) colors.trim = spec.finishes.trimColor;
+    if (spec.finishes.roofColor) colors.roof = spec.finishes.roofColor;
+    if (spec.finishes.doorColor) colors.door = spec.finishes.doorColor;
+    if (spec.finishes.sidingTexture) dimensions.sidingTexture = spec.finishes.sidingTexture;
+  }
+
   return {
     ...home,
     name: spec.name,
-    dimensions: { ...home.dimensions, ...spec.dimensions },
+    colors,
+    dimensions,
     openings: spec.openings.map((o, i) => ({
       id: nextId(o.type[0], i),
       type: o.type,

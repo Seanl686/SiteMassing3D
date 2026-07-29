@@ -18,7 +18,7 @@ import { HOME_PHOTO_SLOTS, homeSlotByKey } from './homephotos.js';
 import {
   HOME_SPEC_SCHEMA, buildSpecPrompt, validateHomeSpec, extractJson, applySpecToHome,
 } from './homespec.js';
-import { readPlanWithClaude, loadApiKey, saveApiKey, isPersisted } from './readplan.js';
+import { readPlanWithAI, readPlanWithClaude, loadApiKey, saveApiKey, loadApiKeys, saveApiKeys, isPersisted } from './readplan.js';
 import {
   captureSiteView, applySiteView, cycleSiteView, indexOfView, uniqueViewName, suggestViewName,
   SITE_VIEW_SLOTS, findSlotView, slotByKey, sortSiteViews,
@@ -2018,6 +2018,36 @@ function bind() {
       alert(`Could not load homes/${file}: ${err.message}`);
     }
   });
+
+  const dlgAiKeys = $('dlgAiKeys');
+  if ($('btnAiSettings') && dlgAiKeys) {
+    $('btnAiSettings').addEventListener('click', () => {
+      const keys = loadApiKeys();
+      if ($('selAiProvider')) $('selAiProvider').value = keys.activeProvider || 'anthropic';
+      if ($('key_anthropic')) $('key_anthropic').value = keys.anthropic || '';
+      if ($('key_openai')) $('key_openai').value = keys.openai || '';
+      if ($('key_grok')) $('key_grok').value = keys.grok || '';
+      if ($('key_gemini')) $('key_gemini').value = keys.gemini || '';
+      if ($('chkPersistKeys')) $('chkPersistKeys').checked = isPersisted();
+      dlgAiKeys.showModal();
+    });
+  }
+  if ($('btnCloseAiKeys') && dlgAiKeys) {
+    $('btnCloseAiKeys').addEventListener('click', () => dlgAiKeys.close());
+  }
+  if ($('btnSaveAiKeys') && dlgAiKeys) {
+    $('btnSaveAiKeys').addEventListener('click', () => {
+      const keys = {
+        activeProvider: $('selAiProvider')?.value || 'anthropic',
+        anthropic: $('key_anthropic')?.value?.trim() || '',
+        openai: $('key_openai')?.value?.trim() || '',
+        grok: $('key_grok')?.value?.trim() || '',
+        gemini: $('key_gemini')?.value?.trim() || '',
+      };
+      saveApiKeys(keys, $('chkPersistKeys')?.checked);
+      dlgAiKeys.close();
+    });
+  }
 
   $('btnNew').addEventListener('click', () => {
     if (!confirm('Discard the current home and start a new one?')) return;

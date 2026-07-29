@@ -44,6 +44,7 @@
     <label class="btn" for="fileHome">Open JSON</label>
     <input type="file" id="fileHome" accept="application/json" hidden>
     <button id="btnSave">Save JSON</button>
+    <button id="btnAiSettings" title="Configure OpenAI, Grok, Gemini, or Claude API Keys">🔑 AI API Keys</button>
     <button id="btnShot" class="primary">Screenshot</button>
   </div>
 </header>
@@ -533,6 +534,59 @@
     <div id="hud"></div>
   </div>
 </main>
+
+<!-- AI API Keys Modal -->
+<dialog id="dlgAiKeys" class="modal" style="border:1px solid #3b4252;background:#181c24;color:#e8edf4;padding:0;border-radius:8px;max-width:480px;width:90%;">
+  <form method="dialog" style="margin:0;">
+    <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:space-between;">
+      <h3 style="margin:0;font-size:15px;color:#6fb2ff;">🔑 AI API Keys &amp; Vision Provider Settings</h3>
+      <button type="button" id="btnCloseAiKeys" style="background:none;border:none;color:#aaa;font-size:18px;cursor:pointer;">✕</button>
+    </div>
+    <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px;font-size:12px;">
+      <p style="margin:0;color:#9aa;font-size:11px;line-height:1.4;">
+        Configure keys for AI Vision plan reading, finish color extraction (siding, trim, roof, doors), and CLI generation. Keys are stored locally in your browser.
+      </p>
+
+      <label style="display:flex;flex-direction:column;gap:4px;">
+        <span style="font-weight:600;color:#cbd5e1;">Active Vision Provider</span>
+        <select id="selAiProvider" style="padding:6px;background:#0d1117;color:#fff;border:1px solid #333;border-radius:4px;">
+          <option value="anthropic">Anthropic Claude (Claude Opus 5)</option>
+          <option value="openai">OpenAI (GPT-4o Vision)</option>
+          <option value="grok">xAI Grok (Grok-2-Vision)</option>
+          <option value="gemini">Google Gemini (Gemini 2.0 Flash)</option>
+        </select>
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:4px;">
+        <span style="font-weight:600;">Anthropic Claude API Key</span>
+        <input type="password" id="key_anthropic" placeholder="sk-ant-..." autocomplete="off" style="padding:6px;background:#0d1117;color:#fff;border:1px solid #333;border-radius:4px;">
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:4px;">
+        <span style="font-weight:600;">OpenAI API Key</span>
+        <input type="password" id="key_openai" placeholder="sk-proj-..." autocomplete="off" style="padding:6px;background:#0d1117;color:#fff;border:1px solid #333;border-radius:4px;">
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:4px;">
+        <span style="font-weight:600;">xAI Grok API Key</span>
+        <input type="password" id="key_grok" placeholder="xai-..." autocomplete="off" style="padding:6px;background:#0d1117;color:#fff;border:1px solid #333;border-radius:4px;">
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:4px;">
+        <span style="font-weight:600;">Google Gemini API Key</span>
+        <input type="password" id="key_gemini" placeholder="AIza..." autocomplete="off" style="padding:6px;background:#0d1117;color:#fff;border:1px solid #333;border-radius:4px;">
+      </label>
+
+      <label style="display:flex;align-items:center;gap:6px;margin-top:4px;">
+        <input type="checkbox" id="chkPersistKeys">
+        <span>Remember keys in browser storage across restarts</span>
+      </label>
+    </div>
+    <div style="padding:12px 20px;border-top:1px solid rgba(255,255,255,0.1);display:flex;justify-content:end;gap:8px;background:rgba(0,0,0,0.2);">
+      <button type="button" id="btnSaveAiKeys" class="primary" style="padding:6px 14px;">Save Settings</button>
+    </div>
+  </form>
+</dialog>
 
 <script type="module" src="src/main.js"></script>
 </body>
