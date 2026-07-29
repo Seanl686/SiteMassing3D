@@ -195,8 +195,13 @@ export async function buildRenderPackage(ctx = {}) {
   const sp = home.sitePhoto || {};
   // Saved site views each pair a lot photo with the camera framed onto it, so
   // each one is its own render pass and gets its own folder. Without any, the
-  // package describes the single set-up currently on screen.
-  const siteViews = opts.allSiteViews && ctx.applyView ? (home.siteViews || []) : [];
+  // package describes the single set-up currently on screen. A view with no
+  // photo has no site to reference — packaging it anyway hands the model a
+  // hero plate with nothing behind it, and it renders whatever wireframe it
+  // was given as if that were the finished site. Drop those before counting.
+  const siteViews = opts.allSiteViews && ctx.applyView
+    ? (home.siteViews || []).filter((v) => !!v?.photo?.src)
+    : [];
   // Folders and an index only earn their keep from two passes up. With exactly
   // one saved view the package stays flat — it is still that view's photo and
   // camera that get rendered, just at the root where a single brief belongs.
