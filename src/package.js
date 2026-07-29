@@ -132,8 +132,8 @@ ridge-height percentages in the brief are measured off that camera.
 ## Where to place rendered images (CLI & Automated Pipelines)
 
 When running image generation via CLI scripts, LLM tools, or automated agents:
-- **Save all output rendered images directly into the `renders/` subfolder** inside this package directory.
-- Recommended filenames: `renders/render-01-initial.png`, `renders/render-02-polished.png`, `renders/render-final.png`.
+- **Save all output rendered images directly into the \`renders/\` subfolder** inside this package directory.
+- Recommended filenames: \`renders/render-01-initial.png\`, \`renders/render-02-polished.png\`, \`renders/render-final.png\`.
 ${multi ? `- For multi-view packages, save each view's output into its view directory's \`renders/\` folder (e.g. \`views/01-front-yard/renders/\`).\n` : ''}
 ## Why the plates are untextured
 
