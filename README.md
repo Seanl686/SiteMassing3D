@@ -83,9 +83,29 @@ writes one archive containing:
 lot photo's camera position, so it is the only one the model can site. The
 elevations and the contact sheet are geometry reference — they say what the home
 is, not where to stand. Four finished renders need four lot photos, each shot
-from the position matching its view, framed and exported one pair at a time.
-The brief says this to the model in as many words, because rendering a viewpoint
-the lot photo was never shot from is the failure this workflow hits most.
+from the position matching its view. The brief says this to the model in as many
+words, because rendering a viewpoint the lot photo was never shot from is the
+failure this workflow hits most.
+
+**Saved site views** (in the Site Photo panel) are how you do that without
+rebuilding the set-up each time. A site view stores the lot photo, its
+alignment *and* the camera framed onto it, under a name. Save one per position,
+then cycle with `‹ Prev` / `Next ›`, the badge in the view bar, or the `[` and
+`]` keys. With *One folder per saved site view* ticked, the package writes
+`views/01-<name>/` … each with its own lot photo, hero plate, cutout and
+`BRIEF.md`, plus a root `01-INDEX.md`. One export, one render pass per photo.
+
+**360° Panorama Site Wrap** removes the constraint entirely. Load an
+equirectangular (2:1) 360 shot taken from the middle of the pad and it is
+wrapped on a sphere **centred on the house site** — not pinned to the camera, so
+the home does not slide across it as you orbit. Every angle becomes a valid
+render position from a single photograph, and the hero plate comes out with the
+real lot already behind the home at the right perspective. Set *Shot height* to
+the tripod height, *Horizon radius* to roughly the treeline distance, then nudge
+*Level* until the horizon lies flat on the ground grid; *Heading* spins the lot
+under the home. The brief detects this and changes what it asks the model for —
+"photographise this scene" rather than "composite these two plates". A panorama
+supersedes the flat site photo while it is showing.
 
 The brief's scale numbers ("spans 31% to 78% of the image width", "ridge at 59%
 of frame height", "nearest corner: front-left") are read off the live camera by

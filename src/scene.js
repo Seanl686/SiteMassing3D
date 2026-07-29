@@ -86,6 +86,14 @@ export class Stage {
     this.planGroup = new THREE.Group();
     this.scene.add(this.planGroup);
 
+    // The 360 panorama lives here: an inverted sphere centred on the site, not
+    // a scene background. A background sits at infinity and never moves against
+    // the model, so the home would slide across it as the camera orbits. A
+    // sphere of a stated radius is centred on the pad the photo was shot from,
+    // which is what makes orbiting the home read as walking around the lot.
+    this.panoGroup = new THREE.Group();
+    this.scene.add(this.panoGroup);
+
     this.homeGroup = new THREE.Group();
     this.scene.add(this.homeGroup);
   }
@@ -185,6 +193,79 @@ export class Stage {
       edges.userData.hiddenLineEdge = true;
       m.add(edges);
     }
+  }
+
+  /**
+   * Wrap an equirectangular panorama around the site.
+   *
+   * `onReady` fires once the image has decoded, because the texture arrives a
+   * frame or more after the call and the caller usually wants to re-render or
+   * re-measure then. Returns true while a panorama is showing.
+   */
+  setPanorama(pano, groundY = 0, onReady) {
+    const src = pano?.src;
+    const on = !!src && pano.show !== false;
+
+    if (!on) {
+      if (this.panoMesh) this.panoMesh.visible = false;
+      return false;
+    }
+
+    if (!this.panoMesh) {
+      // scale(-1,1,1) turns the sphere inside out AND un-mirrors the mapping —
+      // BackSide alone renders the interior but shows the photo flipped.
+      const geo = new THREE.SphereGeometry(1, 64, 40);
+      geo.scale(-1, 1, 1);
+      const mat = new THREE.MeshBasicMaterial({
+        // A photograph is already a finished exposure; tone-mapping it again
+        // crushes the sky the model is supposed to match.
+        toneMapped: false,
+        transparent: true,
+        depthWrite: false,
+      });
+      this.panoMesh = new THREE.Mesh(geo, mat);
+      this.panoMesh.renderOrder = -1;   // paint before the home, never over it
+      this.panoGroup.add(this.panoMesh);
+    }
+
+    if (this._panoSrc !== src) {
+      this._panoSrc = src;
+      this.panoMesh.material.map?.dispose();
+      this.panoMesh.material.map = null;
+      new THREE.TextureLoader().load(src, (tex) => {
+        // A later load may have overtaken this one.
+        if (this._panoSrc !== src) { tex.dispose(); return; }
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.mapping = THREE.EquirectangularReflectionMapping;
+        tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+        this.panoMesh.material.map = tex;
+        this.panoMesh.material.needsUpdate = true;
+        onReady?.();
+      });
+    }
+
+    const radius = Math.max(20, +pano.radiusFt || 300);
+    this.panoMesh.visible = true;
+    this.panoMesh.scale.setScalar(radius);
+    // Centred on the site, lifted by the ground baseline plus the height the
+    // camera was at when the panorama was shot.
+    this.panoMesh.position.set(0, groundY + (+pano.heightFt || 0), 0);
+    this.panoMesh.rotation.set(
+      THREE.MathUtils.degToRad(+pano.tiltDeg || 0),
+      THREE.MathUtils.degToRad(+pano.yawDeg || 0),
+      0,
+    );
+    this.panoMesh.material.opacity = pano.opacity ?? 1;
+    this.panoMesh.material.color.setScalar(pano.brightness ?? 1);
+    return true;
+  }
+
+  /** Hide the panorama for one render — cutouts and geometry plates. */
+  setPanoramaVisible(on) {
+    if (!this.panoMesh) return undefined;
+    const was = this.panoMesh.visible;
+    this.panoMesh.visible = !!on && !!this._panoSrc;
+    return was;
   }
 
   resize(w, h) {

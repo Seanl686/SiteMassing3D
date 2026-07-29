@@ -205,6 +205,81 @@ main.sidebar-collapsed #sidebar {
   color: #ffffff;
   border-color: #6fb2ff;
 }
+.site-view-badge {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #cfe3ff;
+  max-width: 190px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.site-view-badge.unsaved { color: #9aa4b2; font-weight: 500; font-style: italic; }
+
+/* Saved site views: one row per lot-photo + camera set-up. */
+.site-view {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 6px;
+  margin-top: 5px;
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 5px;
+  background: rgba(255,255,255,0.03);
+  cursor: pointer;
+}
+.site-view:hover { background: rgba(111,178,255,0.09); border-color: rgba(111,178,255,0.35); }
+.site-view.active { background: rgba(111,178,255,0.16); border-color: #6fb2ff; }
+.site-view .thumb {
+  width: 46px;
+  height: 32px;
+  flex: none;
+  border-radius: 3px;
+  object-fit: cover;
+  background: #12161c;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.site-view .thumb.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: #6b7480;
+}
+.site-view .sv-body { flex: 1 1 auto; min-width: 0; }
+.site-view .sv-name {
+  width: 100%;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: #e8edf4;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 1px 3px;
+}
+.site-view .sv-name:focus {
+  background: rgba(0,0,0,0.35);
+  border-color: rgba(111,178,255,0.5);
+  outline: none;
+}
+.site-view .sv-meta {
+  font-size: 10px;
+  color: #8b95a3;
+  padding: 0 4px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.site-view .sv-actions { display: flex; gap: 3px; flex: none; }
+.site-view .sv-actions button {
+  font-size: 10px;
+  padding: 2px 5px;
+  min-width: 0;
+}
+
 .view-presets-bar {
   background: rgba(18, 22, 28, 0.88);
   padding: 3px;

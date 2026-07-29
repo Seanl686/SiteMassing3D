@@ -1,6 +1,8 @@
 // Default home spec and shared constants. Units are FEET throughout the app;
 // one three.js world unit == one foot.
 
+import { readSiteViews } from './siteviews.js';
+
 export const WALLS = ['front', 'back', 'left', 'right'];
 
 export const WALL_LABEL = {
@@ -82,6 +84,22 @@ export function defaultHome() {
     // always a PNG — a PDF page is converted on load, because image models
     // ignore PDF attachments. `pdf` keeps the original for the human.
     sitePlan: { src: null, pdf: null, name: '', page: 1, pageCount: 0, width: 0, height: 0 },
+    // Equirectangular 360 photo wrapped on a sphere centred on the site, so the
+    // camera can orbit the home and stay inside the real surroundings. Supersedes
+    // the flat site photo while it is showing.
+    panorama: {
+      src: null, show: true,
+      yawDeg: 0,        // spin the lot around the home until north lines up
+      tiltDeg: 0,       // level a hand-held shot
+      radiusFt: 300,    // how far away the horizon reads
+      heightFt: 5.5,    // tripod height the pano was shot at
+      brightness: 1,
+      opacity: 1,
+    },
+    // Named lot-photo + camera set-ups. One lot photo renders one view, so a
+    // site shot from four positions is four of these — see siteviews.js.
+    siteViews: [],
+    activeSiteViewId: null,
     // The handful of things the model cannot know because they are on the lot,
     // not in the spec. Everything else in the render brief is measured.
     brief: defaultBrief(),
@@ -188,7 +206,12 @@ export function migrate(home) {
     plan: { ...base.plan, ...(home.plan || {}) },
     sitePhoto,
     sitePlan: { ...base.sitePlan, ...(home.sitePlan || {}) },
+    panorama: { ...base.panorama, ...(home.panorama || {}) },
+    siteViews: readSiteViews(home.siteViews),
+    activeSiteViewId: home.activeSiteViewId || null,
     brief: { ...base.brief, ...(home.brief || {}) },
   };
+  // A dangling active id would light up a row that is no longer there.
+  if (!out.siteViews.some((v) => v.id === out.activeSiteViewId)) out.activeSiteViewId = null;
   return out;
 }

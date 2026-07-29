@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SiteMassing3D — double-wide massing &amp; elevation renderer</title>
 <!-- ?v= bust: plain static servers hand Chrome a cached stylesheet after edits -->
-<link rel="stylesheet" href="css/app.css?v=11">
+<link rel="stylesheet" href="css/app.css?v=12">
 <script type="importmap">
 {
   "imports": {
@@ -310,6 +310,39 @@
           <button id="btnResetPhoto" style="margin-top: auto;">Reset all align</button>
         </div>
         <p class="hint">Full photo displays uncropped. Adjust photo pan/zoom, ground baseline Y, and camera distance to align perspective independently of house lot position.</p>
+
+        <h3 class="subhead">Saved Site Views</h3>
+        <p class="hint">A site view stores this lot photo, its alignment <i>and</i> the camera framed onto it, under a name. Shoot the lot from four positions, set each one up once, and cycle between them — or let the render package render every one of them in a pass. <b>[</b> and <b>]</b> cycle.</p>
+        <div class="btnrow">
+          <button id="btnPrevSiteView" title="Previous site view ([)">‹ Prev</button>
+          <button id="btnNextSiteView" title="Next site view (])">Next ›</button>
+          <button id="btnAddSiteView" class="primary" title="Store the current lot photo, its alignment and the camera as a new site view">+ Save current</button>
+        </div>
+        <div id="siteViewList"></div>
+      </div>
+    </section>
+
+    <section class="panel collapsible" id="panel_pano">
+      <div class="panel-header">
+        <h2><span class="code">360</span> Panorama Site Wrap</h2>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="panel-body">
+        <p class="hint">An equirectangular (2:1) 360° photo shot from the middle of the pad, wrapped on a sphere <b>centred on the house site</b> — not pinned to the camera. Orbit the home and you walk around the real lot, so every angle is a valid render position instead of only the one the flat photo was shot from.</p>
+        <label class="btn block" for="filePanorama">Load 360° panorama (equirectangular JPG/PNG)</label>
+        <input type="file" id="filePanorama" accept="image/*" hidden>
+        <p class="hint" id="panoStatus">No panorama loaded.</p>
+        <label class="row check"><input id="pn_show" type="checkbox" autocomplete="off" checked><span>Wrap panorama around the site</span></label>
+        <div class="grid2">
+          <label><span>Heading / yaw (°)</span><input id="pn_yaw" type="number" autocomplete="off" step="1" min="-180" max="180"></label>
+          <label><span>Level / tilt (°)</span><input id="pn_tilt" type="number" autocomplete="off" step="0.5" min="-30" max="30"></label>
+          <label><span>Horizon radius (ft)</span><input id="pn_radius" type="number" autocomplete="off" step="10" min="20" max="2000"></label>
+          <label><span>Shot height (ft)</span><input id="pn_height" type="number" autocomplete="off" step="0.5" min="-20" max="60"></label>
+          <label><span>Brightness</span><input id="pn_brightness" type="range" autocomplete="off" min="0.2" max="2" step="0.05"></label>
+          <label><span>Opacity</span><input id="pn_opacity" type="range" autocomplete="off" min="0.1" max="1" step="0.05"></label>
+        </div>
+        <button id="btnPanoSpin" class="block" title="Rotate the camera around the house through the panorama">Orbit 45° through the panorama</button>
+        <p class="hint">Set <i>Shot height</i> to the tripod height and <i>Horizon radius</i> to roughly how far the treeline is, then nudge <i>Level</i> until the horizon sits flat against the ground grid. Yaw spins the lot until the pad faces the way the house should. A panorama supersedes the flat site photo while it is showing.</p>
       </div>
     </section>
 
@@ -371,6 +404,7 @@
         <label class="row check"><input id="pk_contactSheet" type="checkbox" autocomplete="off" checked><span>4-view contact sheet <i>(reference only)</i></span></label>
         <label class="row check"><input id="pk_elevations" type="checkbox" autocomplete="off" checked><span>Individual elevations + roof plan <i>(reference only)</i></span></label>
         <label class="row check"><input id="pk_cutout" type="checkbox" autocomplete="off" checked><span>Transparent cutout of the current view</span></label>
+        <label class="row check"><input id="pk_allSiteViews" type="checkbox" autocomplete="off" checked><span>One folder per saved site view <i>(a render pass each)</i></span></label>
         <label class="row check"><input id="pk_lotPhoto" type="checkbox" autocomplete="off" checked><span>Lot photo (unmodified)</span></label>
         <label class="row check"><input id="pk_sitePlan" type="checkbox" autocomplete="off" checked><span>Site plan page (PNG)</span></label>
         <label class="row check"><input id="pk_projectJson" type="checkbox" autocomplete="off" checked><span>Project JSON, so the package can be rebuilt</span></label>
@@ -425,6 +459,11 @@
         <button id="btnRotL90" class="btn-rot" title="Rotate camera 90° Left">↺ 90°</button>
         <button id="btnRotR90" class="btn-rot" title="Rotate camera 90° Right">↻ 90°</button>
         <button id="btnWireframe" class="btn-rot" title="Toggle wireframe mode">📐 Wireframe</button>
+      </div>
+      <div class="view-rot-group" id="siteViewBar" style="display:none;">
+        <button id="btnPrevSiteViewBar" class="btn-rot" title="Previous site view ([)">‹</button>
+        <span id="siteViewBadge" class="site-view-badge">No site view</span>
+        <button id="btnNextSiteViewBar" class="btn-rot" title="Next site view (])">›</button>
       </div>
       <div id="viewPresets" class="btn-group view-presets-bar">
         <button data-view="hero-left">¾ L</button>

@@ -93,9 +93,13 @@ export function renderToCanvas(stage, w, h, alpha, sceneOpts, home) {
   }
 
   const sp = home?.sitePhoto;
+  // A cutout is the model alone, so the panorama comes off for that one render.
+  const panoWas = alpha ? stage.setPanoramaVisible(false) : undefined;
+  const panoShowing = !alpha && !!stage.panoMesh?.visible;
   // Same test the live plate uses — "block landscape" hides the photo on screen,
-  // so it has to hide it here too.
-  const useBgPhoto = sp && sp.src && sp.show && !alpha && !sceneOpts?.blockLandscape;
+  // so it has to hide it here too. A panorama supersedes the flat plate: they
+  // are two answers to the same question and would paint over each other.
+  const useBgPhoto = sp && sp.src && sp.show && !alpha && !panoShowing && !sceneOpts?.blockLandscape;
 
   if (alpha || useBgPhoto) {
     stage.scene.background = null;
@@ -113,6 +117,7 @@ export function renderToCanvas(stage, w, h, alpha, sceneOpts, home) {
   stage.renderer.render(stage.scene, stage.camera);
 
   if (stage.overlay) stage.overlay.visible = overlayWas;
+  if (panoWas !== undefined) stage.setPanoramaVisible(panoWas);
 
   const out = document.createElement('canvas');
   out.width = w; out.height = h;

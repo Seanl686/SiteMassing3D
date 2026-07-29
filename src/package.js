@@ -31,24 +31,47 @@ export const defaultPackageOptions = () => ({
   sitePlan: true,
   originalPdf: true,
   projectJson: true,
+  allSiteViews: true,
 });
 
-const README = (name) => `# ${name} — render package
+const pad2 = (n) => String(n).padStart(2, '0');
+
+/** Is the 360 wrap the backdrop of the plate we are about to render? */
+const usingPanorama = (stage, pano) => !!pano?.src && pano.show !== false && !!stage?.panoMesh?.visible;
+
+const README = (name, multi, pano) => `# ${name} — render package
 
 Everything in this folder was exported together from SiteMassing3D so it stays
 consistent: the plates, the lot photo, the site plan and the brief all describe
 the same model at the same moment.
 
-## How to use it
+${multi ? `## Several render passes
 
-1. Open \`01-BRIEF.md\`. Section 1 lists the files to attach, in order.
+This package holds **one folder per saved site view**, under \`views/\`. Start at
+\`01-INDEX.md\`. Each folder is its own conversation with the image model: its own
+lot photo, its own massing plate framed from that photo's position, and its own
+\`BRIEF.md\`. The plates at the root are shared geometry reference.
+
+` : ''}## How to use it
+
+1. Open \`${multi ? '01-INDEX.md, then a view folder\'s BRIEF.md' : '01-BRIEF.md'}\`. Section 1 lists the files to attach, in order.
 2. Attach them to the image model (Gemini / Nano Banana, ChatGPT, Firefly,
    Midjourney edit — the wording is model-agnostic).
 3. Paste section 5 as your first message. The model is asked to echo the
    dimensions back before it renders, so a misread costs one turn, not four.
 4. Use section 6 for corrections — **one change per turn**, never stacked.
 
-## One lot photo renders one view
+${pano ? `## The lot is a 360 panorama
+
+\`10-lot-panorama.jpg\` is the whole site, shot from the middle of the pad. The
+hero plate in each pass is a view **out of** it, so the lot is already behind the
+home at the right perspective — there is nothing to composite onto. Because the
+panorama covers every direction, any camera angle is a valid render position;
+that is the point of shooting one instead of a handful of flat photos.
+
+The contact sheet, the elevations and the roof plan are still **geometry
+reference**: they tell the model what the home is, not where to stand.
+` : `## One lot photo renders one view
 
 \`20-massing-hero.png\` is the only plate that carries a camera position matched to
 \`10-lot-photo.jpg\`. That pair is what produces a render. Every other plate —
@@ -66,8 +89,12 @@ pass per pair:
 | straight-on front | square to the long side of the pad | Front elev |
 | end view | square to the short side | Left / Right end |
 
-Re-frame the app's camera to match each photo before exporting, because the
-scale and ridge-height percentages in the brief are measured off that camera.
+Save each of those set-ups as a **site view** in the app and the package renders
+one folder per view in a single pass. A 360 panorama removes the constraint
+entirely — one shot, any angle.
+`}
+Re-frame the app's camera before exporting either way, because the scale and
+ridge-height percentages in the brief are measured off that camera.
 
 ## Why the plates are untextured
 
@@ -78,6 +105,28 @@ the walls no photograph covers. A textured render would fight the lot photo's
 lighting; a clean massing plate reads as geometry.
 `;
 
+/** Root index when the package holds several render passes. */
+function buildViewIndex(home, passes) {
+  const L = [`# ${home.name || 'Untitled model'} — ${passes.length} render passes`, ''];
+  L.push(`This package holds one folder per saved site view. **Each folder is a`);
+  L.push(`separate conversation with the image model** — its own lot photo, its own`);
+  L.push(`massing plate framed from that photo's position, and its own brief.`);
+  L.push('');
+  L.push(`Do not mix them. A plate framed for one lot photo cannot be sited on`);
+  L.push(`another; that mismatch is what makes a composite read as pasted on.`);
+  L.push('');
+  L.push(`| # | Site view | Folder | Start with |`);
+  L.push(`|---|---|---|---|`);
+  passes.forEach((p, i) => {
+    L.push(`| ${i + 1} | ${p.view.name} | \`${p.dir}/\` | \`${p.dir}/BRIEF.md\` |`);
+  });
+  L.push('');
+  L.push(`The shared geometry plates (contact sheet, elevations, roof plan) and the`);
+  L.push(`site plan sit at the root and are referenced by every brief. They are`);
+  L.push(`measurements to read, not viewpoints to render.`);
+  return L.join('\n');
+}
+
 /**
  * Assemble the package. Returns `{ files, manifest, brief, folder }` without
  * writing anything, so it can be inspected or tested before it is saved.
@@ -85,7 +134,8 @@ lighting; a clean massing plate reads as geometry.
  * Rendering the elevation plates moves the camera and hides the site photo;
  * both are put back before this returns.
  */
-export async function buildRenderPackage({ stage, state, viewName, options, savedAt } = {}) {
+export async function buildRenderPackage(ctx = {}) {
+  const { stage, state, viewName, options, savedAt } = ctx;
   const opts = { ...defaultPackageOptions(), ...(options || {}) };
   const { home, scene } = state;
   const base = slug(home.name);
@@ -98,27 +148,80 @@ export async function buildRenderPackage({ stage, state, viewName, options, save
     if (role) manifest.push({ index: manifest.length + 1, file, role });
   };
 
-  // ---- 1. the lot photo, unmodified ---------------------------------------
   const sp = home.sitePhoto || {};
-  if (opts.lotPhoto && sp.src) {
-    const ext = dataUrlExt(sp.src, 'jpg');
-    add(`10-lot-photo.${ext}`, dataUrlToBytes(sp.src),
-      'the empty lot — the source of truth for the site. Do not re-render it.');
+  // Saved site views each pair a lot photo with the camera framed onto it, so
+  // each one is its own render pass and gets its own folder. Without any, the
+  // package describes the single set-up currently on screen.
+  const siteViews = opts.allSiteViews && ctx.applyView ? (home.siteViews || []) : [];
+  const multi = siteViews.length > 0;
+
+  // One panorama covers the whole site, however many passes there are, so it is
+  // added once and every brief points at the same file.
+  const pano = home.panorama || {};
+  const panoBackdrop = usingPanorama(stage, pano);
+  let panoFile = null;
+  if (opts.lotPhoto && panoBackdrop && pano.src) {
+    panoFile = `10-lot-panorama.${dataUrlExt(pano.src, 'jpg')}`;
+    add(panoFile, dataUrlToBytes(pano.src),
+      'the lot as a 360 panorama — the source of truth for the site. The hero plate is a view out of it, from inside it.');
   }
 
-  // ---- 2. the hero plate: the composite the user framed --------------------
-  const framing = measureFraming(stage, home, viewName);
-  const heroCanvas = plateCanvas(stage, home, scene, state.export, viewName || 'hero', {
-    alpha: false,
-    captionFile: `20-massing-hero.png`,
-  });
-  add('20-massing-hero.png', await canvasToPngBytes(heroCanvas),
-    'the massing model framed and scaled the way it should sit on the lot — match this placement, angle and size.');
+  /**
+   * The pair that actually produces a render: the lot photo and the massing
+   * plate framed from the same position. `prefix` is '' at the root or
+   * `views/NN-name/` inside a per-view folder.
+   */
+  const addRenderPass = async (prefix, names, collect) => {
+    const passLotPhoto = home.sitePhoto || {};
+    // A panorama is already wrapped around the site, so the hero plate below is
+    // a view out of the real lot and there is no separate flat backdrop to
+    // attach. One panorama covers every pass, so it sits at the root — see the
+    // shared entry above, not here.
+    if (opts.lotPhoto && !panoBackdrop && passLotPhoto.src) {
+      const ext = dataUrlExt(passLotPhoto.src, 'jpg');
+      collect(`${names.lot}.${ext}`, dataUrlToBytes(passLotPhoto.src),
+        'the empty lot — the source of truth for the site. Do not re-render it.');
+    }
+    const passFraming = measureFraming(stage, home, viewName);
+    const hero = plateCanvas(stage, home, scene, state.export, viewName || 'hero', {
+      alpha: false,
+      captionFile: `${names.hero}.png`,
+    });
+    collect(`${names.hero}.png`, await canvasToPngBytes(hero),
+      'the massing model framed and scaled the way it should sit on the lot — match this placement, angle and size.');
+    if (opts.cutout) {
+      const cut = plateCanvas(stage, home, scene, state.export, viewName || 'hero', { alpha: true });
+      collect(`${names.cutout}.png`, await canvasToPngBytes(cut),
+        'the same view as a transparent cutout, for compositing directly onto the lot photo.');
+    }
+    return passFraming;
+  };
 
-  if (opts.cutout) {
-    const cut = plateCanvas(stage, home, scene, state.export, viewName || 'hero', { alpha: true });
-    add('21-massing-hero-cutout.png', await canvasToPngBytes(cut),
-      'the same view as a transparent cutout, for compositing directly onto the lot photo.');
+  // ---- 1 & 2. the render pass(es) -----------------------------------------
+  let framing = null;
+  const passes = [];
+  const backdrop = panoBackdrop ? 'panorama' : 'photo';
+
+  if (!multi) {
+    framing = await addRenderPass('', { lot: '10-lot-photo', hero: '20-massing-hero', cutout: '21-massing-hero-cutout' }, add);
+  } else {
+    for (let i = 0; i < siteViews.length; i++) {
+      const view = siteViews[i];
+      const dir = `views/${pad2(i + 1)}-${slug(view.name)}`;
+      const local = [];
+      ctx.applyView(view);
+      const f = await addRenderPass(
+        dir,
+        { lot: 'lot-photo', hero: 'hero', cutout: 'hero-cutout' },
+        (file, data, role) => {
+          files.push({ name: `${folder}/${dir}/${file}`, data });
+          if (role) local.push({ index: local.length + 1, file, role });
+        },
+      );
+      passes.push({ view, dir, framing: f, manifest: local, backdrop });
+      if (!framing) framing = f;
+    }
+    ctx.restore?.();
   }
 
   // ---- 3. geometry plates -------------------------------------------------
@@ -131,7 +234,10 @@ export async function buildRenderPackage({ stage, state, viewName, options, save
     if (opts.contactSheet) {
       const sheet = contactSheetCanvas(stage, home, scene, state.export);
       add('30-elevation-set.png', await canvasToPngBytes(sheet.canvas),
-        'four-view contact sheet — GEOMETRY REFERENCE ONLY. Do not render these four views; there is one lot photo, so there is one render.');
+        'four-view contact sheet — GEOMETRY REFERENCE ONLY. Read the home off it; do not render these four views. '
+        + (panoBackdrop
+          ? 'The hero plate is the one framing to render.'
+          : 'There is one lot photo, so there is one render.'));
     }
 
     if (opts.elevations) {
@@ -165,17 +271,39 @@ export async function buildRenderPackage({ stage, state, viewName, options, save
     add(`51-site-plan-original.pdf`, dataUrlToBytes(plan.pdf));
   }
 
-  // ---- 5. the brief -------------------------------------------------------
-  const brief = buildBrief({
-    home,
-    scene,
-    framing,
-    site: home.brief || {},
-    manifest,
-    savedAt,
-  });
-  files.unshift({ name: `${folder}/00-README.md`, data: README(home.name || 'Untitled model') });
-  files.splice(1, 0, { name: `${folder}/01-BRIEF.md`, data: brief });
+  // ---- 5. the brief(s) ----------------------------------------------------
+  // With saved site views there is one brief per view, inside its own folder,
+  // because each one is a separate render pass against a different lot photo.
+  // The shared plates are referenced up two levels from there.
+  const sharedRefs = manifest.map((m) => ({ ...m, file: `../../${m.file}` }));
+
+  for (const p of passes) {
+    // The site comes first in the attachment list, then this pass's own plates,
+    // then the shared geometry — the order the brief tells the model to use.
+    const lead = sharedRefs.filter((m) => panoFile && m.file.endsWith(panoFile));
+    const rest = sharedRefs.filter((m) => !lead.includes(m));
+    const localManifest = [...lead, ...p.manifest, ...rest]
+      .map((m, i) => ({ ...m, index: i + 1 }));
+    files.push({
+      name: `${folder}/${p.dir}/BRIEF.md`,
+      data: buildBrief({
+        home,
+        scene,
+        framing: p.framing,
+        site: { ...(home.brief || {}), backdrop: p.backdrop },
+        manifest: localManifest,
+        savedAt,
+        passName: p.view.name,
+      }),
+    });
+  }
+
+  const brief = multi
+    ? buildViewIndex(home, passes)
+    : buildBrief({ home, scene, framing, site: { ...(home.brief || {}), backdrop }, manifest, savedAt });
+
+  files.unshift({ name: `${folder}/00-README.md`, data: README(home.name || 'Untitled model', multi, panoBackdrop) });
+  files.splice(1, 0, { name: `${folder}/${multi ? '01-INDEX.md' : '01-BRIEF.md'}`, data: brief });
 
   // ---- 6. the project file, so the package can be reproduced --------------
   if (opts.projectJson) {
@@ -192,7 +320,7 @@ export async function buildRenderPackage({ stage, state, viewName, options, save
     });
   }
 
-  return { files, manifest, brief, folder, framing };
+  return { files, manifest, brief, folder, framing, passes };
 }
 
 /** Build the package and hand it to the user as a single .zip. */

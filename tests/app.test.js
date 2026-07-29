@@ -6,6 +6,9 @@ import { zipStore, crc32, dataUrlToBytes, dataUrlExt } from '../src/zip.js';
 import {
   buildBrief, colorName, sidingLabel, describeLighting, wallSummary, openingSchedule,
 } from '../src/brief.js';
+import {
+  captureSiteView, applySiteView, cycleSiteView, indexOfView, uniqueViewName,
+} from '../src/siteviews.js';
 import { derived, wallFrames, fmtAllUnits, buildHome, getWallHeight, dormerSize, applyHeadAlign } from '../src/build.js';
 import { createSidingMaterial } from '../src/textures.js';
 import { History, describeChange } from '../src/history.js';
@@ -874,4 +877,103 @@ test('32. Site Plan And Brief Blanks Survive A Save/Reopen Round Trip', () => {
   const old = migrate({ dimensions: defaultHome().dimensions, openings: [] });
   assert.equal(old.sitePlan.src, null);
   assert.deepEqual(old.brief, defaultBrief());
+});
+
+// ---------------------------------------------------------------------------
+// Saved site views and the 360 panorama
+// ---------------------------------------------------------------------------
+
+test('33. Site Views Capture Only The Photo Fields, And Cycle With Wrap', () => {
+  const a = captureSiteView({
+    name: 'From the gate',
+    sitePhoto: { src: 'data:x', scale: 2, panX: -8, show: true, transient: 'nope' },
+    camera: { type: 'persp', position: [1, 2, 3] },
+    viewLabel: '¾ front-L',
+  });
+  const b = captureSiteView({ name: 'From the road', sitePhoto: { src: 'data:y' } });
+
+  assert.equal(a.photo.scale, 2);
+  assert.equal(a.photo.panX, -8);
+  assert.equal(a.photo.transient, undefined, 'Only the documented photo fields are stored');
+  assert.equal(a.viewLabel, '¾ front-L');
+  assert.notEqual(a.id, b.id, 'Views get distinct ids');
+  assert.equal(captureSiteView({ sitePhoto: {} }).name, 'Untitled view');
+
+  const list = [a, b];
+  assert.equal(cycleSiteView(list, a.id, 1).id, b.id);
+  assert.equal(cycleSiteView(list, b.id, 1).id, a.id, 'Forward wraps');
+  assert.equal(cycleSiteView(list, a.id, -1).id, b.id, 'Backward wraps');
+  // From an unsaved set-up both directions still land somewhere useful.
+  assert.equal(cycleSiteView(list, null, 1).id, a.id);
+  assert.equal(cycleSiteView(list, null, -1).id, b.id);
+  assert.equal(cycleSiteView([], null, 1), null, 'Nothing to cycle');
+  assert.equal(indexOfView(list, b.id), 1);
+
+  // Applying a view overlays its photo onto the live one, leaving the rest.
+  const applied = applySiteView(a, { opacity: 0.4, rotY: 12 });
+  assert.equal(applied.src, 'data:x');
+  assert.equal(applied.scale, 2);
+  assert.equal(applied.rotY, 12, 'Untouched live fields survive');
+});
+
+test('34. Site View Names Are Made Unique — They Become Package Folders', () => {
+  const a = captureSiteView({ name: 'North', sitePhoto: {} });
+  const b = captureSiteView({ name: 'North', sitePhoto: {} });
+  b.name = uniqueViewName([a], 'North');
+  assert.equal(b.name, 'North 2');
+  assert.equal(uniqueViewName([a, b], 'North'), 'North 3');
+  // Clash detection ignores case; the typed casing is what gets kept.
+  assert.equal(uniqueViewName([a, b], 'north'), 'north 3');
+  assert.equal(uniqueViewName([a], 'North', a.id), 'North', 'Renaming itself is not a clash');
+  assert.equal(uniqueViewName([], ''), 'Untitled view');
+});
+
+test('35. Site Views And Panorama Round-Trip Through A Project File', () => {
+  const home = defaultHome();
+  home.siteViews = [
+    captureSiteView({ name: 'From the gate', sitePhoto: { src: 'data:a', panY: 4 }, camera: { type: 'persp' }, viewLabel: '¾ front-L' }),
+    captureSiteView({ name: 'From the road', sitePhoto: { src: 'data:b' }, camera: { type: 'ortho' } }),
+  ];
+  home.activeSiteViewId = home.siteViews[1].id;
+  home.panorama = { ...home.panorama, src: 'data:pano', yawDeg: 37, radiusFt: 420, heightFt: 5 };
+
+  const file = buildProject({ home, scene: defaultScene(), exportOpts: defaultExport(), view: null });
+  const read = readProject(JSON.parse(JSON.stringify(file)));
+
+  assert.equal(read.home.siteViews.length, 2);
+  assert.equal(read.home.siteViews[0].name, 'From the gate');
+  assert.equal(read.home.siteViews[0].photo.panY, 4);
+  assert.equal(read.home.siteViews[0].camera.type, 'persp');
+  assert.equal(read.home.activeSiteViewId, home.siteViews[1].id, 'Which view was active is kept');
+  assert.equal(read.home.panorama.yawDeg, 37);
+  assert.equal(read.home.panorama.radiusFt, 420);
+
+  // An active id pointing at a view that is gone must not survive.
+  const orphaned = migrate({ ...home, siteViews: [], activeSiteViewId: 'ghost' });
+  assert.equal(orphaned.activeSiteViewId, null);
+
+  // Files written before any of this still open with sane defaults.
+  const old = migrate({ dimensions: defaultHome().dimensions, openings: [] });
+  assert.deepEqual(old.siteViews, []);
+  assert.equal(old.panorama.src, null);
+  assert.equal(old.panorama.radiusFt, 300);
+});
+
+test('36. A Panorama Backdrop Changes What The Brief Asks For', () => {
+  const home = defaultHome();
+  const scene = defaultScene();
+  const framing = { left: 0.2, right: 0.7, ridgeTop: 0.5, nearCorner: 'front-left corner', visibleWalls: [], viewLabel: 'x' };
+
+  const flat = buildBrief({ home, scene, framing, site: { backdrop: 'photo' } });
+  assert.ok(flat.includes('Use the lot photo as the source of truth for the site'));
+  assert.ok(!flat.includes('already behind the home'));
+
+  const pano = buildBrief({ home, scene, framing, site: { backdrop: 'panorama' } });
+  assert.ok(pano.includes('The lot is already behind the home in the hero plate'));
+  assert.ok(pano.includes('360 panorama'));
+
+  // A named pass says which one it is, so folders do not get mixed.
+  const pass = buildBrief({ home, scene, framing, site: {}, passName: 'From the gate' });
+  assert.ok(pass.includes('From the gate'));
+  assert.ok(pass.includes('do not mix their files'));
 });

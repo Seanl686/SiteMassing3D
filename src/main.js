@@ -14,6 +14,9 @@ import { exportRenderPackage, buildRenderPackage } from './package.js';
 import { buildBrief } from './brief.js';
 import { measureFraming } from './framing.js';
 import { loadSitePlan, isPdf } from './siteplan.js';
+import {
+  captureSiteView, applySiteView, cycleSiteView, indexOfView, uniqueViewName, suggestViewName,
+} from './siteviews.js';
 
 const STORE_KEY = 'sitemassing3d.v1';
 
@@ -86,6 +89,14 @@ function rebuild() {
     stage.setCameraDistance(sp.camDist);
   }
 
+  // The panorama is geometry centred on the site, so it has to follow the same
+  // ground baseline the home does. "Block landscape" takes it off with the rest.
+  panoShowing = stage.setPanorama(
+    state.scene.blockLandscape ? null : state.home.panorama,
+    baseY,
+    () => { updatePanoStatus(); },
+  );
+
   stage.applySceneOpts(state.scene, state.home.dimensions);
   showGizmo();
   updateHud();
@@ -143,12 +154,15 @@ function syncStageBackdrop() {
   stageEl.style.background = state.scene.bgVisible === false ? '' : state.scene.bg;
 }
 
+/** True while the 360 wrap is up; the flat plate stands down for it. */
+let panoShowing = false;
+
 function updateSitePhotoPlate() {
   syncStageBackdrop();
   const bg = $('sitePhotoBg');
   if (!bg) return;
   const sp = state.home.sitePhoto;
-  if (!sp || !sp.src || !sp.show || state.scene.blockLandscape) {
+  if (!sp || !sp.src || !sp.show || panoShowing || state.scene.blockLandscape) {
     bg.style.display = 'none';
     if (state.scene) stage.scene.background = state.scene.bgVisible === false ? null : new THREE.Color(state.scene.bg);
     return;
@@ -377,6 +391,281 @@ function updateHud() {
 }
 
 // ---------------------------------------------------------------------------
+// 360 panorama
+// ---------------------------------------------------------------------------
+
+const panoFields = [
+  ['pn_yaw', 'yawDeg'], ['pn_tilt', 'tiltDeg'], ['pn_radius', 'radiusFt'],
+  ['pn_height', 'heightFt'], ['pn_brightness', 'brightness'], ['pn_opacity', 'opacity'],
+];
+
+function updatePanoStatus() {
+  const el = $('panoStatus');
+  if (!el) return;
+  const p = state.home.panorama || {};
+  if (!p.src) {
+    el.textContent = 'No panorama loaded. Any equirectangular 360 shot works — a phone pano app, an Insta360, or a Street View export.';
+    return;
+  }
+  const dims = p.width ? `${p.width}×${p.height}` : 'loaded';
+  // A true equirect is 2:1. Anything else will not wrap evenly, and the usual
+  // cause is a cropped or partial pano, which is worth saying out loud.
+  const aspect = p.width && p.height ? p.width / p.height : 2;
+  const warn = Math.abs(aspect - 2) > 0.08
+    ? ` — this is ${aspect.toFixed(2)}:1, not the 2:1 an equirectangular pano needs, so it will wrap unevenly.`
+    : '';
+  el.textContent = `${p.name || 'Panorama'} — ${dims}${warn}`;
+}
+
+function bindPanorama() {
+  if ($('filePanorama')) {
+    $('filePanorama').addEventListener('change', (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      // 4096 on the long edge: a raw 11k pano is 30 MB of base64 and would blow
+      // localStorage, but 1600 (the flat-photo cap) reads as mush once it is
+      // stretched across a full 360 degrees.
+      downscaleImage(f, 4096, 0.86).then((dataUrl) => {
+        const img = new Image();
+        img.onload = () => {
+          state.home.panorama = {
+            ...state.home.panorama,
+            src: dataUrl, show: true, name: f.name,
+            width: img.naturalWidth, height: img.naturalHeight,
+          };
+          if ($('pn_show')) $('pn_show').checked = true;
+          rebuild();
+          updatePanoStatus();
+        };
+        img.src = dataUrl;
+      }).catch(() => alert('Could not read that panorama.'));
+      e.target.value = '';
+    });
+  }
+
+  for (const [id, key] of panoFields) {
+    if (!$(id)) continue;
+    $(id).addEventListener('input', (e) => {
+      const v = parseFloat(e.target.value);
+      if (!Number.isFinite(v)) return;
+      state.home.panorama[key] = v;
+      rebuild();
+    });
+  }
+
+  if ($('pn_show')) {
+    $('pn_show').addEventListener('change', (e) => {
+      state.home.panorama.show = e.target.checked;
+      rebuild();
+      updateSitePhotoPlate();
+    });
+  }
+
+  if ($('btnPanoSpin')) {
+    $('btnPanoSpin').addEventListener('click', () => {
+      stage.rotateView(45);
+      updateFramingReadout();
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Saved site views
+//
+// One lot photo renders one view, so a site shot from several positions is
+// several complete set-ups — photo, alignment and camera together. These store
+// and restore them; the render package renders one folder per view.
+// ---------------------------------------------------------------------------
+
+function activeSiteView() {
+  return state.home.siteViews.find((v) => v.id === state.home.activeSiteViewId) || null;
+}
+
+function updateSiteViewBadge() {
+  const bar = $('siteViewBar');
+  const badge = $('siteViewBadge');
+  const has = state.home.siteViews.length > 0;
+  if (bar) bar.style.display = has ? '' : 'none';
+  if (!badge) return;
+  const active = activeSiteView();
+  if (active) {
+    const at = state.home.siteViews.indexOf(active) + 1;
+    badge.textContent = `${at}/${state.home.siteViews.length} · ${active.name}`;
+    badge.classList.remove('unsaved');
+  } else {
+    badge.textContent = has ? 'Unsaved set-up' : 'No site view';
+    badge.classList.add('unsaved');
+  }
+}
+
+/** One row per saved view: thumbnail, editable name, and its own actions. */
+function renderSiteViewList() {
+  const host = $('siteViewList');
+  if (!host) return;
+  host.textContent = '';
+  const views = state.home.siteViews;
+
+  if (!views.length) {
+    const p = document.createElement('p');
+    p.className = 'hint';
+    p.textContent = 'No site views saved yet. Load a lot photo, align it, frame the camera, then "+ Save current".';
+    host.appendChild(p);
+    updateSiteViewBadge();
+    return;
+  }
+
+  for (const view of views) {
+    const row = document.createElement('div');
+    row.className = 'site-view' + (view.id === state.home.activeSiteViewId ? ' active' : '');
+    row.title = 'Click to restore this lot photo, its alignment and its camera';
+
+    if (view.photo?.src) {
+      const img = document.createElement('img');
+      img.className = 'thumb';
+      img.src = view.photo.src;
+      img.alt = '';
+      row.appendChild(img);
+    } else {
+      const box = document.createElement('div');
+      box.className = 'thumb empty';
+      box.textContent = 'no photo';
+      row.appendChild(box);
+    }
+
+    const body = document.createElement('div');
+    body.className = 'sv-body';
+
+    const name = document.createElement('input');
+    name.className = 'sv-name';
+    name.type = 'text';
+    name.value = view.name;
+    name.addEventListener('click', (e) => e.stopPropagation());
+    name.addEventListener('change', () => {
+      view.name = uniqueViewName(views, name.value, view.id);
+      name.value = view.name;
+      updateSiteViewBadge();
+      save();
+    });
+    body.appendChild(name);
+
+    const meta = document.createElement('div');
+    meta.className = 'sv-meta';
+    const cam = view.camera;
+    meta.textContent = [
+      view.viewLabel || cam?.preset || 'free camera',
+      cam?.type === 'ortho' ? 'orthographic' : 'perspective',
+      view.photo?.src ? 'lot photo' : 'no lot photo',
+    ].join(' · ');
+    body.appendChild(meta);
+    row.appendChild(body);
+
+    const actions = document.createElement('div');
+    actions.className = 'sv-actions';
+
+    const upd = document.createElement('button');
+    upd.textContent = '⭯';
+    upd.title = 'Overwrite this view with the current photo, alignment and camera';
+    upd.addEventListener('click', (e) => { e.stopPropagation(); updateSiteViewFromLive(view.id); });
+    actions.appendChild(upd);
+
+    const del = document.createElement('button');
+    del.textContent = '✕';
+    del.title = 'Delete this site view';
+    del.addEventListener('click', (e) => { e.stopPropagation(); deleteSiteView(view.id); });
+    actions.appendChild(del);
+
+    row.appendChild(actions);
+    row.addEventListener('click', () => applySiteViewById(view.id));
+    host.appendChild(row);
+  }
+  updateSiteViewBadge();
+}
+
+function addSiteView() {
+  const views = state.home.siteViews;
+  const view = captureSiteView({
+    name: suggestViewName(views, currentViewName),
+    sitePhoto: state.home.sitePhoto,
+    camera: stage.cameraState(),
+    viewLabel: currentViewName,
+    savedAt: new Date().toISOString(),
+  });
+  views.push(view);
+  state.home.activeSiteViewId = view.id;
+  renderSiteViewList();
+  save();
+  setPackageStatus(`Saved site view "${view.name}". The render package can render every saved view in one pass.`);
+}
+
+function updateSiteViewFromLive(id) {
+  const views = state.home.siteViews;
+  const at = indexOfView(views, id);
+  if (at < 0) return;
+  views[at] = captureSiteView({
+    id,
+    name: views[at].name,
+    sitePhoto: state.home.sitePhoto,
+    camera: stage.cameraState(),
+    viewLabel: currentViewName,
+    savedAt: new Date().toISOString(),
+  });
+  state.home.activeSiteViewId = id;
+  renderSiteViewList();
+  save();
+  setPackageStatus(`Updated site view "${views[at].name}".`);
+}
+
+function deleteSiteView(id) {
+  const views = state.home.siteViews;
+  const at = indexOfView(views, id);
+  if (at < 0) return;
+  if (!confirm(`Delete the site view "${views[at].name}"? The lot photo it holds goes with it.`)) return;
+  views.splice(at, 1);
+  if (state.home.activeSiteViewId === id) state.home.activeSiteViewId = null;
+  renderSiteViewList();
+  save();
+}
+
+/**
+ * Restore a saved set-up. The camera goes back AFTER the rebuild: rebuild()
+ * re-applies sitePhoto.camDist to the perspective camera, which would otherwise
+ * pull the restored framing off the photo it was aligned to.
+ */
+function applySiteViewById(id) {
+  const view = state.home.siteViews.find((v) => v.id === id);
+  if (!view) return;
+  state.home.sitePhoto = applySiteView(view, state.home.sitePhoto);
+  state.home.activeSiteViewId = view.id;
+  if (view.viewLabel) currentViewName = view.viewLabel;
+  syncForm();
+  rebuild();
+  if (view.camera && stage.applyCameraState(view.camera)) {
+    // The frustum was rebuilt for the aspect the view was saved at; re-apply
+    // the live one so the plate and the photo stay registered.
+    fit();
+  }
+  updateSitePhotoPlate();
+  updateFramingReadout();
+  renderSiteViewList();
+  save();
+}
+
+function cycleSiteViews(step) {
+  const next = cycleSiteView(state.home.siteViews, state.home.activeSiteViewId, step);
+  if (next) applySiteViewById(next.id);
+}
+
+function bindSiteViews() {
+  if ($('btnAddSiteView')) $('btnAddSiteView').addEventListener('click', addSiteView);
+  for (const id of ['btnPrevSiteView', 'btnPrevSiteViewBar']) {
+    if ($(id)) $(id).addEventListener('click', () => cycleSiteViews(-1));
+  }
+  for (const id of ['btnNextSiteView', 'btnNextSiteViewBar']) {
+    if ($(id)) $(id).addEventListener('click', () => cycleSiteViews(1));
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Render package
 // ---------------------------------------------------------------------------
 
@@ -389,6 +678,7 @@ const packageChecks = [
   ['pk_contactSheet', 'contactSheet'], ['pk_elevations', 'elevations'],
   ['pk_cutout', 'cutout'], ['pk_lotPhoto', 'lotPhoto'], ['pk_sitePlan', 'sitePlan'],
   ['pk_originalPdf', 'originalPdf'], ['pk_projectJson', 'projectJson'],
+  ['pk_allSiteViews', 'allSiteViews'],
 ];
 
 /** Original PDFs are kept for the human, not the model — a 40 MB one is not
@@ -439,6 +729,34 @@ function currentBrief() {
     site: state.home.brief || {},
     savedAt: new Date().toISOString().slice(0, 10),
   });
+}
+
+/**
+ * Lets the packager step through the saved site views and put the live set-up
+ * back afterwards. Applying a view has to go through rebuild(): the home group's
+ * position, heading and ground baseline all come off sitePhoto, so a plate
+ * rendered without it would be framed on the previous view's lot.
+ */
+function packageRenderContext() {
+  const savedPhoto = { ...state.home.sitePhoto };
+  const savedCamera = stage.cameraState();
+  const savedViewName = currentViewName;
+  const savedActive = state.home.activeSiteViewId;
+  return {
+    applyView: (view) => {
+      state.home.sitePhoto = applySiteView(view, state.home.sitePhoto);
+      if (view.viewLabel) currentViewName = view.viewLabel;
+      rebuild();
+      if (view.camera) stage.applyCameraState(view.camera);
+    },
+    restore: () => {
+      state.home.sitePhoto = savedPhoto;
+      currentViewName = savedViewName;
+      state.home.activeSiteViewId = savedActive;
+      rebuild();
+      stage.applyCameraState(savedCamera);
+    },
+  };
 }
 
 function setPackageStatus(msg) {
@@ -561,9 +879,14 @@ function bindPackage() {
           viewName: currentViewName,
           options: packageOptions(),
           savedAt: new Date().toISOString().slice(0, 10),
+          ...packageRenderContext(),
         });
         const kb = Math.round(res.bytes / 1024);
-        setPackageStatus(`${res.filename} — ${res.files.length} files, ${kb} KB. ${res.framing ? 'Framing measured off the current camera.' : 'Camera framing could not be measured; the brief uses your typed blanks.'}`);
+        const passes = res.passes?.length
+          ? `${res.passes.length} render pass${res.passes.length === 1 ? '' : 'es'}, one per site view. `
+          : '';
+        setPackageStatus(`${res.filename} — ${passes}${res.files.length} files, ${kb} KB. ${res.framing ? 'Framing measured off the camera.' : 'Camera framing could not be measured; the brief uses your typed blanks.'}`);
+        renderSiteViewList();
       } catch (err) {
         console.error(err);
         setPackageStatus('');
@@ -731,6 +1054,12 @@ function syncForm() {
   }
   if ($('sp_planPage')) $('sp_planPage').value = state.home.sitePlan?.page ?? 1;
   updateSitePlanStatus();
+  for (const [id, key] of panoFields) {
+    if ($(id)) $(id).value = state.home.panorama?.[key] ?? 0;
+  }
+  if ($('pn_show')) $('pn_show').checked = state.home.panorama?.show !== false;
+  updatePanoStatus();
+  renderSiteViewList();
 }
 
 /** Swap in a home spec from disk or the library and reframe on it. */
@@ -771,6 +1100,8 @@ function loadProject(raw) {
 
 function bind() {
   initAccordions();
+  bindPanorama();
+  bindSiteViews();
   bindPackage();
 
   const toggleSidebar = () => {
@@ -1305,6 +1636,18 @@ function bind() {
         return;
       }
     }
+    // [ and ] cycle the saved site views, but not while a field has focus —
+    // they are printable characters.
+    if ((e.key === '[' || e.key === ']') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const typing = e.target instanceof HTMLInputElement
+        || e.target instanceof HTMLTextAreaElement
+        || e.target instanceof HTMLSelectElement;
+      if (!typing) {
+        e.preventDefault();
+        cycleSiteViews(e.key === ']' ? 1 : -1);
+        return;
+      }
+    }
     if (e.key === 'Escape') { pendingAdd = null; canvas.style.cursor = ''; }
     if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIds.size && e.target === document.body) {
       state.home.openings = state.home.openings.filter((o) => !selectedIds.has(o.id));
@@ -1656,9 +1999,17 @@ function pruneImagePool() {
   for (const snap of history.snapshots()) {
     if (snap.home?.plan?.srcKey) live.add(snap.home.plan.srcKey);
     if (snap.home?.sitePhoto?.srcKey) live.add(snap.home.sitePhoto.srcKey);
+    for (const v of snap.home?.siteViews || []) {
+      if (v?.photo?.srcKey) live.add(v.photo.srcKey);
+    }
+    if (snap.home?.panorama?.srcKey) live.add(snap.home.panorama.srcKey);
   }
+  if (state.home.panorama?.src) live.add(poolKey(state.home.panorama.src));
   if (state.home.plan?.src) live.add(poolKey(state.home.plan.src));
   if (state.home.sitePhoto?.src) live.add(poolKey(state.home.sitePhoto.src));
+  for (const v of state.home.siteViews || []) {
+    if (v.photo?.src) live.add(poolKey(v.photo.src));
+  }
   for (const key of [...imagePool.keys()]) if (!live.has(key)) imagePool.delete(key);
 }
 
@@ -1673,6 +2024,14 @@ function snapshotState() {
   // The site plan is an attachment, not a modelling decision — undo should not
   // put a previous PDF page back, and its megabytes have no business on the stack.
   home.sitePlan = { ...home.sitePlan, src: undefined, pdf: undefined };
+  // Each saved site view carries its own lot photo. Same rule as the live one:
+  // the photo goes to the pool and the snapshot keeps only its key, or a
+  // four-view site would put four full-size images on every undo step.
+  home.siteViews = (home.siteViews || []).map((v) => ({
+    ...v,
+    photo: { ...v.photo, src: undefined, srcKey: poolKey(v.photo?.src) },
+  }));
+  home.panorama = { ...home.panorama, src: undefined, srcKey: poolKey(home.panorama?.src) };
   const scene = { ...state.scene, eye: undefined };
   return JSON.parse(JSON.stringify({ home, scene }));
 }
@@ -1688,6 +2047,14 @@ function applySnapshot(snap) {
     // Carry the camera readings across untouched — they are not part of history.
     home.sitePhoto.camDist = state.home.sitePhoto?.camDist ?? home.sitePhoto.camDist;
     home.sitePlan = { ...home.sitePlan, ...(state.home.sitePlan || {}) };
+    // migrate() has already normalised the views; only their pooled photos are
+    // missing, and the snapshot's parallel entry carries the key.
+    home.siteViews = home.siteViews.map((v, i) => {
+      const key = snap.home.siteViews?.[i]?.photo?.srcKey;
+      return { ...v, photo: { ...v.photo, src: key ? imagePool.get(key) ?? null : null } };
+    });
+    const panoKey = snap.home.panorama?.srcKey;
+    home.panorama = { ...home.panorama, src: panoKey ? imagePool.get(panoKey) ?? null : null };
     state.home = home;
     state.scene = { ...defaultScene(), ...snap.scene, eye: state.scene.eye };
 
@@ -1768,6 +2135,8 @@ function save() {
           plan: { ...state.home.plan, src: null },
           sitePhoto: { ...state.home.sitePhoto, src: null },
           sitePlan: { ...state.home.sitePlan, src: null, pdf: null },
+          siteViews: state.home.siteViews.map((v) => ({ ...v, photo: { ...v.photo, src: null } })),
+          panorama: { ...state.home.panorama, src: null },
         },
       };
       localStorage.setItem(STORE_KEY, JSON.stringify(lean));
@@ -1856,8 +2225,11 @@ window.__app = {
   // Package internals, so a package can be inspected without going through the
   // save dialog: __app.buildPackage().then(p => p.files.map(f => f.name)).
   buildPackage: (options) => buildRenderPackage({
-    stage, state, viewName: currentViewName, options, savedAt: new Date().toISOString().slice(0, 10),
+    stage, state, viewName: currentViewName, options,
+    savedAt: new Date().toISOString().slice(0, 10),
+    ...packageRenderContext(),
   }),
+  siteViews: { add: addSiteView, apply: applySiteViewById, cycle: cycleSiteViews },
   brief: currentBrief,
   framing: () => measureFraming(stage, state.home, currentViewName),
 };
