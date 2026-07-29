@@ -24,6 +24,7 @@ import {
 } from '../src/assets.js';
 import {
   rgbToHex, hexToRgb, luma, saturation, sampleAverage, samplePixels, quantize, suggestFinishRoles,
+  zoomAnchoredPan, wheelZoomFactor,
 } from '../src/eyedrop.js';
 
 test('1. Defaults & State Initialization', () => {
@@ -1397,4 +1398,70 @@ test('53. Sampled Pixels Are Taken On A Fixed Stride, Never At Random', () => {
   assert.deepEqual(first, second, 'a re-opened photo must not shuffle its suggested colours');
   assert.ok(first.length > 0 && first.length <= 200);
   assert.ok(first.every((p) => p.length === 3));
+});
+
+test('54. Zoom Holds The Point Under The Cursor Still', () => {
+  const frame = { w: 600, h: 400 };
+  const image = { w: 2000, h: 1500 };
+  const base = Math.min(frame.w / image.w, frame.h / image.h); // fit
+  const anchor = { x: 150, y: 90 };
+
+  // Where the anchor is pointing before the zoom.
+  const imageUnder = (scale, pan) => ({
+    x: (anchor.x - ((frame.w - image.w * scale) / 2 + pan.x)) / scale,
+    y: (anchor.y - ((frame.h - image.h * scale) / 2 + pan.y)) / scale,
+  });
+
+  let scale = base;
+  let pan = { x: 0, y: 0 };
+  const target = imageUnder(scale, pan);
+
+  // Zoom in over several steps, as a wheel would.
+  for (const z of [1.4, 2.1, 5, 12]) {
+    const nextScale = base * z;
+    pan = zoomAnchoredPan({ frame, image, scale, pan, nextScale, anchor });
+    scale = nextScale;
+    const now = imageUnder(scale, pan);
+    assert.ok(Math.abs(now.x - target.x) < 1e-6, `x drifted at ${z}x: ${now.x} vs ${target.x}`);
+    assert.ok(Math.abs(now.y - target.y) < 1e-6, `y drifted at ${z}x: ${now.y} vs ${target.y}`);
+  }
+
+  // And back out again — the same pixel is still under the cursor.
+  pan = zoomAnchoredPan({ frame, image, scale, pan, nextScale: base, anchor });
+  const back = imageUnder(base, pan);
+  assert.ok(Math.abs(back.x - target.x) < 1e-6);
+  assert.ok(Math.abs(back.y - target.y) < 1e-6);
+
+  // With no anchor the frame centre is held instead, which is what a slider or
+  // a keyboard step should do.
+  const centred = zoomAnchoredPan({
+    frame, image, scale: base, pan: { x: 0, y: 0 }, nextScale: base * 3, anchor: null,
+  });
+  assert.ok(Math.abs(centred.x) < 1e-9 && Math.abs(centred.y) < 1e-9,
+    'a centred image zoomed about its centre needs no pan');
+});
+
+test('55. One Wheel Event Zooms The Same However The Device Reports It', () => {
+  // A notched mouse wheel: one big pixel delta per detent.
+  const notch = wheelZoomFactor({ deltaY: -100, deltaMode: 0 });
+  // The same physical detent reported as lines (Firefox).
+  const lines = wheelZoomFactor({ deltaY: -6.25, deltaMode: 1 });
+  assert.ok(Math.abs(notch - lines) < 1e-9, 'a line delta must not zoom 16x less than a pixel one');
+  assert.ok(notch > 1 && notch < 1.4, `one detent should be a modest step, got ${notch}`);
+
+  // A trackpad flick: many small deltas. One of them must barely move.
+  const nudge = wheelZoomFactor({ deltaY: -6, deltaMode: 0 });
+  assert.ok(nudge > 1 && nudge < 1.02, `a trackpad tick should be tiny, got ${nudge}`);
+  // Ten of them land in the same territory as a couple of wheel detents rather
+  // than flinging the view across the zoom range.
+  assert.ok(Math.pow(nudge, 10) < notch * notch);
+
+  // A trackpad pinch arrives as ctrl+wheel with much smaller deltas, so it gets
+  // its own rate — otherwise pinching does nothing.
+  assert.ok(wheelZoomFactor({ deltaY: -6, ctrlKey: true }) > nudge);
+
+  // Direction, and the clamp that stops a momentum burst teleporting the view.
+  assert.ok(wheelZoomFactor({ deltaY: 100 }) < 1, 'wheel down zooms out');
+  assert.equal(wheelZoomFactor({ deltaY: -100000 }), 2);
+  assert.equal(wheelZoomFactor({ deltaY: 100000 }), 0.5);
 });

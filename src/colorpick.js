@@ -15,6 +15,7 @@
 
 import {
   rgbToHex, hexToRgb, sampleAverage, samplePixels, quantize, suggestFinishRoles,
+  zoomAnchoredPan, wheelZoomFactor,
 } from './eyedrop.js';
 
 const SAMPLE_SIZES = [
@@ -45,7 +46,8 @@ function build() {
   const head = el('div', 'eyedrop-head');
   const title = el('h3', null, '🎯 Pick finishes off the photo');
   const hint = el('p', 'eyedrop-subtitle',
-    'Arm a surface on the right, then click it in the photograph. The model updates as you go.');
+    'Arm a surface on the right, then click it in the photograph — the model updates as you go. '
+    + 'Zoom with the wheel, a trackpad pinch or two fingers; drag to pan.');
   const headText = el('div');
   headText.append(title, hint);
   const close = el('button', 'eyedrop-x', '✕');
@@ -76,11 +78,21 @@ function build() {
   sizeSel.value = '2';
   sizeWrap.appendChild(sizeSel);
 
-  const zoomWrap = el('label', 'eyedrop-tool');
+  // The slider carries a 0..1 position, not a zoom factor — the mapping to zoom
+  // is logarithmic so the useful low end is not crammed into the first sixth.
+  const zoomWrap = el('label', 'eyedrop-tool zoom-tool');
   zoomWrap.append(el('span', null, 'Zoom'));
+  const zoomOut = el('button', 'zoom-step', '−');
+  zoomOut.type = 'button';
+  zoomOut.title = 'Zoom out (−)';
   const zoom = el('input');
-  zoom.type = 'range'; zoom.min = '1'; zoom.max = '8'; zoom.step = '0.1'; zoom.value = '1';
-  zoomWrap.appendChild(zoom);
+  zoom.type = 'range'; zoom.min = '0'; zoom.max = '1'; zoom.step = '0.001'; zoom.value = '0';
+  zoom.title = 'Drag to zoom. The wheel, a trackpad pinch and two fingers all work on the photo itself.';
+  const zoomIn = el('button', 'zoom-step', '+');
+  zoomIn.type = 'button';
+  zoomIn.title = 'Zoom in (+)';
+  const zoomLabel = el('span', 'zoom-label', '1.0×');
+  zoomWrap.append(zoomOut, zoom, zoomIn, zoomLabel);
 
   const advanceWrap = el('label', 'eyedrop-tool check');
   const advance = el('input');
@@ -136,7 +148,8 @@ function build() {
   ui = {
     canvas, ctx: canvas.getContext('2d'), loupe, lctx: loupe.getContext('2d'),
     readout, empty, sourceStrip, palette, targets, status,
-    sizeSel, zoom, advance, btnFit, btnScreen, btnAuto, btnReset, btnApply, btnCancel, close,
+    sizeSel, zoom, zoomIn, zoomOut, zoomLabel, advance,
+    btnFit, btnScreen, btnAuto, btnReset, btnApply, btnCancel, close,
   };
 
   bindEvents();
@@ -149,12 +162,121 @@ let fullCtx = null;
 let fullData = null;
 let fullW = 0, fullH = 0;
 
-const view = { zoom: 1, panX: 0, panY: 0, scale: 1, ox: 0, oy: 0 };
+// ---------------------------------------------------------------------------
+// The view: zoom and pan
+//
+// Zoom is the part of this that has to feel right, and there are three separate
+// ways to get it wrong:
+//
+//   - Zooming about the centre of the frame rather than the pointer. The thing
+//     being aimed at slides away exactly when it is being aimed at, which is
+//     what makes a picker feel like it is fighting you.
+//   - Treating one wheel event as one fixed step. A trackpad sends dozens of
+//     tiny deltas per flick and a notched mouse wheel sends one big one, so a
+//     per-event step is either hypersensitive or unusably coarse depending on
+//     what is plugged in. Scale by the delta, not by the event.
+//   - A linear slider, where the bottom sixth covers 1×–2× — the range people
+//     actually use — and the rest is a wasteland.
+//
+// And on a touch screen none of the above exists at all unless two-finger pinch
+// is handled explicitly: `touch-action: none` is required for the pointer
+// stream, and it also switches off the browser's own pinch.
+// ---------------------------------------------------------------------------
+
+const view = { zoom: 1, panX: 0, panY: 0, scale: 1, base: 1, ox: 0, oy: 0, w: 0, h: 0 };
+
+/** 1 = the whole photo fitted to the frame. Below that is just empty margin. */
+const MIN_ZOOM = 1;
+
+// Every pointer currently down on the canvas. Two of them is a pinch; one is a
+// drag or a pick. Mouse, pen and touch all arrive through the same stream.
+// Module scope so closing the dialog mid-gesture cannot leave a phantom finger
+// behind for the next time it opens.
+const pointers = new Map();
+let gesture = null;      // 'pan' | 'pinch'
+let moved = 0;
+let last = null;
+let origin = null;
+let pinch = null;
+let suppressTap = false;
+
+function resetGesture() {
+  pointers.clear();
+  gesture = null;
+  pinch = null;
+  last = null;
+  origin = null;
+  moved = 0;
+  suppressTap = false;
+}
+
+/**
+ * How far in it is worth going: about 24 screen pixels per image pixel. Past
+ * that the canvas is a wall of squares and the loupe is the better instrument.
+ * Derived from the image, so a 4000 px photo and an 800 px one each stop
+ * somewhere useful instead of sharing one arbitrary ceiling.
+ */
+function maxZoom() {
+  if (!fullCanvas || !view.base) return 8;
+  return Math.max(2, Math.min(60, 24 / view.base));
+}
+
+// The slider is logarithmic: equal travel gives equal proportional change, so
+// 1×–2× gets as much of the track as 20×–40×.
+const zoomFromSlider = (t) => {
+  const span = maxZoom() / MIN_ZOOM;
+  return span <= 1 ? MIN_ZOOM : MIN_ZOOM * Math.pow(span, Math.max(0, Math.min(1, t)));
+};
+const sliderFromZoom = (z) => {
+  const span = maxZoom() / MIN_ZOOM;
+  return span <= 1 ? 0 : Math.log(Math.max(MIN_ZOOM, z) / MIN_ZOOM) / Math.log(span);
+};
+
+function syncZoomUi() {
+  if (!ui) return;
+  ui.zoom.value = String(sliderFromZoom(view.zoom));
+  ui.zoomLabel.textContent = `${view.zoom < 10 ? view.zoom.toFixed(1) : Math.round(view.zoom)}×`;
+  const hi = maxZoom();
+  ui.zoomOut.disabled = !fullCanvas || view.zoom <= MIN_ZOOM + 1e-4;
+  ui.zoomIn.disabled = !fullCanvas || view.zoom >= hi - 1e-4;
+}
 
 function fitView() {
   view.zoom = 1; view.panX = 0; view.panY = 0;
-  if (ui) ui.zoom.value = '1';
   draw();
+  syncZoomUi();
+}
+
+/**
+ * Change the zoom, keeping the image point under (ax, ay) exactly where it is.
+ *
+ * `panDx`/`panDy` are applied first, so a pinch — which drags and scales in the
+ * same event — anchors against the nudged pan rather than a frame-old one, and
+ * the whole gesture costs a single redraw.
+ */
+function setZoom(next, ax, ay, panDx = 0, panDy = 0) {
+  if (!fullCanvas) return;
+  const z = Math.max(MIN_ZOOM, Math.min(maxZoom(), next));
+  const w = view.w || 1;
+  const h = view.h || 1;
+  view.panX += panDx;
+  view.panY += panDy;
+
+  if (Math.abs(z - view.zoom) > 1e-4) {
+    const next = zoomAnchoredPan({
+      frame: { w, h },
+      image: { w: fullW, h: fullH },
+      scale: view.scale,
+      pan: { x: view.panX, y: view.panY },
+      nextScale: view.base * z,
+      anchor: ax == null ? null : { x: ax, y: ay },
+    });
+    view.zoom = z;
+    view.panX = next.x;
+    view.panY = next.y;
+  }
+  draw();
+  syncZoomUi();
 }
 
 function draw() {
@@ -163,6 +285,7 @@ function draw() {
   const rect = canvas.parentElement.getBoundingClientRect();
   const w = Math.max(80, Math.floor(rect.width));
   const h = Math.max(80, Math.floor(rect.height));
+  view.w = w; view.h = h;
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
     canvas.width = Math.floor(w * dpr);
@@ -174,8 +297,9 @@ function draw() {
   ctx.clearRect(0, 0, w, h);
   if (!fullCanvas) return;
 
-  const base = Math.min(w / fullW, h / fullH);
-  view.scale = base * view.zoom;
+  view.base = Math.min(w / fullW, h / fullH);
+  view.zoom = Math.max(MIN_ZOOM, Math.min(maxZoom(), view.zoom));
+  view.scale = view.base * view.zoom;
   const dw = fullW * view.scale;
   const dh = fullH * view.scale;
   // Keep at least a third of the image on screen however far it is dragged.
@@ -186,7 +310,9 @@ function draw() {
   view.ox = (w - dw) / 2 + view.panX;
   view.oy = (h - dh) / 2 + view.panY;
 
-  ctx.imageSmoothingEnabled = view.zoom < 3;
+  // Once one image pixel covers more than a couple of screen pixels, smoothing
+  // is inventing colours between the ones being sampled. Show the real grid.
+  ctx.imageSmoothingEnabled = view.scale < 2;
   ctx.drawImage(fullCanvas, view.ox, view.oy, dw, dh);
 }
 
@@ -227,16 +353,19 @@ function drawLoupe(ix, iy) {
   );
 }
 
-function positionLoupe(x, y) {
+/**
+ * Park the loupe beside the cursor, flipping across it near an edge so it never
+ * covers the thing being sampled. A finger needs a much bigger gap than a mouse
+ * pointer — it is covering that part of the screen itself.
+ */
+function positionLoupe(x, y, gap = 18) {
   const { loupe } = ui;
   const stage = loupe.parentElement.getBoundingClientRect();
   const size = 132;
-  // Flip to the other side of the cursor near an edge so the loupe never covers
-  // the thing being sampled.
-  const lx = x + 18 + size > stage.width ? x - 18 - size : x + 18;
-  const ly = y + 18 + size > stage.height ? y - 18 - size : y + 18;
-  loupe.style.left = `${Math.max(4, lx)}px`;
-  loupe.style.top = `${Math.max(4, ly)}px`;
+  const lx = x + gap + size > stage.width ? x - gap - size : x + gap;
+  const ly = y + gap + size > stage.height ? y - gap - size : y + gap;
+  loupe.style.left = `${Math.max(4, Math.min(stage.width - size - 4, lx))}px`;
+  loupe.style.top = `${Math.max(4, Math.min(stage.height - size - 4, ly))}px`;
 }
 
 function setReadout(hex, ix, iy) {
@@ -295,6 +424,7 @@ function loadSource(source) {
     ui.empty.style.display = 'flex';
     ui.palette.textContent = '';
     draw();
+    syncZoomUi();
     return;
   }
 
@@ -320,6 +450,7 @@ function loadSource(source) {
     ui.empty.textContent = 'That image could not be decoded.';
     ui.empty.style.display = 'flex';
     draw();
+    syncZoomUi();
   };
   img.src = source.src;
 }
@@ -400,75 +531,163 @@ function renderTargets() {
 // Events
 // ---------------------------------------------------------------------------
 
-function bindEvents() {
-  const { canvas, loupe, sizeSel, zoom, btnFit, btnScreen, btnAuto, btnReset, btnApply, btnCancel, close } = ui;
+/** How far a press may wander and still count as a pick rather than a drag. */
+const tapSlop = (pointerType) => (pointerType === 'mouse' ? 4 : 12);
 
-  let dragging = false;
-  let moved = 0;
-  let last = null;
+/** Show the loupe and the readout for a point on the canvas. */
+function updateHover(x, y, pointerType = 'mouse') {
+  const { loupe } = ui;
+  if (!fullCanvas) { loupe.style.display = 'none'; setReadout(null); return; }
+  const { x: ix, y: iy } = toImage(x, y);
+  if (ix < 0 || iy < 0 || ix >= fullW || iy >= fullH) {
+    loupe.style.display = 'none';
+    setReadout(null);
+    return;
+  }
+  loupe.style.display = 'block';
+  positionLoupe(x, y, pointerType === 'mouse' ? 18 : 52);
+  drawLoupe(ix, iy);
+  setReadout(sampleAt(ix, iy)?.hex, ix, iy);
+}
+
+const hideHover = () => {
+  if (!ui) return;
+  ui.loupe.style.display = 'none';
+  setReadout(null);
+};
+
+/** Distance between the two live pointers, and the midpoint between them. */
+function pinchState() {
+  const [a, b] = [...pointers.values()];
+  if (!a || !b) return null;
+  return {
+    dist: Math.hypot(b.x - a.x, b.y - a.y),
+    mx: (a.x + b.x) / 2,
+    my: (a.y + b.y) / 2,
+  };
+}
+
+function bindEvents() {
+  const { canvas, sizeSel, zoom, zoomIn, zoomOut, btnFit, btnScreen, btnAuto, btnReset, btnApply, btnCancel, close } = ui;
 
   canvas.addEventListener('pointerdown', (e) => {
     if (!fullCanvas) return;
-    dragging = true; moved = 0; last = { x: e.offsetX, y: e.offsetY };
     canvas.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
+    if (pointers.size === 1) {
+      gesture = 'pan';
+      moved = 0;
+      suppressTap = false;
+      last = { x: e.offsetX, y: e.offsetY };
+      origin = { x: e.offsetX, y: e.offsetY };
+    } else if (pointers.size === 2) {
+      gesture = 'pinch';
+      // A second finger means the user is framing, not picking. Whatever the
+      // first finger was doing must not land as a colour when they lift.
+      suppressTap = true;
+      pinch = pinchState();
+      hideHover();
+    }
   });
 
   canvas.addEventListener('pointermove', (e) => {
     if (!fullCanvas) return;
-    if (dragging && last) {
+    const p = pointers.get(e.pointerId);
+    if (p) { p.x = e.offsetX; p.y = e.offsetY; }
+
+    if (gesture === 'pinch' && pointers.size >= 2) {
+      const now = pinchState();
+      if (pinch && now && pinch.dist > 8 && now.dist > 8) {
+        // One gesture, both transforms: the midpoint's travel pans, the spread
+        // between the fingers zooms, and the zoom is anchored on that midpoint.
+        setZoom(view.zoom * (now.dist / pinch.dist), now.mx, now.my,
+          now.mx - pinch.mx, now.my - pinch.my);
+      }
+      pinch = now;
+      return;
+    }
+
+    if (gesture === 'pan' && last && origin) {
       const dx = e.offsetX - last.x;
       const dy = e.offsetY - last.y;
-      moved += Math.abs(dx) + Math.abs(dy);
-      // Only pan once the drag is clearly a drag — otherwise a slightly shaky
-      // click would slide the photo instead of sampling it.
-      if (moved > 4) {
+      // Straight-line distance from where the press started, not the sum of
+      // every wobble — a slow hand tracing a small circle is still a click.
+      moved = Math.max(moved, Math.hypot(e.offsetX - origin.x, e.offsetY - origin.y));
+      // Only pan once the press is clearly a drag — otherwise a shaky click, or
+      // the wobble of a fingertip, slides the photo instead of sampling it.
+      if (moved > tapSlop(e.pointerType)) {
         view.panX += dx; view.panY += dy;
         last = { x: e.offsetX, y: e.offsetY };
         draw();
       }
     }
-    const { x: ix, y: iy } = toImage(e.offsetX, e.offsetY);
-    if (ix < 0 || iy < 0 || ix >= fullW || iy >= fullH) {
-      loupe.style.display = 'none';
-      setReadout(null);
-      return;
-    }
-    loupe.style.display = 'block';
-    positionLoupe(e.offsetX, e.offsetY);
-    drawLoupe(ix, iy);
-    const hit = sampleAt(ix, iy);
-    setReadout(hit?.hex, ix, iy);
+    updateHover(e.offsetX, e.offsetY, e.pointerType);
   });
 
-  const endDrag = (e) => {
-    if (!dragging) return;
-    dragging = false;
+  const endPointer = (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.delete(e.pointerId);
     try { canvas.releasePointerCapture(e.pointerId); } catch { /* pointer already gone */ }
-    if (moved <= 4 && fullCanvas) {
+
+    if (pointers.size === 1) {
+      // A finger lifted out of a pinch. Carry on panning from the survivor, and
+      // never treat the rest of that gesture as a pick.
+      const [only] = [...pointers.values()];
+      gesture = 'pan';
+      last = { x: only.x, y: only.y };
+      origin = { x: only.x, y: only.y };
+      pinch = null;
+      suppressTap = true;
+      return;
+    }
+    if (pointers.size > 1) { pinch = pinchState(); return; }
+
+    const wasTap = gesture === 'pan' && !suppressTap && moved <= tapSlop(e.pointerType);
+    gesture = null;
+    pinch = null;
+    suppressTap = false;
+    if (wasTap && fullCanvas) {
       const { x: ix, y: iy } = toImage(e.offsetX, e.offsetY);
       const hit = sampleAt(ix, iy);
       if (hit) applyPick(hit.hex);
     }
+    // A finger leaves nothing hovering behind it.
+    if (e.pointerType !== 'mouse') hideHover();
   };
-  canvas.addEventListener('pointerup', endDrag);
-  canvas.addEventListener('pointercancel', () => { dragging = false; });
-
-  canvas.addEventListener('pointerleave', () => {
-    loupe.style.display = 'none';
-    setReadout(null);
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+  canvas.addEventListener('pointerleave', (e) => {
+    if (!pointers.has(e.pointerId)) hideHover();
   });
 
   canvas.addEventListener('wheel', (e) => {
     if (!fullCanvas) return;
+    // Always: an unhandled wheel here scrolls the dialog or zooms the page.
     e.preventDefault();
-    const next = Math.max(1, Math.min(8, view.zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
-    view.zoom = next;
-    zoom.value = String(next);
-    draw();
+    // ctrlKey on a wheel event is a trackpad pinch, which both macOS and
+    // Windows synthesise; wheelZoomFactor handles that and the line/page delta
+    // modes so a trackpad and a notched wheel land on the same feel.
+    const factor = wheelZoomFactor({
+      deltaY: e.deltaY, deltaMode: e.deltaMode, ctrlKey: e.ctrlKey, pageHeight: view.h,
+    });
+    setZoom(view.zoom * factor, e.offsetX, e.offsetY);
+    updateHover(e.offsetX, e.offsetY, e.pointerType || 'mouse');
   }, { passive: false });
 
-  zoom.addEventListener('input', () => { view.zoom = parseFloat(zoom.value) || 1; draw(); });
+  // Keeping the pointer where it is means the anchor for a keyboard or button
+  // zoom is the centre of the frame, which is what the eye expects.
+  const stepZoom = (mult) => setZoom(view.zoom * mult, null, null);
+  zoomIn.addEventListener('click', () => stepZoom(1.6));
+  zoomOut.addEventListener('click', () => stepZoom(1 / 1.6));
+  zoom.addEventListener('input', () => setZoom(zoomFromSlider(parseFloat(zoom.value) || 0), null, null));
   btnFit.addEventListener('click', fitView);
+
+  dlg.addEventListener('keydown', (e) => {
+    if (e.target instanceof HTMLInputElement && e.target.type !== 'range') return;
+    if (e.key === '+' || e.key === '=') { e.preventDefault(); stepZoom(1.6); }
+    else if (e.key === '-' || e.key === '_') { e.preventDefault(); stepZoom(1 / 1.6); }
+    else if (e.key === '0') { e.preventDefault(); fitView(); }
+  });
   sizeSel.addEventListener('change', () => setStatus(`Sampling ${SAMPLE_SIZES[parseInt(sizeSel.value, 10)].label}.`));
 
   btnScreen.addEventListener('click', async () => {
@@ -505,7 +724,8 @@ function bindEvents() {
   // A dialog dismissed with Escape must not silently keep the preview colours.
   dlg.addEventListener('cancel', (e) => { e.preventDefault(); finish(false); });
 
-  addEventListener('resize', () => { if (dlg?.open) draw(); });
+  // The zoom ceiling is derived from how the image fits, so a resize moves it.
+  addEventListener('resize', () => { if (dlg?.open) { draw(); syncZoomUi(); } });
 }
 
 function finish(commit) {
@@ -516,6 +736,7 @@ function finish(commit) {
   else { s.onPreview({ ...s.original }); s.onCancel?.(); }
   // Free the working copy; these are multi-megabyte buffers.
   fullCanvas = fullCtx = fullData = null;
+  resetGesture();
   if (dlg.open) dlg.close();
 }
 
@@ -554,6 +775,7 @@ export function openColorPicker({ sources = [], targets = [], armedKey = null, o
     onCancel,
   };
 
+  resetGesture();
   renderTargets();
   setStatus(sources.length
     ? 'Tip: the three-quarter catalogue shot shows siding, trim and roof under one light — it is the best single source.'

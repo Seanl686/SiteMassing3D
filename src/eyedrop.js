@@ -135,6 +135,60 @@ export function quantize(pixels, k = 8) {
     .sort((a, b) => b.weight - a.weight);
 }
 
+// ---------------------------------------------------------------------------
+// Zoom maths
+//
+// Both of these are pure so the behaviour that decides whether the picker feels
+// responsive or feels like it is fighting you can actually be tested.
+// ---------------------------------------------------------------------------
+
+/**
+ * The pan that keeps the image point under `anchor` under `anchor` after the
+ * scale changes.
+ *
+ * Zooming about the centre of the frame instead of the pointer is the single
+ * thing that makes a picker unusable: the pixel being aimed at slides away
+ * exactly when it is being aimed at, so every zoom needs a corrective drag.
+ *
+ * The image is drawn centred, offset by the pan:
+ *   ox = (frame.w - image.w * scale) / 2 + pan.x
+ * so the image point under the anchor is (anchor.x - ox) / scale, and holding it
+ * still is a matter of solving that same equation the other way round.
+ */
+export function zoomAnchoredPan({ frame, image, scale, pan, nextScale, anchor }) {
+  const ax = anchor?.x ?? frame.w / 2;
+  const ay = anchor?.y ?? frame.h / 2;
+  const ox = (frame.w - image.w * scale) / 2 + pan.x;
+  const oy = (frame.h - image.h * scale) / 2 + pan.y;
+  const ix = (ax - ox) / scale;
+  const iy = (ay - oy) / scale;
+  return {
+    x: ax - ix * nextScale - (frame.w - image.w * nextScale) / 2,
+    y: ay - iy * nextScale - (frame.h - image.h * nextScale) / 2,
+  };
+}
+
+/**
+ * Turn one wheel event into a zoom multiplier that feels the same whatever
+ * produced it.
+ *
+ * A notched mouse wheel sends a single deltaY near 100. A trackpad flick sends
+ * a stream of deltas around 2–10. Firefox reports lines (deltaMode 1) rather
+ * than pixels. A trackpad pinch arrives as a wheel event with `ctrlKey` set and
+ * deltas an order of magnitude smaller again. Counting events instead of
+ * scaling by the delta makes one of those hypersensitive and another unusably
+ * coarse, which is the usual reason wheel zoom feels wrong.
+ *
+ * The result is clamped to [0.5, 2] so a flung wheel or a momentum burst cannot
+ * teleport the view past the thing being looked for.
+ */
+export function wheelZoomFactor({ deltaY, deltaMode = 0, ctrlKey = false, pageHeight = 800 }) {
+  const unit = deltaMode === 1 ? 16 : deltaMode === 2 ? pageHeight : 1;
+  const rate = ctrlKey ? 0.012 : 0.0022;
+  const factor = Math.exp(-deltaY * unit * rate);
+  return Math.min(2, Math.max(0.5, factor));
+}
+
 /**
  * Guess which palette entry is which part of the house.
  *
