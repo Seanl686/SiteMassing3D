@@ -259,7 +259,10 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   w(`| **20-massing-hero.png** | **EXACT 1-TO-1 POSITION, SCALE, CAMERA ANGLE, & GEOMETRY** — the home is ALREADY placed in its exact spot | Material textures (untextured 3D massing) |`);
   w(`| **10-lot-photo.jpg** | Clean site background reference (ground, trees, sky, lighting context) | Position of the home — **DO NOT RE-SITE OR MOVE THE HOUSE ON THIS EMPTY PHOTO** |`);
   w(`| **Massing elevation plates** | Measured orthographic geometry: size, proportion, roof pitch, door/window offsets | Site placement, perspective |`);
-  w(`| **Home photographs** | Finish: siding, windows, trim, doors, and roof appearance | Position, scale, or placement on the lot |`);
+  w(`| **Home photographs** | **HIGHEST AUTHORITY ON FINISH & APPEARANCE** — siding profile/color, trim, doors, windows, roof, and fixtures. **TAKES 100% PRECEDENCE OVER TEXT SPECS.** | Position, scale, or placement on the lot |`);
+  w();
+  w(`**CRITICAL PRECEDENCE MANDATE — HOME PHOTOS OVERRIDE ALL TEXT SPECS:**`);
+  w(`If there is any difference between written text descriptions/color names and what is visible in the attached home photographs (\`40-home-*.jpg\`), **THE ATTACHED HOME PHOTOGRAPHS TAKE TOTAL PRECEDENCE.** Reproduce the exact siding profile, siding color, trim color, roof shingle texture, door design, and fixtures as shown in the photographs.`);
   w();
   w(`The plates and the home photographs describe **the same home** and are meant to`);
   w(`be used together, one over the other — the plate is the measured drawing`);
@@ -416,14 +419,11 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   w(`> **Output Location (CLI/Agent):** Save all final rendered output images into the \`renders/\` subfolder inside this package folder (${passName ? `\`views/${slug(passName)}/renders/\`` : '\`renders/\`'}).`);
   w(`>`);
   if (shot.length) {
-    w(`> **Use the attached photographs of the real home as the source of truth for`);
-    w(`> finish.** Each is named for the wall it shows; reproduce its siding profile`);
-    w(`> and colour, window proportions and spacing, trim and roof exactly as`);
-    w(`> photographed, on the wall it belongs to. They confirm the written`);
-    w(`> specification: ${sidingLabel(d.sidingTexture)} in ${describeColor(c.siding)},`);
-    w(`> ${describeColor(c.trim)} trim and window surrounds, ${describeColor(c.roof)} roof,`);
-    w(`> ${describeColor(c.door)} doors. Where the two disagree, follow the photograph`);
-    w(`> for appearance and the plate for position. Do not redesign or add features.`);
+    w(`> **THE ATTACHED HOME PHOTOGRAPHS ARE THE HIGHEST AUTHORITY AND TAKE 100% PRECEDENCE OVER TEXT FOR ALL FINISHES, COLOURS, TEXTURES, AND FIXTURES.**`);
+    w(`> Each photo is named for the wall it shows; reproduce its exact siding profile`);
+    w(`> and colour, window style, trim, roof texture/colour, doors, and light fixtures as`);
+    w(`> photographed, on the wall it belongs to. Where written text specifications disagree with what is visible in the photographs,`);
+    w(`> **THE PHOTOGRAPHS WIN 100%.** Follow the photo for all visual appearance/fixtures and the plate for geometry/position.`);
   } else {
     w(`> **No photographs of the home are attached, so this specification is the`);
     w(`> complete description of its finish:** ${sidingLabel(d.sidingTexture)} in`);
