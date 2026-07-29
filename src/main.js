@@ -178,9 +178,7 @@ function updateSitePhotoPlate() {
   if (!sp || !sp.src || !sp.show || panoShowing || state.scene.blockLandscape) {
     bg.style.display = 'none';
     stage.plateBackdrop = false;
-    if (state.scene) {
-      stage.setBackground(state.scene.bgVisible === false ? null : new THREE.Color(state.scene.bg));
-    }
+    if (state.scene) stage.refreshBackground(state.scene);
     return;
   }
   // Claim the backdrop: applySceneOpts leaves the background alone while this is
@@ -209,7 +207,7 @@ function updateSitePhotoPlate() {
   // stylesheet) so a rotated or zoomed-out photo has paint beyond the edges
   // instead of blank corners.
   bg.style.transform = `rotate(${rot}deg)`;
-  stage.setBackground(null);
+  stage.refreshBackground(state.scene);
 }
 
 /** Openings in the multi-selection, in list order. */
@@ -2499,7 +2497,10 @@ function bind() {
       state.scene.wireframe = !state.scene.wireframe;
       if ($('s_wireframe')) $('s_wireframe').checked = state.scene.wireframe;
       $('btnWireframe').classList.toggle('active', state.scene.wireframe);
-      stage.setWireframe(state.scene.wireframe);
+      // Through applySceneOpts, not setWireframe directly: the mode also decides
+      // how the backdrop is composited, and that lives in one place.
+      stage.applySceneOpts(state.scene, state.home.dimensions);
+      updateSitePhotoPlate();
       save();
     });
   }

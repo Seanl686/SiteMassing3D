@@ -142,9 +142,7 @@ export class Stage {
     // Painting a background then hides the photo, and this runs on EVERY scene
     // change — wireframe, grid, sun, background colour — so without the guard a
     // toggle that has nothing to do with the backdrop wipes the loaded photo.
-    if (!this.plateBackdrop) {
-      this.setBackground(o.bgVisible === false ? null : new THREE.Color(o.bg));
-    }
+    this.refreshBackground(o);
     this.persp.fov = focalToFov(o.focal);
     this.persp.updateProjectionMatrix();
     this.setTrueColor(o.trueColor);
@@ -160,6 +158,24 @@ export class Stage {
    * background alone used to hand back an opaque black canvas the next time a
    * photo was loaded.
    */
+  /**
+   * The one place that decides what the canvas is cleared to. Two things need a
+   * transparent buffer instead of the background colour, and both used to be
+   * settled ad hoc in different files, which is how a scene toggle ended up
+   * wiping a loaded backdrop:
+   *
+   *  - the lot photo, a plate BEHIND the canvas, which only shows through a
+   *    transparent one (`plateBackdrop`, set by whoever owns the plate);
+   *  - a panorama under wireframe, composited destination-over into whatever
+   *    the drawing has not claimed — an opaque clear claims everything.
+   */
+  refreshBackground(o) {
+    if (this.plateBackdrop) return this.setBackground(null);
+    const panoUnderWireframe = !!o?.wireframe && !!this.panoMesh?.visible;
+    const bare = o?.bgVisible === false || panoUnderWireframe;
+    return this.setBackground(bare ? null : new THREE.Color(o?.bg ?? 0x20242a));
+  }
+
   setBackground(color) {
     this.scene.background = color || null;
     this.renderer.setClearAlpha(color ? 1 : 0);
@@ -251,6 +267,7 @@ export class Stage {
       this._wfMask?.dispose();
       this._wfEdge?.dispose();
       this._wfMask = this._wfEdge = null;
+      this.syncPanoBlending();
       return;
     }
 
@@ -290,12 +307,13 @@ export class Stage {
       m.material = this._wfMask;
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, 25), this._wfEdge);
       edges.userData.hiddenLineEdge = true;
-      // Every mask has to be in the depth buffer before any line is stroked. A
-      // colour-writing mask could paint over a line drawn too early; this one
-      // cannot, so the order is made explicit instead of left to the sort.
+      // Every mask has to have erased its pixels before any line is stroked, or
+      // a line drawn early is wiped by a mask drawn late. Made explicit rather
+      // than left to the render sort.
       edges.renderOrder = 10;
       m.add(edges);
     }
+    this.syncPanoBlending();
   }
 
   /**
@@ -358,19 +376,46 @@ export class Stage {
       THREE.MathUtils.degToRad(+pano.yawDeg || 0),
       0,
     );
-    const opacity = pano.opacity ?? 1;
-    this.panoMesh.material.opacity = opacity;
-    // A fully opaque panorama belongs in the OPAQUE pass, where renderOrder -1
-    // puts it first and every later draw sits on top of it. Left transparent it
-    // renders after the home, which meant a depth-only wireframe mask punched a
-    // hole in it instead of letting the panorama show through the silhouette.
-    const transparent = opacity < 1;
-    if (this.panoMesh.material.transparent !== transparent) {
-      this.panoMesh.material.transparent = transparent;
-      this.panoMesh.material.needsUpdate = true;
-    }
+    this.panoMesh.material.opacity = pano.opacity ?? 1;
     this.panoMesh.material.color.setScalar(pano.brightness ?? 1);
+    this.syncPanoBlending();
     return true;
+  }
+
+  /**
+   * How the panorama is composited, which depends on the wireframe.
+   *
+   * Normally it is a backdrop: drawn first, everything else paints over it.
+   *
+   * Under wireframe the home's silhouette is ERASED to transparent, and the
+   * panorama — unlike the lot photo, which is a plate behind the canvas — lives
+   * inside the same buffer, so it would be erased along with everything else.
+   * It is therefore drawn LAST instead, with the depth test off and a
+   * destination-over blend, which fills only the pixels nothing has claimed:
+   * the cleared silhouette. The line drawing survives on top of it.
+   */
+  syncPanoBlending() {
+    const mesh = this.panoMesh;
+    if (!mesh) return;
+    const m = mesh.material;
+    const wireframe = !!this._wfMask;
+    if (wireframe) {
+      m.transparent = true;
+      m.depthTest = false;
+      m.blending = THREE.CustomBlending;
+      m.blendEquation = THREE.AddEquation;
+      m.blendSrc = THREE.OneMinusDstAlphaFactor;
+      m.blendDst = THREE.OneFactor;
+      mesh.renderOrder = 20;              // after the mask and after the lines
+    } else {
+      // An opaque panorama belongs in the opaque pass, where renderOrder -1 puts
+      // it before the model. Only a faded one needs the transparent pass.
+      m.transparent = (m.opacity ?? 1) < 1;
+      m.depthTest = true;
+      m.blending = THREE.NormalBlending;
+      mesh.renderOrder = -1;
+    }
+    m.needsUpdate = true;
   }
 
   /** Hide the panorama for one render — cutouts and geometry plates. */
