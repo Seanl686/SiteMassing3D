@@ -200,16 +200,30 @@ export function wheelZoomFactor({ deltaY, deltaMode = 0, ctrlKey = false, pageHe
  * the most frame that is neither. Doors and skirting fall back to siding-family
  * colours because on most units they are.
  */
+/**
+ * Whether an entry reads as sky rather than paint.
+ *
+ * Every exterior photograph of a house has sky in it, and sky is usually both
+ * the lightest thing in frame and a large part of it — so without this the
+ * trim, which is picked as the lightest colour, comes back as pale blue on
+ * essentially every real photo. Sky is light AND markedly blue-dominant;
+ * house paint that pale is not that blue.
+ */
+export const looksLikeSky = (c) => luma(c) > 150 && (c.b - c.r) > 25;
+
 export function suggestFinishRoles(palette) {
   const p = (palette || []).filter((c) => c && typeof c.hex === 'string');
   if (!p.length) return {};
 
-  // Ignore near-black and blown-white slivers: those are shadow and sky, not paint.
+  // Ignore near-black and blown-white slivers: those are shadow and glare.
   const usable = p.filter((c) => {
     const l = luma(c);
     return l > 14 && l < 246;
   });
-  const pool = usable.length >= 3 ? usable : p;
+  const lit = usable.length >= 3 ? usable : p;
+  // Drop the sky, but never to the point of having nothing left to assign.
+  const grounded = lit.filter((c) => !looksLikeSky(c));
+  const pool = grounded.length >= 3 ? grounded : lit;
 
   const byLuma = [...pool].sort((a, b) => luma(a) - luma(b));
   const roof = byLuma[0];

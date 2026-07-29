@@ -24,7 +24,7 @@ import {
 } from '../src/assets.js';
 import {
   rgbToHex, hexToRgb, luma, saturation, sampleAverage, samplePixels, quantize, suggestFinishRoles,
-  zoomAnchoredPan, wheelZoomFactor,
+  zoomAnchoredPan, wheelZoomFactor, looksLikeSky,
 } from '../src/eyedrop.js';
 
 test('1. Defaults & State Initialization', () => {
@@ -1464,4 +1464,30 @@ test('55. One Wheel Event Zooms The Same However The Device Reports It', () => {
   assert.ok(wheelZoomFactor({ deltaY: 100 }) < 1, 'wheel down zooms out');
   assert.equal(wheelZoomFactor({ deltaY: -100000 }), 2);
   assert.equal(wheelZoomFactor({ deltaY: 100000 }), 0.5);
+});
+
+test('56. The Sky Is Not Offered As Trim', () => {
+  // Every exterior photograph has sky in it, and sky is usually both the
+  // lightest thing in frame and a big part of it.
+  const sky = { r: 166, g: 199, b: 232, hex: '#a6c7e8', weight: 0.30 };
+  const siding = { r: 111, g: 139, b: 163, hex: '#6f8ba3', weight: 0.28 };
+  const roof = { r: 47, g: 50, b: 56, hex: '#2f3238', weight: 0.20 };
+  const trim = { r: 244, g: 244, b: 241, hex: '#f4f4f1', weight: 0.12 };
+  const door = { r: 168, g: 35, b: 31, hex: '#a8231f', weight: 0.10 };
+
+  assert.equal(looksLikeSky(sky), true);
+  assert.equal(looksLikeSky(trim), false, 'white trim is light but not blue');
+  assert.equal(looksLikeSky(siding), false, 'blue-grey siding is not light enough to be sky');
+  assert.equal(looksLikeSky(roof), false);
+
+  const roles = suggestFinishRoles([sky, siding, roof, trim, door]);
+  assert.equal(roles.trim, '#f4f4f1', 'the trim is the white board, not the sky');
+  assert.equal(roles.roof, '#2f3238');
+  assert.equal(roles.siding, '#6f8ba3');
+  assert.notEqual(roles.door, sky.hex);
+
+  // With nothing but sky and one surface there is no better answer available,
+  // so the guard must not strip the palette down to nothing.
+  const thin = suggestFinishRoles([sky, siding]);
+  assert.ok(thin.siding && thin.roof && thin.trim, 'a thin palette still gets assigned');
 });

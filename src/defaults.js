@@ -141,6 +141,10 @@ export function defaultScene() {
     railMat: 'pressure_treated', // 'pressure_treated', 'white_trim', 'black_metal', 'matching_trim'
     balusterStyle: 'balusters', // 'balusters', 'horizontal_cables', 'open'
     wireframe: false,
+    // Flat, unlit shading with tone mapping off, so every surface renders as
+    // exactly the hex it was given. The check that a finish picked off a
+    // photograph really is one for one — the lit render cannot answer that.
+    trueColor: false,
     blockLandscape: false,
     labels: false,
     dims: false,

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SiteMassing3D — double-wide massing &amp; elevation renderer</title>
 <!-- ?v= bust: plain static servers hand Chrome a cached stylesheet after edits -->
-<link rel="stylesheet" href="css/app.css?v=16">
+<link rel="stylesheet" href="css/app.css?v=17">
 <script type="importmap">
 {
   "imports": {
@@ -516,6 +516,8 @@
         <label class="row check"><input id="s_grid" type="checkbox" autocomplete="off"><span>Ground grid</span></label>
         <label class="row check"><input id="s_shadow" type="checkbox" autocomplete="off"><span>Cast shadow</span></label>
         <label class="row check"><input id="s_wireframe" type="checkbox" autocomplete="off"><span style="color:#6fb2ff;font-weight:600;">📐 Wireframe view mode</span></label>
+        <label class="row check"><input id="s_trueColor" type="checkbox" autocomplete="off"><span style="color:#7fd18a;font-weight:600;">🎨 True colour (flat, unlit)</span></label>
+        <p class="hint">The normal render is photographic — warm sun, cool sky, filmic tone mapping — so a wall does <b>not</b> come back on screen as the hex it was given. Tick this to shade everything flat and unlit, where every surface reads as exactly its colour. It is how you confirm a finish picked off a photograph is one for one; untick it to see how the finish will actually look.</p>
         <label class="row check"><input id="s_labels" type="checkbox" autocomplete="off"><span>Door callout markers</span></label>
         <label class="row check"><input id="s_dims" type="checkbox" autocomplete="off"><span>Dimension outline on ground</span></label>
         <label class="row check" style="margin-top:8px;background:rgba(255,100,100,0.12);padding:5px 8px;border-radius:4px;border:1px solid rgba(255,133,133,0.3);"><input id="s_blockLandscape" type="checkbox" autocomplete="off"><span style="color:#ff8585;font-weight:600;">🚫 Block landscape &amp; ground view</span></label>

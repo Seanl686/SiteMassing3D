@@ -302,9 +302,17 @@ function draw() {
   view.scale = view.base * view.zoom;
   const dw = fullW * view.scale;
   const dh = fullH * view.scale;
-  // Keep at least a third of the image on screen however far it is dragged.
-  const limX = Math.max(0, (dw - w) / 2 + w / 3);
-  const limY = Math.max(0, (dh - h) / 2 + h / 3);
+  // The pan limit has to be loose enough that it never fights the zoom anchor.
+  // A tight clamp silently overrides the pan that holds a point under the
+  // cursor, and the point drifts anyway — which reads as the anchoring being
+  // broken when it is the clamp overruling it. The rule here is only that the
+  // image and the frame keep overlapping by 40% of the smaller of the two, so
+  // the photo can never be lost off the edge but can always be brought right
+  // up to it.
+  const keepX = Math.min(dw, w) * 0.4;
+  const keepY = Math.min(dh, h) * 0.4;
+  const limX = Math.max(0, (w + dw) / 2 - keepX);
+  const limY = Math.max(0, (h + dh) / 2 - keepY);
   view.panX = Math.max(-limX, Math.min(limX, view.panX));
   view.panY = Math.max(-limY, Math.min(limY, view.panY));
   view.ox = (w - dw) / 2 + view.panX;
@@ -531,6 +539,19 @@ function renderTargets() {
 // Events
 // ---------------------------------------------------------------------------
 
+/**
+ * A pointer or wheel event's position in canvas coordinates.
+ *
+ * `offsetX`/`offsetY` would say the same thing for a real event, but they are
+ * defined against the target's padding box and are unreliable on synthesised
+ * events, which makes the zoom anchor untestable. The bounding rect is
+ * unambiguous.
+ */
+function localPoint(e) {
+  const r = ui.canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
 /** How far a press may wander and still count as a pick rather than a drag. */
 const tapSlop = (pointerType) => (pointerType === 'mouse' ? 4 : 12);
 
@@ -573,13 +594,14 @@ function bindEvents() {
   canvas.addEventListener('pointerdown', (e) => {
     if (!fullCanvas) return;
     canvas.setPointerCapture(e.pointerId);
-    pointers.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
+    const pt = localPoint(e);
+    pointers.set(e.pointerId, { x: pt.x, y: pt.y });
     if (pointers.size === 1) {
       gesture = 'pan';
       moved = 0;
       suppressTap = false;
-      last = { x: e.offsetX, y: e.offsetY };
-      origin = { x: e.offsetX, y: e.offsetY };
+      last = { x: pt.x, y: pt.y };
+      origin = { x: pt.x, y: pt.y };
     } else if (pointers.size === 2) {
       gesture = 'pinch';
       // A second finger means the user is framing, not picking. Whatever the
@@ -592,8 +614,9 @@ function bindEvents() {
 
   canvas.addEventListener('pointermove', (e) => {
     if (!fullCanvas) return;
+    const pt = localPoint(e);
     const p = pointers.get(e.pointerId);
-    if (p) { p.x = e.offsetX; p.y = e.offsetY; }
+    if (p) { p.x = pt.x; p.y = pt.y; }
 
     if (gesture === 'pinch' && pointers.size >= 2) {
       const now = pinchState();
@@ -608,20 +631,20 @@ function bindEvents() {
     }
 
     if (gesture === 'pan' && last && origin) {
-      const dx = e.offsetX - last.x;
-      const dy = e.offsetY - last.y;
+      const dx = pt.x - last.x;
+      const dy = pt.y - last.y;
       // Straight-line distance from where the press started, not the sum of
       // every wobble — a slow hand tracing a small circle is still a click.
-      moved = Math.max(moved, Math.hypot(e.offsetX - origin.x, e.offsetY - origin.y));
+      moved = Math.max(moved, Math.hypot(pt.x - origin.x, pt.y - origin.y));
       // Only pan once the press is clearly a drag — otherwise a shaky click, or
       // the wobble of a fingertip, slides the photo instead of sampling it.
       if (moved > tapSlop(e.pointerType)) {
         view.panX += dx; view.panY += dy;
-        last = { x: e.offsetX, y: e.offsetY };
+        last = { x: pt.x, y: pt.y };
         draw();
       }
     }
-    updateHover(e.offsetX, e.offsetY, e.pointerType);
+    updateHover(pt.x, pt.y, e.pointerType);
   });
 
   const endPointer = (e) => {
@@ -647,7 +670,8 @@ function bindEvents() {
     pinch = null;
     suppressTap = false;
     if (wasTap && fullCanvas) {
-      const { x: ix, y: iy } = toImage(e.offsetX, e.offsetY);
+      const up = localPoint(e);
+      const { x: ix, y: iy } = toImage(up.x, up.y);
       const hit = sampleAt(ix, iy);
       if (hit) applyPick(hit.hex);
     }
@@ -670,8 +694,9 @@ function bindEvents() {
     const factor = wheelZoomFactor({
       deltaY: e.deltaY, deltaMode: e.deltaMode, ctrlKey: e.ctrlKey, pageHeight: view.h,
     });
-    setZoom(view.zoom * factor, e.offsetX, e.offsetY);
-    updateHover(e.offsetX, e.offsetY, e.pointerType || 'mouse');
+    const pt = localPoint(e);
+    setZoom(view.zoom * factor, pt.x, pt.y);
+    updateHover(pt.x, pt.y, e.pointerType || 'mouse');
   }, { passive: false });
 
   // Keeping the pointer where it is means the anchor for a keyboard or button

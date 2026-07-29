@@ -73,6 +73,17 @@ export class Stage {
     this.fill.position.set(-40, 30, -60);
     this.scene.add(this.fill);
 
+    // True-colour mode's only light.
+    //
+    // The intensity is pi, not 1: an ambient light contributes its colour times
+    // its intensity as irradiance, and the Lambert BRDF then divides by pi, so
+    // an intensity of 1 renders every albedo at 1/pi — a uniform 40% too dark,
+    // which is exactly the kind of near-miss that looks like a colour bug.
+    // Multiplying it back out makes a surface read as precisely its own hex.
+    this.trueColorLight = new THREE.AmbientLight(0xffffff, Math.PI);
+    this.trueColorLight.visible = false;
+    this.scene.add(this.trueColorLight);
+
     const groundMat = new THREE.ShadowMaterial({ opacity: 0.26 });
     this.ground = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), groundMat);
     this.ground.rotation.x = -Math.PI / 2;
@@ -130,7 +141,45 @@ export class Stage {
     this.scene.background = o.bgVisible === false ? null : new THREE.Color(o.bg);
     this.persp.fov = focalToFov(o.focal);
     this.persp.updateProjectionMatrix();
+    this.setTrueColor(o.trueColor);
     this.setWireframe(o.wireframe);
+  }
+
+  /**
+   * Flat, unlit, un-tone-mapped shading: every surface renders as exactly the
+   * hex it was given.
+   *
+   * The normal render is photographic — ACES tone mapping, a warm sun, a cool
+   * sky — and under it a wall picked off a photograph does NOT come back as the
+   * colour that was picked. That is correct for a render and useless for
+   * checking a match, so this is the mode you flip into to confirm the finishes
+   * are one for one with the photo, and flip out of to see how they will look.
+   *
+   * Metalness has to go too: it moves energy out of the diffuse lobe, and a
+   * default 0.05 is a visible 5% darkening on a value that is meant to be exact.
+   */
+  setTrueColor(enabled) {
+    const on = !!enabled;
+    this.trueColor = on;
+    this.renderer.toneMapping = on ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
+    this.trueColorLight.visible = on;
+    this.hemi.visible = !on;
+    this.sun.visible = !on;
+    this.fill.visible = !on;
+    if (!this.homeGroup) return;
+    this.homeGroup.traverse((o) => {
+      if (!o.isMesh) return;
+      for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
+        if (!m || m.metalness === undefined) continue;
+        if (on) {
+          if (m.userData.litMetalness === undefined) m.userData.litMetalness = m.metalness;
+          m.metalness = 0;
+        } else if (m.userData.litMetalness !== undefined) {
+          m.metalness = m.userData.litMetalness;
+          delete m.userData.litMetalness;
+        }
+      }
+    });
   }
 
   /**

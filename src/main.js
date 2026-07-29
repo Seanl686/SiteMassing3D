@@ -1848,7 +1848,7 @@ const photoFields = [
 ];
 const sceneNums = [['s_focal', 'focal'], ['s_eye', 'eye'], ['s_landingDepth', 'landingDepthFt']];
 const sceneRanges = [['s_sunAz', 'sunAz'], ['s_sunEl', 'sunEl'], ['s_flat', 'flat']];
-const sceneChecks = [['s_grid', 'grid'], ['s_shadow', 'shadow'], ['s_steps', 'steps'], ['s_stepLanding', 'stepLanding'], ['s_wireframe', 'wireframe'], ['s_blockLandscape', 'blockLandscape'], ['s_labels', 'labels'], ['s_dims', 'dims']];
+const sceneChecks = [['s_grid', 'grid'], ['s_shadow', 'shadow'], ['s_steps', 'steps'], ['s_stepLanding', 'stepLanding'], ['s_wireframe', 'wireframe'], ['s_trueColor', 'trueColor'], ['s_blockLandscape', 'blockLandscape'], ['s_labels', 'labels'], ['s_dims', 'dims']];
 
 /** Snap to the nearest quarter foot (3 in) so the steps land on whole feet. */
 const roundQuarter = (v) => Math.round(v * 4) / 4;
@@ -3218,6 +3218,9 @@ window.__app = {
     ...packageRenderContext(),
   })),
   siteViews: { add: addSiteView, apply: applySiteViewById, cycle: cycleSiteViews },
+  // Asset wiring, so a loaded image can be poked in and the panels made to
+  // re-read it without a reload: __app.assets.changed().
+  assets: { changed: assetsChanged, list: () => collectAssets(state.home), pick: openFinishPicker },
   brief: currentBrief,
   framing: () => measureFraming(stage, state.home, currentViewName),
 };
