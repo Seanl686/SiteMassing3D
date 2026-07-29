@@ -106,9 +106,15 @@ class Rate429Error extends Error {
 /** Turn an API error body into something worth showing a user. */
 function describeError(status, body, model) {
   const message = body?.error?.message || body?.message || '';
+  const code = body?.error?.code || '';
   if (status === 401) return 'That API key was rejected. Please check your key and make sure it is active.';
   if (status === 403) return `The key does not have access to ${model}. ${message}`;
-  if (status === 429) throw new Rate429Error('Rate limited by the API — will retry automatically.');
+  if (status === 429) {
+    if (code === 'insufficient_quota' || message.toLowerCase().includes('quota')) {
+      return `API key has no remaining quota or credits (${message || 'insufficient quota'}).`;
+    }
+    throw new Rate429Error(`Rate limited by ${model} API — retrying shortly.`);
+  }
   if (status === 413) return 'The image is too large to send. Re-load it — image is capped at 2200 px.';
   if (status >= 500) return `The API service returned status ${status}. Try again shortly.`;
   return message || `The API returned status ${status}.`;
