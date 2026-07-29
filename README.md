@@ -28,10 +28,12 @@ so the vendored copy can be refreshed.
 2. Set siding / trim / roof colors off the dealer-lot photo.
 3. Place the **exterior doors** — this is the part a photograph can't give you.
    Load the floor plan as a plate, scale it to the footprint outline, and trace.
-4. Hit **Front elev / Rear elev / Left end / Right end**, or **Render 4-view
-   contact sheet** for all of them at once.
-5. Feed those PNGs to the image model as the geometry reference, alongside the
-   lot photo and the home photos.
+4. Load the lot photo in **Site Photo & Camera Framing** and frame the model on
+   it — that framing is what the render will match.
+5. Load the site plan PDF in **AI Render Package**; page 1 is converted to PNG.
+6. Hit **Export render package (.zip)**. One file, ready to hand to the image
+   model: the plates, the lot photo, the converted plan, and a written brief
+   whose numbers were measured off the model rather than typed.
 
 The burnt-in caption carries the model name and `W × L`, so the plate answers the
 "state the dimensions you read" step of the prompt template on its own.
@@ -62,6 +64,41 @@ as you face that wall from outside.
 printed footprint matches the blue outline (turn on *Dimension outline on ground*
 to see it), then nudge Offset X/Z and Rotation until it lines up. With *Plan-pick
 mode* on, clicking the plate drops a door on the nearest wall at that position.
+
+**AI Render Package** — the app's actual output. *Export render package (.zip)*
+writes one archive containing:
+
+| File | What it is |
+|---|---|
+| `00-README.md` | how to use the package |
+| `01-BRIEF.md` | the prompt, with every number measured off this model |
+| `10-lot-photo.*` | the lot photo, unmodified |
+| `20-massing-hero.png` | the current view — the plate matched to the lot photo |
+| `21-massing-hero-cutout.png` | the same view with an alpha channel, for compositing |
+| `30-elevation-set.png`, `31`–`35` | the four elevations and the roof plan |
+| `50-site-plan.png` | page 1 of the site plan PDF, converted |
+| `90-project.json` | the project, so the package can be rebuilt |
+
+**One lot photo renders one view.** The hero plate is the only one shot from the
+lot photo's camera position, so it is the only one the model can site. The
+elevations and the contact sheet are geometry reference — they say what the home
+is, not where to stand. Four finished renders need four lot photos, each shot
+from the position matching its view, framed and exported one pair at a time.
+The brief says this to the model in as many words, because rendering a viewpoint
+the lot photo was never shot from is the failure this workflow hits most.
+
+The brief's scale numbers ("spans 31% to 78% of the image width", "ridge at 59%
+of frame height", "nearest corner: front-left") are read off the live camera by
+projecting the model's bounding box, so **re-export after you re-frame**. The
+*Measured framing* line in the panel shows them live.
+
+Fill the *What only the lot photo can tell you* fields — the landmark, the pad,
+what to preserve — and they land in the brief. Leave *Nearest corner* and
+*Lighting* blank and they are derived from the camera and the sun sliders.
+
+The site plan accepts a **PDF** and converts page 1 to PNG in the browser (pdf.js
+is vendored). This matters: most image models ignore PDF attachments outright,
+and the ones that accept them read text unreliably.
 
 **Screenshot** — set the pixel size, then *Render PNG*. *Fit pixel aspect to
 current view* retargets the height so an elevation isn't 70% sky. *Transparent

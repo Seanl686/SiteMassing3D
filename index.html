@@ -334,6 +334,54 @@
       </div>
     </section>
 
+    <section class="panel collapsible open" id="panel_package">
+      <div class="panel-header">
+        <h2><span class="code">PKG</span> AI Render Package</h2>
+        <span class="chevron">▲</span>
+      </div>
+      <div class="panel-body">
+        <p class="hint">One zip carrying the massing plates, the lot photo, the site plan and a written brief with every dimension measured off this model — the whole hand-off to Gemini / Midjourney / Flux in a single file.</p>
+
+        <h3 class="subhead">Site plan / spec sheet</h3>
+        <label class="btn block" for="fileSitePlan">Load site plan (PDF, PNG or JPG)</label>
+        <input type="file" id="fileSitePlan" accept="application/pdf,image/*" hidden>
+        <p class="hint" id="sitePlanStatus">No site plan loaded. A PDF is converted to PNG automatically — image models ignore PDF attachments.</p>
+        <div class="grid2" id="row_sitePlanPage" style="display:none;">
+          <label><span>Page</span><input id="sp_planPage" type="number" autocomplete="off" step="1" min="1" value="1"></label>
+          <button id="btnSitePlanPage" style="margin-top:auto;">Re-render page</button>
+        </div>
+        <label class="row check"><input id="pk_originalPdf" type="checkbox" autocomplete="off" checked><span>Keep the original PDF in the package</span></label>
+
+        <h3 class="subhead">What only the lot photo can tell you</h3>
+        <div class="grid2">
+          <label><span>Nearest corner</span><input id="bf_nearCorner" type="text" autocomplete="off" placeholder="Auto (from camera)"></label>
+          <label><span>Pad / siting area</span><input id="bf_pad" type="text" autocomplete="off" placeholder="the gravel pad"></label>
+          <label><span>Far-end landmark</span><input id="bf_landmark" type="text" autocomplete="off" placeholder="the utility pole on the left"></label>
+          <label><span>Ridge height ref</span><input id="bf_heightRef" type="text" autocomplete="off" placeholder="the treeline behind it"></label>
+        </div>
+        <label class="row"><span>Keep exactly as photographed</span><input id="bf_keep" type="text" autocomplete="off" placeholder="trees, stone retaining wall, utility pole, sky, ground"></label>
+        <label class="row"><span>Lighting</span><input id="bf_light" type="text" autocomplete="off" placeholder="Auto (from sun &amp; overcast sliders)"></label>
+        <label class="row"><span>Extra instructions</span><input id="bf_notes" type="text" autocomplete="off" placeholder="anything else the model must respect"></label>
+
+        <h3 class="subhead">Measured framing</h3>
+        <p class="hint" id="framingReadout">Frame the view you want the render to match — the brief quotes these numbers.</p>
+
+        <h3 class="subhead">Include in the package</h3>
+        <p class="hint"><b>One lot photo renders one view.</b> The hero plate — whatever is framed on screen right now — is the only plate the image model can site on your lot photo, because it is the only one shot from that camera position. Everything below it is a <i>geometry reference</i>: it tells the model what the home is, not where to stand. To get four finished renders you need four lot photos, each shot from the position that matches its plate, and one pass per pair.</p>
+        <label class="row check"><input id="pk_contactSheet" type="checkbox" autocomplete="off" checked><span>4-view contact sheet <i>(reference only)</i></span></label>
+        <label class="row check"><input id="pk_elevations" type="checkbox" autocomplete="off" checked><span>Individual elevations + roof plan <i>(reference only)</i></span></label>
+        <label class="row check"><input id="pk_cutout" type="checkbox" autocomplete="off" checked><span>Transparent cutout of the current view</span></label>
+        <label class="row check"><input id="pk_lotPhoto" type="checkbox" autocomplete="off" checked><span>Lot photo (unmodified)</span></label>
+        <label class="row check"><input id="pk_sitePlan" type="checkbox" autocomplete="off" checked><span>Site plan page (PNG)</span></label>
+        <label class="row check"><input id="pk_projectJson" type="checkbox" autocomplete="off" checked><span>Project JSON, so the package can be rebuilt</span></label>
+
+        <button id="btnCopyBrief" class="block">Copy brief to clipboard</button>
+        <button id="btnSaveBrief" class="block">Save brief as .md</button>
+        <button id="btnPackage" class="primary block">Export render package (.zip)</button>
+        <p class="hint" id="packageStatus"></p>
+      </div>
+    </section>
+
     <section class="panel collapsible" id="panel_export">
       <div class="panel-header">
         <h2><span class="code">OUT</span> Scene, View &amp; Screenshot Export</h2>

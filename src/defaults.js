@@ -78,6 +78,26 @@ export function defaultHome() {
     ],
     plan: { src: null, widthFt: 56, offsetX: 0, offsetZ: 0, rotation: 0, opacity: 0.65, show: true },
     sitePhoto: { src: null, show: true, fitMode: 'camera', opacity: 0.85, scale: 1.0, panX: 0, panY: 0, rotation: 0, baselineY: 0, camDist: 60, posX: 0, posZ: 0, rotY: 0 },
+    // The site plan / spec sheet that ships with the render package. `src` is
+    // always a PNG — a PDF page is converted on load, because image models
+    // ignore PDF attachments. `pdf` keeps the original for the human.
+    sitePlan: { src: null, pdf: null, name: '', page: 1, pageCount: 0, width: 0, height: 0 },
+    // The handful of things the model cannot know because they are on the lot,
+    // not in the spec. Everything else in the render brief is measured.
+    brief: defaultBrief(),
+  };
+}
+
+/** Free-text blanks the render brief needs from the person looking at the lot. */
+export function defaultBrief() {
+  return {
+    nearCorner: '',   // blank = use the corner measured from the live camera
+    pad: '',
+    landmark: '',
+    keep: '',
+    heightRef: '',
+    light: '',        // blank = derived from the sun / overcast controls
+    notes: '',
   };
 }
 
@@ -167,6 +187,8 @@ export function migrate(home) {
     })),
     plan: { ...base.plan, ...(home.plan || {}) },
     sitePhoto,
+    sitePlan: { ...base.sitePlan, ...(home.sitePlan || {}) },
+    brief: { ...base.brief, ...(home.brief || {}) },
   };
   return out;
 }

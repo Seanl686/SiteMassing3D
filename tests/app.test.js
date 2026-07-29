@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { defaultHome, defaultScene, defaultExport, migrate, WALLS } from '../src/defaults.js';
+import { defaultHome, defaultScene, defaultExport, defaultBrief, migrate, WALLS } from '../src/defaults.js';
+import { zipStore, crc32, dataUrlToBytes, dataUrlExt } from '../src/zip.js';
+import {
+  buildBrief, colorName, sidingLabel, describeLighting, wallSummary, openingSchedule,
+} from '../src/brief.js';
 import { derived, wallFrames, fmtAllUnits, buildHome, getWallHeight, dormerSize, applyHeadAlign } from '../src/build.js';
 import { createSidingMaterial } from '../src/textures.js';
 import { History, describeChange } from '../src/history.js';
@@ -743,4 +747,131 @@ test('27. Project Reader Accepts Older Bare-Home Files', () => {
 
   assert.throws(() => readProject(null), /not a project file/);
   assert.throws(() => readProject({ nothing: true }), /no home/);
+});
+
+// ---------------------------------------------------------------------------
+// Render package: zip container, brief text, and the state that carries them
+// ---------------------------------------------------------------------------
+
+test('28. Zip Writer Produces A Readable Store-Only Archive', () => {
+  const files = [
+    { name: 'pkg/00-README.md', data: 'hello world' },
+    { name: 'pkg/10-photo.png', data: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 1, 2, 3]) },
+  ];
+  const bytes = zipStore(files, { modified: new Date(2026, 6, 29, 12, 30, 0) });
+
+  assert.ok(bytes instanceof Uint8Array);
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  assert.equal(dv.getUint32(0, true), 0x04034b50, 'Starts with a local file header');
+
+  // End of central directory: last 22 bytes when there is no archive comment.
+  const eocd = bytes.length - 22;
+  assert.equal(dv.getUint32(eocd, true), 0x06054b50, 'Ends with EOCD');
+  assert.equal(dv.getUint16(eocd + 10, true), 2, 'Two entries in the directory');
+
+  const cdStart = dv.getUint32(eocd + 16, true);
+  assert.equal(dv.getUint32(cdStart, true), 0x02014b50, 'Central directory sits where EOCD says');
+
+  // Store-only: the payload is present verbatim, so the reader does not need
+  // an inflater. Find the README text in the raw bytes.
+  const text = new TextDecoder().decode(bytes);
+  assert.ok(text.includes('hello world'), 'Entry data is stored uncompressed');
+  assert.ok(text.includes('pkg/00-README.md'), 'Entry names are stored');
+
+  assert.throws(() => zipStore([]), /at least one entry/);
+});
+
+test('29. CRC32 And Data URL Decoding Match Known Values', () => {
+  assert.equal(crc32(new TextEncoder().encode('123456789')), 0xcbf43926, 'CRC-32 check value');
+  assert.equal(crc32(new Uint8Array(0)), 0);
+
+  const bytes = dataUrlToBytes('data:image/png;base64,aGVsbG8=');
+  assert.equal(new TextDecoder().decode(bytes), 'hello');
+  assert.equal(dataUrlExt('data:image/png;base64,AA'), 'png');
+  assert.equal(dataUrlExt('data:image/jpeg;base64,AA'), 'jpg');
+  assert.equal(dataUrlExt('data:application/pdf;base64,AA'), 'pdf');
+  assert.throws(() => dataUrlToBytes('not-a-data-url'), /not a data URL/);
+});
+
+test('30. Brief Carries The Measured Geometry, Not Hand-Typed Blanks', () => {
+  const home = defaultHome();
+  home.name = 'Redmond 25610';
+  home.dimensions.widthFt = 27;
+  home.dimensions.lengthFt = 56;
+  const scene = defaultScene();
+
+  const framing = {
+    left: 0.3, right: 0.8, ridgeTop: 0.62, bottom: 0.2, top: 0.62,
+    nearCorner: 'front-right corner', visibleWalls: ['front wall', 'right gable end'],
+    viewLabel: '¾ front-L',
+  };
+  const md = buildBrief({
+    home, scene, framing,
+    site: { landmark: 'the utility pole', keep: 'trees and sky', pad: 'the gravel pad' },
+    manifest: [{ index: 1, file: '10-lot-photo.jpg', role: 'the empty lot' }],
+    savedAt: '2026-07-29',
+  });
+
+  assert.ok(md.includes('Redmond 25610'));
+  assert.ok(md.includes('2.07'), 'States the front-wall to gable-end ratio');
+  assert.ok(md.includes('30% to 80%'), 'Scale comes from the measured framing');
+  assert.ok(md.includes('62%'), 'Ridge height comes from the measured framing');
+  assert.ok(md.includes('front-right corner'), 'Near corner comes from the camera');
+  assert.ok(md.includes('the gravel pad') && md.includes('the utility pole'));
+  assert.ok(md.includes('10-lot-photo.jpg'), 'Attachments are named by filename');
+  assert.ok(!md.includes('{{X1}}'), 'No unfilled scale blanks when framing is known');
+  // The opening schedule is the whole point — the walls no photo covers.
+  assert.ok(md.includes('Rear / utility door'));
+  assert.ok(md.includes('Primary bedroom'));
+
+  // With no framing, it degrades to blanks rather than inventing numbers.
+  const noFraming = buildBrief({ home, scene, site: {} });
+  assert.ok(noFraming.includes('{{X1}}'));
+});
+
+test('31. Brief Vocabulary Is Derived From The Model State', () => {
+  assert.equal(colorName('#3a3d42'), 'charcoal');
+  assert.equal(colorName('#f5f5f2'), 'white');
+  assert.equal(colorName('#8c3a33'), 'barn red');
+  assert.equal(colorName('nonsense'), 'unspecified');
+
+  assert.equal(sidingLabel('board_batten'), 'vertical board-and-batten siding');
+  assert.equal(sidingLabel(undefined), 'horizontal lap siding');
+
+  assert.ok(describeLighting({ flat: 0.95 }).includes('overcast'));
+  assert.ok(describeLighting({ flat: 0.6 }).includes('soft'));
+  assert.ok(describeLighting({ flat: 0.1, sunAz: 300, sunEl: 15 }).includes('from the right'));
+
+  const home = defaultHome();
+  assert.ok(wallSummary(home, 'front').includes('window'));
+  assert.equal(wallSummary({ openings: [] }, 'left'), 'blank — no doors, no windows');
+
+  const rows = openingSchedule(home);
+  assert.equal(rows.length, home.openings.length);
+  assert.equal(rows[0].wall, 'front', 'Schedule is grouped front, rear, left, right');
+  const walls = [...new Set(rows.map((r) => r.wall))];
+  assert.deepEqual(walls, ['front', 'back', 'left', 'right']);
+});
+
+test('32. Site Plan And Brief Blanks Survive A Save/Reopen Round Trip', () => {
+  const home = defaultHome();
+  home.sitePlan = {
+    src: 'data:image/png;base64,AAAA', pdf: 'data:application/pdf;base64,BBBB',
+    name: '139160_117254_3196.pdf', page: 1, pageCount: 4, width: 1700, height: 2200,
+  };
+  home.brief.landmark = 'the utility pole on the left';
+  home.brief.keep = 'trees, stone wall, sky';
+
+  const file = buildProject({ home, scene: defaultScene(), exportOpts: defaultExport(), view: null });
+  const read = readProject(JSON.parse(JSON.stringify(file)));
+
+  assert.equal(read.home.sitePlan.src, 'data:image/png;base64,AAAA');
+  assert.equal(read.home.sitePlan.pageCount, 4);
+  assert.equal(read.home.sitePlan.name, '139160_117254_3196.pdf');
+  assert.equal(read.home.brief.landmark, 'the utility pole on the left');
+
+  // A file saved before the render package existed still opens, with defaults.
+  const old = migrate({ dimensions: defaultHome().dimensions, openings: [] });
+  assert.equal(old.sitePlan.src, null);
+  assert.deepEqual(old.brief, defaultBrief());
 });

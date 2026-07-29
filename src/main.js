@@ -10,6 +10,10 @@ import { shoot, contactSheet, renderToCanvas, saveWithPicker } from './capture.j
 import { defaultHome, defaultScene, defaultExport, nextId, OPENING_PRESETS, migrate } from './defaults.js';
 import { History, describeChange } from './history.js';
 import { buildProject, readProject } from './project.js';
+import { exportRenderPackage, buildRenderPackage } from './package.js';
+import { buildBrief } from './brief.js';
+import { measureFraming } from './framing.js';
+import { loadSitePlan, isPdf } from './siteplan.js';
 
 const STORE_KEY = 'sitemassing3d.v1';
 
@@ -85,6 +89,7 @@ function rebuild() {
   stage.applySceneOpts(state.scene, state.home.dimensions);
   showGizmo();
   updateHud();
+  updateFramingReadout();
   updateSitePhotoPlate();
   save();
 }
@@ -372,6 +377,208 @@ function updateHud() {
 }
 
 // ---------------------------------------------------------------------------
+// Render package
+// ---------------------------------------------------------------------------
+
+const briefFields = [
+  ['bf_nearCorner', 'nearCorner'], ['bf_pad', 'pad'], ['bf_landmark', 'landmark'],
+  ['bf_heightRef', 'heightRef'], ['bf_keep', 'keep'], ['bf_light', 'light'],
+  ['bf_notes', 'notes'],
+];
+const packageChecks = [
+  ['pk_contactSheet', 'contactSheet'], ['pk_elevations', 'elevations'],
+  ['pk_cutout', 'cutout'], ['pk_lotPhoto', 'lotPhoto'], ['pk_sitePlan', 'sitePlan'],
+  ['pk_originalPdf', 'originalPdf'], ['pk_projectJson', 'projectJson'],
+];
+
+/** Original PDFs are kept for the human, not the model — a 40 MB one is not
+ *  worth carrying through localStorage and into every package. */
+const MAX_KEPT_PDF_BYTES = 8 * 1024 * 1024;
+
+function packageOptions() {
+  const out = {};
+  for (const [id, key] of packageChecks) out[key] = $(id) ? $(id).checked : true;
+  return out;
+}
+
+const pct = (v) => `${Math.round(v * 100)}%`;
+
+function updateFramingReadout() {
+  const el = $('framingReadout');
+  if (!el) return;
+  const f = measureFraming(stage, state.home, currentViewName);
+  if (!f) {
+    el.textContent = 'The model is out of frame, so the brief will fall back to hand-typed scale blanks. Re-frame the view.';
+    return;
+  }
+  el.textContent =
+    `Spans ${pct(f.left)}–${pct(f.right)} of frame width · ridge at ${pct(f.ridgeTop)} of frame height · ` +
+    `nearest corner: ${f.nearCorner} · sees ${f.visibleWalls.join(', ') || 'no walls'}.`;
+}
+
+function updateSitePlanStatus() {
+  const el = $('sitePlanStatus');
+  const plan = state.home.sitePlan || {};
+  const row = $('row_sitePlanPage');
+  if (row) row.style.display = plan.pageCount > 1 ? '' : 'none';
+  if (!el) return;
+  if (!plan.src) {
+    el.textContent = 'No site plan loaded. A PDF is converted to PNG automatically — image models ignore PDF attachments.';
+    return;
+  }
+  const pages = plan.pageCount > 1 ? `, page ${plan.page} of ${plan.pageCount}` : '';
+  const pdf = plan.pdf ? ' · original PDF kept' : '';
+  el.textContent = `${plan.name || 'Site plan'} — ${plan.width}×${plan.height} px PNG${pages}${pdf}.`;
+}
+
+function currentBrief() {
+  return buildBrief({
+    home: state.home,
+    scene: state.scene,
+    framing: measureFraming(stage, state.home, currentViewName),
+    site: state.home.brief || {},
+    savedAt: new Date().toISOString().slice(0, 10),
+  });
+}
+
+function setPackageStatus(msg) {
+  if ($('packageStatus')) $('packageStatus').textContent = msg || '';
+}
+
+/** The picked file becomes a PNG page plus, optionally, the original PDF. */
+let sitePlanFile = null;
+
+async function applySitePlanFile(file, page) {
+  setPackageStatus(`Reading ${file.name}…`);
+  const res = await loadSitePlan(file, { page: page || 1 });
+  const keepPdf = isPdf(file) && file.size <= MAX_KEPT_PDF_BYTES;
+  state.home.sitePlan = {
+    src: res.dataUrl,
+    pdf: keepPdf ? await fileToDataUrl(file) : null,
+    name: file.name,
+    page: res.page,
+    pageCount: res.pageCount,
+    width: res.width,
+    height: res.height,
+  };
+  if ($('sp_planPage')) $('sp_planPage').value = res.page;
+  updateSitePlanStatus();
+  save();
+  setPackageStatus(
+    isPdf(file) && !keepPdf
+      ? 'Site plan converted. The original PDF was too large to keep, so only the PNG page is packaged.'
+      : 'Site plan ready.',
+  );
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error('read failed'));
+    r.readAsDataURL(file);
+  });
+}
+
+function bindPackage() {
+  for (const [id, key] of briefFields) {
+    if (!$(id)) continue;
+    $(id).addEventListener('input', (e) => {
+      state.home.brief[key] = e.target.value;
+      save();
+    });
+  }
+
+  if ($('fileSitePlan')) {
+    $('fileSitePlan').addEventListener('change', async (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      sitePlanFile = f;
+      try {
+        await applySitePlanFile(f, 1);
+      } catch (err) {
+        setPackageStatus('');
+        alert(`Could not read that site plan: ${err.message}`);
+      }
+      e.target.value = '';
+    });
+  }
+
+  if ($('btnSitePlanPage')) {
+    $('btnSitePlanPage').addEventListener('click', async () => {
+      const page = parseInt($('sp_planPage').value, 10) || 1;
+      if (!sitePlanFile) {
+        setPackageStatus('Re-pick the PDF to render another page — only the converted page is kept between sessions.');
+        return;
+      }
+      try {
+        await applySitePlanFile(sitePlanFile, page);
+      } catch (err) {
+        alert(`Could not render page ${page}: ${err.message}`);
+      }
+    });
+  }
+
+  if ($('btnCopyBrief')) {
+    $('btnCopyBrief').addEventListener('click', async () => {
+      const text = currentBrief();
+      try {
+        await navigator.clipboard.writeText(text);
+        setPackageStatus('Brief copied to the clipboard.');
+      } catch {
+        // Clipboard access is blocked outside a secure context; fall back to a
+        // selectable prompt rather than silently doing nothing.
+        window.prompt('Copy the brief:', text.slice(0, 2000));
+      }
+    });
+  }
+
+  if ($('btnSaveBrief')) {
+    $('btnSaveBrief').addEventListener('click', async () => {
+      const blob = new Blob([currentBrief()], { type: 'text/markdown' });
+      const name = `${(state.home.name || 'home').replace(/[^\w-]+/g, '_')}-brief.md`;
+      const saved = await saveWithPicker(blob, name, 'Markdown brief', 'text/markdown', '.md');
+      if (!saved) {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      }
+      setPackageStatus(`Brief saved as ${name}.`);
+    });
+  }
+
+  if ($('btnPackage')) {
+    $('btnPackage').addEventListener('click', async () => {
+      const btn = $('btnPackage');
+      btn.disabled = true;
+      setPackageStatus('Rendering plates…');
+      try {
+        const res = await exportRenderPackage({
+          stage,
+          state,
+          viewName: currentViewName,
+          options: packageOptions(),
+          savedAt: new Date().toISOString().slice(0, 10),
+        });
+        const kb = Math.round(res.bytes / 1024);
+        setPackageStatus(`${res.filename} — ${res.files.length} files, ${kb} KB. ${res.framing ? 'Framing measured off the current camera.' : 'Camera framing could not be measured; the brief uses your typed blanks.'}`);
+      } catch (err) {
+        console.error(err);
+        setPackageStatus('');
+        alert(`Could not build the render package: ${err.message}`);
+      } finally {
+        btn.disabled = false;
+        // Plate rendering resizes the renderer and hides the site photo plate.
+        updateSitePhotoPlate();
+        updateFramingReadout();
+      }
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Form binding
 // ---------------------------------------------------------------------------
 
@@ -519,6 +726,11 @@ function syncForm() {
   $('x_h').value = state.export.h;
   $('x_alpha').checked = state.export.alpha;
   $('x_burn').checked = state.export.burn;
+  for (const [id, key] of briefFields) {
+    if ($(id)) $(id).value = state.home.brief?.[key] ?? '';
+  }
+  if ($('sp_planPage')) $('sp_planPage').value = state.home.sitePlan?.page ?? 1;
+  updateSitePlanStatus();
 }
 
 /** Swap in a home spec from disk or the library and reframe on it. */
@@ -553,11 +765,13 @@ function loadProject(raw) {
     stage.userMoved = false;
     stage.setView(p.view.preset || 'hero-left', state.home.dimensions, state.scene);
   }
+  updateFramingReadout();
   save();
 }
 
 function bind() {
   initAccordions();
+  bindPackage();
 
   const toggleSidebar = () => {
     const main = $('mainContainer');
@@ -870,6 +1084,7 @@ function bind() {
     }
 
     updateHud();
+    updateFramingReadout();
     // OrbitControls damping keeps firing 'change' for as long as the camera is
     // easing, so saving unconditionally here wrote to localStorage several times
     // a second and, once history existed, filled the undo stack with camera drift.
@@ -968,6 +1183,7 @@ function bind() {
     b.addEventListener('click', () => {
       stage.setView(b.dataset.view, state.home.dimensions, state.scene);
       currentViewName = b.textContent.trim();
+      updateFramingReadout();
     });
   }
 
@@ -1454,6 +1670,9 @@ function snapshotState() {
   // would otherwise queue undo steps. Where the camera is pointing is
   // navigation; undo should not drag it back.
   home.sitePhoto = { ...home.sitePhoto, src: undefined, camDist: undefined, srcKey: poolKey(home.sitePhoto?.src) };
+  // The site plan is an attachment, not a modelling decision — undo should not
+  // put a previous PDF page back, and its megabytes have no business on the stack.
+  home.sitePlan = { ...home.sitePlan, src: undefined, pdf: undefined };
   const scene = { ...state.scene, eye: undefined };
   return JSON.parse(JSON.stringify({ home, scene }));
 }
@@ -1468,6 +1687,7 @@ function applySnapshot(snap) {
     home.sitePhoto.src = snap.home.sitePhoto?.srcKey ? imagePool.get(snap.home.sitePhoto.srcKey) ?? null : null;
     // Carry the camera readings across untouched — they are not part of history.
     home.sitePhoto.camDist = state.home.sitePhoto?.camDist ?? home.sitePhoto.camDist;
+    home.sitePlan = { ...home.sitePlan, ...(state.home.sitePlan || {}) };
     state.home = home;
     state.scene = { ...defaultScene(), ...snap.scene, eye: state.scene.eye };
 
@@ -1547,13 +1767,14 @@ function save() {
           ...state.home,
           plan: { ...state.home.plan, src: null },
           sitePhoto: { ...state.home.sitePhoto, src: null },
+          sitePlan: { ...state.home.sitePlan, src: null, pdf: null },
         },
       };
       localStorage.setItem(STORE_KEY, JSON.stringify(lean));
     } catch { /* give up quietly; the JSON export is the real save path */ }
     if (!warnedQuota) {
       warnedQuota = true;
-      alert('Storage is full, so the site photo / plan image could not be saved with this project. They will be missing after a reload — use "Export JSON" to keep a full copy, or upload a smaller image.');
+      alert('Storage is full, so the site photo / plan images could not be saved with this project. They will be missing after a reload — use "Save JSON" to keep a full copy, or upload a smaller image.');
     }
   }
 }
@@ -1612,6 +1833,7 @@ fit();
 convertPhotoPanBasis();
 updatePlanPlate(stage, state.home.plan);
 stage.setView('hero-left', state.home.dimensions, state.scene);
+updateFramingReadout();
 
 if (window.ResizeObserver && canvas.parentElement) {
   const ro = new ResizeObserver(fit);
@@ -1629,7 +1851,16 @@ requestAnimationFrame(() => {
 });
 
 // Debug handle: lets you poke at state/stage from the console without a build step.
-window.__app = { state, stage, rebuild, refreshList, renderToCanvas };
+window.__app = {
+  state, stage, rebuild, refreshList, renderToCanvas,
+  // Package internals, so a package can be inspected without going through the
+  // save dialog: __app.buildPackage().then(p => p.files.map(f => f.name)).
+  buildPackage: (options) => buildRenderPackage({
+    stage, state, viewName: currentViewName, options, savedAt: new Date().toISOString().slice(0, 10),
+  }),
+  brief: currentBrief,
+  framing: () => measureFraming(stage, state.home, currentViewName),
+};
 
 (function loop() {
   requestAnimationFrame(loop);

@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { fmtFt } from './build.js';
 
-function slug(s) {
+export function slug(s) {
   return (s || 'home').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'home';
 }
 
@@ -207,7 +207,7 @@ export function caption(home, viewName, filename) {
   return `${modelName}  ·  File: ${fname}  ·  ${fmtFt(d.widthFt)} × ${fmtFt(d.lengthFt)}  ·  ${viewName}`;
 }
 
-function burnCaption(canvas, text) {
+export function burnCaption(canvas, text) {
   const ctx = canvas.getContext('2d');
   const fs = Math.max(16, Math.round(canvas.width / 62));
   const pad = Math.round(fs * 0.7);
@@ -223,7 +223,12 @@ function burnCaption(canvas, text) {
   return canvas;
 }
 
-export function shoot(stage, home, sceneOpts, exportOpts, viewName) {
+/**
+ * Render the live view to a canvas at the export size, captioned, WITHOUT
+ * downloading it. `shoot()` is this plus a download; the render package uses it
+ * directly so a plate can go straight into the zip.
+ */
+export function plateCanvas(stage, home, sceneOpts, exportOpts, viewName, overrides = {}) {
   const dom = stage.renderer?.domElement;
   const liveW = dom ? dom.width : 1920;
   const liveH = dom ? dom.height : 1080;
@@ -237,10 +242,17 @@ export function shoot(stage, home, sceneOpts, exportOpts, viewName) {
     targetH = Math.max(1, Math.round(targetW / liveAspect));
   }
 
+  const alpha = overrides.alpha ?? exportOpts.alpha;
+  const burn = overrides.burn ?? exportOpts.burn;
   const filename = getExportFilename(home, viewName);
-  const c = renderToCanvas(stage, targetW, targetH, exportOpts.alpha, sceneOpts, home);
-  if (exportOpts.burn && !exportOpts.alpha) burnCaption(c, caption(home, viewName, filename));
-  download(c, filename);
+  const c = renderToCanvas(stage, targetW, targetH, alpha, sceneOpts, home);
+  if (burn && !alpha) burnCaption(c, caption(home, viewName, overrides.captionFile || filename));
+  return c;
+}
+
+export function shoot(stage, home, sceneOpts, exportOpts, viewName) {
+  const c = plateCanvas(stage, home, sceneOpts, exportOpts, viewName);
+  download(c, getExportFilename(home, viewName));
   return c;
 }
 
@@ -251,8 +263,32 @@ const SHEET_VIEWS = [
   ['hero-left', 'Three-quarter, front-left'],
 ];
 
+/**
+ * Run `fn` with the camera free to be moved around, then put the user's exact
+ * framing back. Re-applying the view preset is not enough: once the user has
+ * orbited, the preset is not where the camera was.
+ */
+export function withRestoredCamera(stage, fn) {
+  const saved = stage.cameraState?.();
+  const restore = () => { if (saved) stage.applyCameraState(saved); };
+  let out;
+  try {
+    out = fn();
+  } catch (err) {
+    restore();
+    throw err;
+  }
+  // Plate rendering is async (canvas.toBlob), so a plain try/finally would put
+  // the camera back before the first plate had been encoded.
+  if (out && typeof out.then === 'function') {
+    return out.then((v) => { restore(); return v; }, (e) => { restore(); throw e; });
+  }
+  restore();
+  return out;
+}
+
 /** 2x2 contact sheet of the standard elevation set — the plate set for an image model. */
-export function contactSheet(stage, home, sceneOpts, exportOpts) {
+export function contactSheetCanvas(stage, home, sceneOpts, exportOpts) {
   const cw = Math.round(exportOpts.w / 2);
   const ch = Math.round(exportOpts.h / 2);
   const sheet = document.createElement('canvas');
@@ -262,13 +298,13 @@ export function contactSheet(stage, home, sceneOpts, exportOpts) {
   ctx.fillStyle = sceneOpts.bg;
   ctx.fillRect(0, 0, sheet.width, sheet.height);
 
-  const restoreView = stage._lastView;
-
-  SHEET_VIEWS.forEach(([view, label], i) => {
-    stage.setView(view, home.dimensions, sceneOpts);
-    const tile = renderToCanvas(stage, cw, ch, false, sceneOpts, home);
-    burnCaption(tile, label);
-    ctx.drawImage(tile, (i % 2) * cw, Math.floor(i / 2) * ch);
+  withRestoredCamera(stage, () => {
+    SHEET_VIEWS.forEach(([view, label], i) => {
+      stage.setView(view, home.dimensions, sceneOpts);
+      const tile = renderToCanvas(stage, cw, ch, false, sceneOpts, home);
+      burnCaption(tile, label);
+      ctx.drawImage(tile, (i % 2) * cw, Math.floor(i / 2) * ch);
+    });
   });
 
   ctx.strokeStyle = 'rgba(255,255,255,0.18)';
@@ -277,9 +313,23 @@ export function contactSheet(stage, home, sceneOpts, exportOpts) {
   ctx.moveTo(0, ch); ctx.lineTo(sheet.width, ch);
   ctx.stroke();
 
-  const sheetFilename = `${slug(home?.name || 'home')}-elevation-set.png`;
-  burnCaption(sheet, caption(home, 'elevation set', sheetFilename));
-  if (restoreView) stage.setView(restoreView, home.dimensions, sceneOpts);
-  download(sheet, sheetFilename);
-  return sheet;
+  const filename = `${slug(home?.name || 'home')}-elevation-set.png`;
+  burnCaption(sheet, caption(home, 'elevation set', filename));
+  return { canvas: sheet, filename };
+}
+
+export function contactSheet(stage, home, sceneOpts, exportOpts) {
+  const { canvas, filename } = contactSheetCanvas(stage, home, sceneOpts, exportOpts);
+  download(canvas, filename);
+  return canvas;
+}
+
+/** Canvas -> PNG bytes, for anything that packages rather than downloads. */
+export function canvasToPngBytes(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) { reject(new Error('canvas encode failed')); return; }
+      blob.arrayBuffer().then((buf) => resolve(new Uint8Array(buf)), reject);
+    }, 'image/png');
+  });
 }
