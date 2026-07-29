@@ -551,8 +551,6 @@ function cycleActiveProvider() {
   syncApiKeysUI();
 }
 
-let planReadAbort = null;
-
 function bindPlanReader() {
   syncApiKeysUI();
 
