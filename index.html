@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SiteMassing3D — double-wide massing &amp; elevation renderer</title>
 <!-- ?v= bust: plain static servers hand Chrome a cached stylesheet after edits -->
-<link rel="stylesheet" href="css/app.css?v=14">
+<link rel="stylesheet" href="css/app.css?v=15">
 <script type="importmap">
 {
   "imports": {
@@ -182,6 +182,12 @@
           <label><span>Glass</span><input id="c_glass" type="color" autocomplete="off"></label>
         </div>
         <label class="row check" style="margin-top:6px;"><input id="f_cornerTrim" type="checkbox" autocomplete="off"><span>Corner trim boards</span></label>
+
+        <h3 class="subhead">Match The Real Home</h3>
+        <p class="hint">A typed hex is a guess, and the guess always comes out too clean — real siding photographs greyer and cooler than its swatch name, and a roof read by eye lands a couple of shades light. Pick the colours straight off the photograph instead and the render is one for one with the unit.</p>
+        <div id="matPhotoSources"></div>
+        <button id="btnPickColors" class="primary block">🎯 Pick colours off the photo</button>
+        <p class="hint" id="matPickStatus"></p>
       </div>
     </section>
 
@@ -195,6 +201,7 @@
         <p class="hint">Load the ones you have. <b>Walls you cannot photograph are exactly why the plates exist</b> — the package tells the model to follow the plate and the written spec there, and to invent nothing.</p>
         <div id="homePhotoList"></div>
         <input type="file" id="fileHomePhoto" accept="image/*" hidden>
+        <p class="hint" id="homePhotoLinks"></p>
       </div>
     </section>
 
@@ -300,6 +307,7 @@
         <p class="hint">Any other angle — loads into the live view without claiming a slot.</p>
         <label class="btn block" for="fileSitePhoto">Load site photo (PNG/JPG)</label>
         <input type="file" id="fileSitePhoto" accept="image/*" hidden>
+        <div id="freePhotoLinks"></div>
         <div class="grid2">
           <label><span>Photo fit mode</span>
             <select id="sp_fitMode">
@@ -385,6 +393,7 @@
         </div>
         <label class="row check"><input id="p_pick" type="checkbox" autocomplete="off"><span>Plan-pick mode: click plan to drop a door on nearest wall</span></label>
         <p class="hint">Scale the plate so its printed footprint matches the white outline, then trace door positions off it.</p>
+        <div id="planLinkRow"></div>
       </div>
     </section>
 
@@ -442,6 +451,10 @@
       </div>
       <div class="panel-body">
         <p class="hint">One zip carrying the massing plates, the lot photo, the site plan and a written brief with every dimension measured off this model — the whole hand-off to Gemini / Midjourney / Flux in a single file.</p>
+
+        <h3 class="subhead">Everything loaded so far</h3>
+        <p class="hint">Every image this project holds, whichever panel loaded it. Click one to jump to the panel that owns it.</p>
+        <div id="assetRail"></div>
 
         <h3 class="subhead">Site plan / spec sheet</h3>
         <label class="btn block" for="fileSitePlan">Load site plan (PDF, PNG or JPG)</label>

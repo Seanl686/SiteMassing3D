@@ -19,6 +19,12 @@ import { History, describeChange } from '../src/history.js';
 import { buildProject, readProject, PROJECT_VERSION } from '../src/project.js';
 import { validateHomeSpec, applySpecToHome, parseHexColor } from '../src/homespec.js';
 import { AI_PROVIDERS, loadApiKeys, saveApiKeys, readPlanWithAutoCycle } from '../src/readplan.js';
+import {
+  collectAssets, assetInventory, finishSampleAssets, planPlateLinked, missingHomePhotoNames,
+} from '../src/assets.js';
+import {
+  rgbToHex, hexToRgb, luma, saturation, sampleAverage, samplePixels, quantize, suggestFinishRoles,
+} from '../src/eyedrop.js';
 
 test('1. Defaults & State Initialization', () => {
   const home = defaultHome();
@@ -1267,3 +1273,128 @@ test('47. Multi-Provider AI API Key Auto-Cycling & Fallback', async () => {
 
 
 
+
+// ---------------------------------------------------------------------------
+// Cross-panel asset registry and photo colour sampling
+// ---------------------------------------------------------------------------
+
+test('48. Every Loaded Image Is Registered Against The Panel That Owns It', () => {
+  const home = defaultHome();
+  home.homePhotos = { hero: { src: 'data:image/jpeg;base64,AAA', name: 'lot-3q.jpg' } };
+  home.sitePlan = { ...home.sitePlan, src: 'data:image/png;base64,BBB', name: 'spec.pdf', width: 1700, height: 2200, page: 1, pageCount: 3 };
+  home.plan = { ...home.plan, src: 'data:image/png;base64,CCC' };
+  home.siteViews = [captureSiteView({
+    name: '¾ front-left', slotKey: 'hero-left',
+    sitePhoto: { src: 'data:image/jpeg;base64,DDD' },
+  })];
+
+  const assets = collectAssets(home);
+  const byKind = Object.fromEntries(assets.map((a) => [a.kind, a]));
+
+  assert.equal(assets.length, 4);
+  // The panel each one jumps back to is the panel that loaded it — this is the
+  // whole point of the registry.
+  assert.equal(byKind.homePhoto.panel, 'panel_homephotos');
+  assert.equal(byKind.lotPhoto.panel, 'panel_photo');
+  assert.equal(byKind.sitePlan.panel, 'panel_package');
+  assert.equal(byKind.planPlate.panel, 'panel_plan');
+  assert.match(byKind.sitePlan.detail, /page 1 of 3/);
+
+  const inv = assetInventory(home);
+  assert.equal(inv.homePhotos, 1);
+  assert.equal(inv.homePhotoSlots, HOME_PHOTO_SLOTS.length);
+  assert.equal(inv.lotPhotos, 1);
+  assert.equal(inv.slottedLotPhotos, 1);
+  assert.equal(inv.sitePlan, true);
+  assert.equal(inv.planPlate, true);
+  assert.equal(inv.panorama, false);
+  assert.deepEqual(missingHomePhotoNames(home), HOME_PHOTO_SLOTS.filter((s) => s.key !== 'hero').map((s) => s.name));
+});
+
+test('49. The Tracing Plate Reports Whether It Is The Site Plan Page', () => {
+  const home = defaultHome();
+  assert.equal(planPlateLinked(home), false, 'nothing loaded is not linked');
+
+  home.sitePlan = { ...home.sitePlan, src: 'data:image/png;base64,PAGE' };
+  assert.equal(planPlateLinked(home), false, 'a plan with no plate is not linked');
+
+  home.plan = { ...home.plan, src: 'data:image/png;base64,PAGE' };
+  assert.equal(planPlateLinked(home), true);
+
+  // A plate the user loaded separately must never be reported as the same
+  // drawing — that is what stops the site plan quietly overwriting it.
+  home.plan.src = 'data:image/png;base64,OTHER';
+  assert.equal(planPlateLinked(home), false);
+});
+
+test('50. Only Photographs Are Offered As Colour Sources, Catalogue Shot First', () => {
+  const home = defaultHome();
+  home.plan = { ...home.plan, src: 'data:image/png;base64,LINEART' };
+  home.homePhotos = {
+    front: { src: 'data:image/jpeg;base64,FRONT', name: 'front.jpg' },
+    hero: { src: 'data:image/jpeg;base64,HERO', name: 'hero.jpg' },
+  };
+  home.siteViews = [captureSiteView({ name: 'lot', sitePhoto: { src: 'data:image/jpeg;base64,LOT' } })];
+
+  const sources = finishSampleAssets(home);
+  assert.equal(sources[0].key, 'hero', 'the ¾ shot shows siding, trim and roof under one light');
+  assert.deepEqual(sources.map((s) => s.kind), ['homePhoto', 'homePhoto', 'lotPhoto']);
+  assert.ok(!sources.some((s) => s.kind === 'planPlate'), 'sampling line art returns the colour of paper');
+  assert.ok(sources.every((s) => s.canSampleFinish));
+});
+
+test('51. A Sample Averages Its Box And Ignores Transparency', () => {
+  // 2x2: three known colours and one fully transparent pixel.
+  const w = 2, h = 2;
+  const data = new Uint8ClampedArray([
+    100, 100, 100, 255, 200, 200, 200, 255,
+    150, 150, 150, 255, 0, 0, 0, 0,
+  ]);
+
+  assert.deepEqual(sampleAverage(data, w, h, 0, 0, 0), { r: 100, g: 100, b: 100 });
+  // The 3x3 box clips to the image and skips the transparent corner, so the
+  // answer is the mean of the three opaque pixels, not of four.
+  assert.deepEqual(sampleAverage(data, w, h, 0, 0, 1), { r: 150, g: 150, b: 150 });
+  assert.equal(sampleAverage(data, w, h, 0, 0, 0) && rgbToHex({ r: 100, g: 100, b: 100 }), '#646464');
+  assert.equal(sampleAverage(data, w, h, 1, 1, 0), null, 'a fully transparent pixel has no colour');
+  assert.deepEqual(hexToRgb('#646464'), { r: 100, g: 100, b: 100 });
+});
+
+test('52. The Photo Palette Is Deterministic And Maps Onto The House', () => {
+  // A photograph-shaped mix: mostly wall, some roof, a little trim, one door.
+  const pixels = [];
+  for (let i = 0; i < 500; i++) pixels.push([141, 146, 153]); // siding, the big area
+  for (let i = 0; i < 200; i++) pixels.push([32, 34, 38]);   // roof, darkest
+  for (let i = 0; i < 120; i++) pixels.push([242, 242, 240]); // trim, lightest
+  for (let i = 0; i < 60; i++) pixels.push([150, 30, 30]);    // a red door
+
+  const a = quantize(pixels, 6);
+  const b = quantize(pixels, 6);
+  assert.deepEqual(a.map((c) => c.hex), b.map((c) => c.hex), 'the same photo must give the same palette every time');
+  assert.ok(a.length > 1 && a.length <= 6);
+  assert.ok(a[0].weight >= a[a.length - 1].weight, 'sorted by how much of the frame each covers');
+
+  const roles = suggestFinishRoles(a);
+  assert.ok(luma(hexToRgb(roles.roof)) < luma(hexToRgb(roles.siding)), 'the roof is the darkest large area');
+  assert.ok(luma(hexToRgb(roles.trim)) > luma(hexToRgb(roles.siding)), 'the trim is the lightest');
+  // Unlisted siding surfaces follow the main siding rather than being left behind.
+  assert.equal(roles.dormerSiding, roles.siding);
+  assert.equal(roles.gableSiding, roles.siding);
+  assert.ok(saturation(hexToRgb(roles.door)) > 0.18, 'a strongly coloured door survives quantisation');
+});
+
+test('53. Sampled Pixels Are Taken On A Fixed Stride, Never At Random', () => {
+  const w = 40, h = 40;
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (let i = 0; i < w * h; i++) {
+    data[i * 4] = i % 256;
+    data[i * 4 + 1] = 80;
+    data[i * 4 + 2] = 90;
+    data[i * 4 + 3] = i < 100 ? 0 : 255; // first 100 pixels fully transparent
+  }
+  const first = samplePixels(data, w, h, 200);
+  const second = samplePixels(data, w, h, 200);
+  assert.deepEqual(first, second, 'a re-opened photo must not shuffle its suggested colours');
+  assert.ok(first.length > 0 && first.length <= 200);
+  assert.ok(first.every((p) => p.length === 3));
+});

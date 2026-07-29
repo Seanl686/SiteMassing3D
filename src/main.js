@@ -16,6 +16,10 @@ import { measureFraming } from './framing.js';
 import { loadSitePlan, isPdf } from './siteplan.js';
 import { HOME_PHOTO_SLOTS, homeSlotByKey } from './homephotos.js';
 import {
+  collectAssets, assetInventory, finishSampleAssets, planPlateLinked, missingHomePhotoNames,
+} from './assets.js';
+import { openColorPicker } from './colorpick.js';
+import {
   HOME_SPEC_SCHEMA, buildSpecPrompt, validateHomeSpec, extractJson, applySpecToHome,
 } from './homespec.js';
 import { readPlanWithAI, readPlanWithAutoCycle, readPlanWithClaude, loadApiKey, saveApiKey, loadApiKeys, saveApiKeys, isPersisted } from './readplan.js';
@@ -707,8 +711,15 @@ function renderHomePhotoList() {
       clear.addEventListener('click', () => {
         delete state.home.homePhotos[slot.key];
         renderHomePhotoList();
+        assetsChanged();
         save();
       });
+
+      const pick = document.createElement('button');
+      pick.textContent = '🎯 Colours';
+      pick.title = 'Open the eyedropper on this photograph and read the exterior finishes off it';
+      pick.addEventListener('click', () => openFinishPicker(null, `homePhoto:${slot.key}`));
+      actions.appendChild(pick);
       actions.appendChild(clear);
     }
     body.appendChild(actions);
@@ -737,10 +748,370 @@ function bindHomePhotos() {
     downscaleImage(f, 1800, 0.86).then((src) => {
       state.home.homePhotos = { ...state.home.homePhotos, [key]: { src, name: f.name } };
       renderHomePhotoList();
+      assetsChanged();
       save();
-      setPackageStatus(`Loaded the ${homeSlotByKey(key).name} photo of the home.`);
+      setPackageStatus(`Loaded the ${homeSlotByKey(key).name} photo of the home. It is now a colour source in Exterior Materials too.`);
     }).catch(() => alert('Could not read that image.'));
   });
+}
+
+// ---------------------------------------------------------------------------
+// Cross-panel asset wiring
+//
+// The panels were built one at a time and each ended up owning its uploads in
+// isolation, which is how the same PDF page came to be loaded twice — once as
+// the site plan for the package, once as the tracing plate — and how a photo of
+// the real home could sit unused two panels above the colour fields it answers.
+//
+// Everything below is one job: when an image lands anywhere, every panel that
+// could use it says so. assetsChanged() is the single broadcast; call it after
+// any upload, clear or link.
+// ---------------------------------------------------------------------------
+
+/** Open a collapsed panel, scroll to it, and flash it so the jump is visible. */
+function revealPanel(panelId) {
+  const panel = $(panelId);
+  if (!panel) return;
+  if (!panel.classList.contains('open')) {
+    panel.classList.add('open');
+    const chev = panel.querySelector('.chevron');
+    if (chev) chev.textContent = '▲';
+  }
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  panel.classList.remove('panel-flash');
+  void panel.offsetWidth; // restart the animation rather than let it no-op
+  panel.classList.add('panel-flash');
+  setTimeout(() => panel.classList.remove('panel-flash'), 1500);
+}
+
+function makeButton(text, title, onClick, cls) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = text;
+  if (title) b.title = title;
+  if (cls) b.className = cls;
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+/** The live inventory in the package panel: every image, and who loaded it. */
+function renderAssetRail() {
+  const host = $('assetRail');
+  if (!host) return;
+  host.textContent = '';
+  const assets = collectAssets(state.home);
+  if (!assets.length) {
+    const p = document.createElement('p');
+    p.className = 'hint';
+    p.textContent = 'Nothing loaded yet. The package will carry the massing plates and the brief, and nothing else.';
+    host.appendChild(p);
+    return;
+  }
+  for (const a of assets) {
+    const card = document.createElement('div');
+    card.className = 'asset-card';
+    const img = document.createElement('img');
+    img.src = a.src;
+    img.alt = a.label;
+    img.loading = 'lazy';
+    const body = document.createElement('div');
+    body.className = 'asset-body';
+    const name = document.createElement('div');
+    name.className = 'asset-name';
+    const code = document.createElement('span');
+    code.className = 'asset-code';
+    code.textContent = a.code;
+    name.append(code, document.createTextNode(a.label));
+    const detail = document.createElement('div');
+    detail.className = 'asset-detail';
+    detail.textContent = a.detail;
+    body.append(name, detail);
+    card.append(img, body);
+    card.title = `Loaded in the ${a.panelName} panel — click to go there`;
+    card.addEventListener('click', () => revealPanel(a.panel));
+    host.appendChild(card);
+  }
+}
+
+/** Say on each package checkbox what it will actually put in the zip. */
+function annotatePackageChecks() {
+  const inv = assetInventory(state.home);
+  const notes = {
+    pk_homePhotos: inv.homePhotos
+      ? [`${inv.homePhotos} of ${inv.homePhotoSlots} loaded`, false]
+      : ['none loaded', true],
+    pk_sitePlan: inv.sitePlan ? ['page ready', false] : ['nothing loaded', true],
+    pk_originalPdf: inv.sitePlanPdf ? ['PDF kept', false] : ['no PDF held', true],
+    pk_allSiteViews: inv.lotPhotos
+      ? [`${inv.lotPhotos} view${inv.lotPhotos === 1 ? '' : 's'}`, false]
+      : ['no saved views', true],
+    pk_lotPhoto: state.home.sitePhoto?.src ? ['photo ready', false] : ['no lot photo', true],
+  };
+  for (const [id, [text, missing]] of Object.entries(notes)) {
+    const box = $(id);
+    if (!box) continue;
+    const label = box.closest('label');
+    if (!label) continue;
+    let tag = label.querySelector('.pk-count');
+    if (!tag) {
+      tag = document.createElement('i');
+      tag.className = 'pk-count';
+      label.appendChild(tag);
+    }
+    tag.textContent = text;
+    tag.classList.toggle('missing', missing);
+    label.classList.toggle('pk-empty', missing);
+  }
+}
+
+/**
+ * Point the floor plan tracing plate at the site plan page.
+ *
+ * These were two separate uploads of, almost always, the same drawing. The plan
+ * panel needs it on the ground to trace doors off; the package needs it as a
+ * page for the vision model. One image, two uses.
+ */
+function linkSitePlanToPlate() {
+  const src = state.home.sitePlan?.src;
+  if (!src) return false;
+  state.home.plan.src = src;
+  state.home.plan.show = true;
+  if ($('p_show')) $('p_show').checked = true;
+  updatePlanPlate(stage, state.home.plan);
+  save();
+  assetsChanged();
+  return true;
+}
+
+function renderPlanLinkRow() {
+  const host = $('planLinkRow');
+  if (!host) return;
+  host.textContent = '';
+  const hasPlan = !!state.home.sitePlan?.src;
+  const linked = planPlateLinked(state.home);
+
+  const note = document.createElement('p');
+  note.className = `hint link-note${linked ? ' linked' : ''}`;
+  note.textContent = linked
+    ? 'This plate IS the site plan page loaded in the AI Render Package panel — re-render a different page there and the plate follows.'
+    : hasPlan
+      ? 'A site plan page is loaded in the AI Render Package panel. It is usually the same drawing you want on the ground here.'
+      : 'Loading a site plan in the AI Render Package panel makes it available here in one click — the same drawing does both jobs.';
+  host.appendChild(note);
+
+  const row = document.createElement('div');
+  row.className = 'btnrow';
+  if (hasPlan && !linked) {
+    row.appendChild(makeButton(
+      'Use the site plan page as this plate',
+      'Puts the site plan page on the ground so doors can be traced off it',
+      () => linkSitePlanToPlate(),
+      'primary',
+    ));
+  }
+  row.appendChild(makeButton('Go to the site plan →', 'Open the AI Render Package panel', () => revealPanel('panel_package')));
+  host.appendChild(row);
+}
+
+/** The finish-sampling sources, shown in the materials panel so it knows they exist. */
+function renderMatPhotoSources() {
+  const host = $('matPhotoSources');
+  if (!host) return;
+  host.textContent = '';
+  const sources = finishSampleAssets(state.home);
+  const btn = $('btnPickColors');
+  if (btn) btn.disabled = !sources.length;
+
+  if (!sources.length) {
+    const p = document.createElement('p');
+    p.className = 'hint link-note';
+    p.append(document.createTextNode('No photograph to sample yet. '));
+    p.appendChild(makeButton(
+      'Load photos of the real home →',
+      'Open the HOM panel',
+      () => revealPanel('panel_homephotos'),
+      'link-btn',
+    ));
+    host.appendChild(p);
+    return;
+  }
+
+  const strip = document.createElement('div');
+  strip.className = 'source-strip';
+  for (const a of sources) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'source-chip';
+    b.title = `${a.kindLabel} — click to open the picker on this photo`;
+    const img = document.createElement('img');
+    img.src = a.src;
+    img.alt = a.label;
+    img.loading = 'lazy';
+    b.append(img, document.createTextNode(a.label));
+    b.addEventListener('click', () => openFinishPicker(null, a.id));
+    strip.appendChild(b);
+  }
+  host.appendChild(strip);
+}
+
+/** The home-photo panel's line about what those photos are now feeding. */
+function renderHomePhotoLinks() {
+  const host = $('homePhotoLinks');
+  if (!host) return;
+  host.textContent = '';
+  const inv = assetInventory(state.home);
+  const missing = missingHomePhotoNames(state.home);
+
+  const line = document.createElement('span');
+  line.textContent = inv.homePhotos
+    ? `${inv.homePhotos} of ${inv.homePhotoSlots} loaded${missing.length ? ` — still missing: ${missing.join(', ')}.` : ' — every wall covered.'} `
+    : 'Nothing loaded. These photos also feed the colour picker, so loading one here fills in the exterior finishes too. ';
+  host.appendChild(line);
+
+  if (inv.homePhotos) {
+    host.appendChild(makeButton(
+      '🎯 Pick the exterior colours off these →',
+      'Open the eyedropper on these photographs',
+      () => openFinishPicker(),
+      'link-btn',
+    ));
+  } else {
+    host.appendChild(makeButton(
+      'Exterior Materials & Colors →',
+      'Open the MAT panel',
+      () => revealPanel('panel_colors'),
+      'link-btn',
+    ));
+  }
+}
+
+/**
+ * A free-form lot photo is loaded into the live view and belongs to nothing, so
+ * it is lost the moment another view is applied. Offer to bank it in a slot,
+ * which is what the user almost always meant.
+ */
+function renderFreePhotoLinks() {
+  const host = $('freePhotoLinks');
+  if (!host) return;
+  host.textContent = '';
+  const src = state.home.sitePhoto?.src;
+  if (!src) return;
+
+  const active = state.home.siteViews.find((v) => v.id === state.home.activeSiteViewId);
+  if (active?.photo?.src === src) {
+    const p = document.createElement('p');
+    p.className = 'hint link-note linked';
+    p.textContent = `This photo is saved in the "${active.name}" site view, with its alignment and camera.`;
+    host.appendChild(p);
+    return;
+  }
+
+  const p = document.createElement('p');
+  p.className = 'hint link-note';
+  p.textContent = 'This photo is not saved in any view yet — applying another view loses it. Bank it in a slot:';
+  host.appendChild(p);
+  const row = document.createElement('div');
+  row.className = 'btnrow';
+  for (const slot of SITE_VIEW_SLOTS) {
+    const taken = !!findSlotView(state.home.siteViews, slot.key)?.photo?.src;
+    row.appendChild(makeButton(
+      `${taken ? 'Replace' : 'Save as'} ${slot.name}`,
+      slot.shoot,
+      () => loadSlotPhoto(slot.key, src),
+    ));
+  }
+  host.appendChild(row);
+}
+
+/** One broadcast: every panel that could care about a loaded image re-reads. */
+function assetsChanged() {
+  renderAssetRail();
+  annotatePackageChecks();
+  renderPlanLinkRow();
+  renderMatPhotoSources();
+  renderHomePhotoLinks();
+  renderFreePhotoLinks();
+}
+
+// ---------------------------------------------------------------------------
+// Picking the finishes off the photograph
+// ---------------------------------------------------------------------------
+
+/** The label the materials panel already prints beside each colour input. */
+function colorFieldLabel(id, key) {
+  const span = $(id)?.closest('label')?.querySelector('span');
+  return span?.textContent?.trim() || key;
+}
+
+function setPickStatus(msg) {
+  if ($('matPickStatus')) $('matPickStatus').textContent = msg || '';
+}
+
+/**
+ * Open the eyedropper.
+ *
+ * `armedKey` is the colour the first pick lands on — pass it when the user
+ * clicked the eyedropper next to a specific field, so one click puts them on the
+ * right target. `preferSourceId` opens straight onto a given photograph.
+ */
+function openFinishPicker(armedKey = null, preferSourceId = null) {
+  let sources = finishSampleAssets(state.home);
+  if (!sources.length) {
+    setPickStatus('Load a photograph of the real home first — that is what the colours are read off.');
+    revealPanel('panel_homephotos');
+    return;
+  }
+  if (preferSourceId) {
+    const at = sources.findIndex((s) => s.id === preferSourceId);
+    if (at > 0) sources = [sources[at], ...sources.slice(0, at), ...sources.slice(at + 1)];
+  }
+
+  const targets = colorFields.map(([id, key]) => ({
+    key,
+    label: colorFieldLabel(id, key),
+    color: state.home.colors[key] || state.home.colors.siding || '#8d9299',
+  }));
+
+  const applyColors = (colors) => {
+    state.home.colors = { ...state.home.colors, ...colors };
+    for (const [id, key] of colorFields) {
+      if ($(id)) $(id).value = state.home.colors[key];
+    }
+    rebuild();
+  };
+
+  openColorPicker({
+    sources,
+    targets,
+    armedKey,
+    onPreview: applyColors,
+    onCommit: (colors, touched) => {
+      applyColors(colors);
+      save();
+      setPickStatus(touched.length
+        ? `${touched.length} finish${touched.length === 1 ? '' : 'es'} taken off the photo: ${touched.map((k) => colorFieldLabel(colorFields.find(([, kk]) => kk === k)?.[0], k)).join(', ')}.`
+        : 'Nothing changed.');
+    },
+    onCancel: () => setPickStatus('Picker closed — colours put back.'),
+  });
+}
+
+/** An eyedropper button beside every colour input, armed on that colour. */
+function decorateColorFields() {
+  for (const [id, key] of colorFields) {
+    const input = $(id);
+    const label = input?.closest('label');
+    if (!label || label.querySelector('.eyedrop-btn')) continue;
+    label.classList.add('color-field');
+    const btn = makeButton('🎯', `Pick "${colorFieldLabel(id, key)}" off a photograph of the real home`, (e) => {
+      // Without this the click activates the surrounding <label> and pops the
+      // native colour swatch open behind the dialog.
+      e.preventDefault();
+      e.stopPropagation();
+      openFinishPicker(key);
+    }, 'eyedrop-btn');
+    label.appendChild(btn);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -789,6 +1160,7 @@ function bindPanorama() {
           if ($('pn_show')) $('pn_show').checked = true;
           rebuild();
           updatePanoStatus();
+          assetsChanged();
         };
         img.src = dataUrl;
       }).catch(() => alert('Could not read that panorama.'));
@@ -945,6 +1317,9 @@ function renderSlotList() {
     card.appendChild(body);
     host.appendChild(card);
   });
+  // Every path that adds, replaces or clears a lot photo comes through here, so
+  // this is where the rest of the app hears about it.
+  assetsChanged();
 }
 
 let pendingSlotKey = null;
@@ -1307,6 +1682,10 @@ async function applySitePlanFile(file, page) {
   setPackageStatus(`Reading ${file.name}…`);
   const res = await loadSitePlan(file, { page: page || 1 });
   const keepPdf = isPdf(file) && file.size <= MAX_KEPT_PDF_BYTES;
+  // An empty plan panel, or one already showing this same drawing, follows the
+  // new page. A plate the user loaded separately is left alone — that is a
+  // deliberate choice of a different drawing and overwriting it would be rude.
+  const adoptPlate = !state.home.plan.src || planPlateLinked(state.home);
   state.home.sitePlan = {
     src: res.dataUrl,
     pdf: keepPdf ? await fileToDataUrl(file) : null,
@@ -1317,12 +1696,16 @@ async function applySitePlanFile(file, page) {
     height: res.height,
   };
   if ($('sp_planPage')) $('sp_planPage').value = res.page;
+  const plated = adoptPlate && linkSitePlanToPlate();
   updateSitePlanStatus();
+  assetsChanged();
   save();
   setPackageStatus(
     isPdf(file) && !keepPdf
       ? 'Site plan converted. The original PDF was too large to keep, so only the PNG page is packaged.'
-      : 'Site plan ready.',
+      : plated
+        ? 'Site plan ready — and put on the ground as the floor plan tracing plate, so doors can be traced straight off it.'
+        : 'Site plan ready.',
   );
 }
 
@@ -1646,6 +2029,8 @@ function bind() {
   bindPanorama();
   bindSiteViews();
   bindPackage();
+  decorateColorFields();
+  if ($('btnPickColors')) $('btnPickColors').addEventListener('click', () => openFinishPicker());
 
   const toggleSidebar = () => {
     const main = $('mainContainer');
@@ -1852,6 +2237,7 @@ function bind() {
       state.home.plan.show = true;
       $('p_show').checked = true;
       updatePlanPlate(stage, state.home.plan);
+      assetsChanged();
       save();
     };
     r.readAsDataURL(f);
@@ -1913,6 +2299,7 @@ function bind() {
         state.home.sitePhoto.show = true;
         if ($('sp_show')) $('sp_show').checked = true;
         rebuild();
+        assetsChanged();
       }).catch(() => {
         alert('Could not read that image.');
       });
@@ -2798,6 +3185,7 @@ syncForm();
 bind();
 rebuild();
 refreshList();
+assetsChanged();
 fit();
 convertPhotoPanBasis();
 updatePlanPlate(stage, state.home.plan);

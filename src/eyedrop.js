@@ -1,0 +1,185 @@
+// Colour sampling off a photograph.
+//
+// The exterior colours used to be typed in as hex, which means they were
+// guessed. A guess is close enough to look wrong: vinyl siding photographs a
+// good deal greyer and cooler than the swatch name suggests, and a roof read off
+// a catalogue photo by eye lands two shades too light almost every time. The
+// photograph of the real home already holds the answer — this reads it out of
+// the pixels so the model's finish is one for one with the unit.
+//
+// DOM-free maths only; the dialog that drives it lives in colorpick.js.
+
+const clamp255 = (v) => (v < 0 ? 0 : v > 255 ? 255 : Math.round(v));
+
+export const rgbToHex = ({ r, g, b }) =>
+  `#${[r, g, b].map((v) => clamp255(v).toString(16).padStart(2, '0')).join('')}`;
+
+export function hexToRgb(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+/** Rec. 709 luma. Used for ordering a palette dark-to-light, not for contrast. */
+export const luma = ({ r, g, b }) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+/** HSV saturation, 0..1. Cheap, and enough to tell a door colour from siding. */
+export function saturation({ r, g, b }) {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  return max === 0 ? 0 : (max - min) / max;
+}
+
+/**
+ * Average the pixels in a square of side `2 * radius + 1` centred on (x, y).
+ *
+ * A single pixel is the wrong sample off a photograph: JPEG blocking, sensor
+ * noise and the speckle in a shingle all move one pixel several shades away
+ * from the colour a person sees. Averaging a small box is what makes two picks
+ * on the same wall agree. Fully transparent pixels are skipped so sampling a
+ * cutout render does not drag the answer toward black.
+ *
+ * `data` is RGBA as produced by CanvasRenderingContext2D.getImageData.
+ * Returns null when the box lands entirely outside the image or on transparency.
+ */
+export function sampleAverage(data, width, height, x, y, radius = 2) {
+  const cx = Math.round(x);
+  const cy = Math.round(y);
+  const r = Math.max(0, Math.round(radius));
+  let sr = 0, sg = 0, sb = 0, n = 0;
+  for (let dy = -r; dy <= r; dy++) {
+    const py = cy + dy;
+    if (py < 0 || py >= height) continue;
+    for (let dx = -r; dx <= r; dx++) {
+      const px = cx + dx;
+      if (px < 0 || px >= width) continue;
+      const i = (py * width + px) * 4;
+      if (data[i + 3] < 8) continue;
+      sr += data[i]; sg += data[i + 1]; sb += data[i + 2]; n++;
+    }
+  }
+  if (!n) return null;
+  return { r: Math.round(sr / n), g: Math.round(sg / n), b: Math.round(sb / n) };
+}
+
+/**
+ * Pull up to `max` pixels out of an RGBA buffer on a regular stride.
+ *
+ * Regular rather than random: the palette has to come out the same every time
+ * the same photo is opened, or the suggested colours shuffle under the user
+ * between one visit and the next.
+ */
+export function samplePixels(data, width, height, max = 20000) {
+  const total = width * height;
+  const stride = Math.max(1, Math.floor(total / Math.max(1, max)));
+  const out = [];
+  for (let i = 0; i < total; i += stride) {
+    const p = i * 4;
+    if (data[p + 3] < 8) continue;
+    out.push([data[p], data[p + 1], data[p + 2]]);
+  }
+  return out;
+}
+
+function boxRange(box) {
+  let lo = [255, 255, 255];
+  let hi = [0, 0, 0];
+  for (const p of box) {
+    for (let c = 0; c < 3; c++) {
+      if (p[c] < lo[c]) lo[c] = p[c];
+      if (p[c] > hi[c]) hi[c] = p[c];
+    }
+  }
+  return [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]];
+}
+
+/**
+ * Median-cut quantisation down to at most `k` colours.
+ *
+ * Median cut over k-means on purpose: it is deterministic with no seeding, it
+ * keeps a small strongly-coloured region (a red door) instead of averaging it
+ * into the wall behind it, and at this size it runs in a frame.
+ */
+export function quantize(pixels, k = 8) {
+  const px = pixels.filter(Boolean);
+  if (!px.length) return [];
+  let boxes = [px];
+  while (boxes.length < k) {
+    // Split the box that is widest on any one channel; ties go to the bigger box.
+    let target = -1, bestSpread = -1, bestChannel = 0;
+    boxes.forEach((box, i) => {
+      if (box.length < 2) return;
+      const range = boxRange(box);
+      const channel = range.indexOf(Math.max(...range));
+      const spread = range[channel] * Math.log(box.length + 1);
+      if (spread > bestSpread) { bestSpread = spread; target = i; bestChannel = channel; }
+    });
+    if (target < 0) break;
+    const box = boxes[target].slice().sort((a, b) => a[bestChannel] - b[bestChannel]);
+    const mid = box.length >> 1;
+    const left = box.slice(0, mid);
+    const right = box.slice(mid);
+    if (!left.length || !right.length) break;
+    boxes = [...boxes.slice(0, target), left, right, ...boxes.slice(target + 1)];
+  }
+
+  return boxes
+    .map((box) => {
+      let r = 0, g = 0, b = 0;
+      for (const p of box) { r += p[0]; g += p[1]; b += p[2]; }
+      const n = box.length;
+      const color = { r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n) };
+      return { ...color, hex: rgbToHex(color), weight: n / px.length };
+    })
+    .sort((a, b) => b.weight - a.weight);
+}
+
+/**
+ * Guess which palette entry is which part of the house.
+ *
+ * These are opening bids, not answers — the point is that a user who clicks
+ * "auto" gets a house that is roughly the right colour in one action and then
+ * corrects the two that are wrong, rather than picking nine colours by hand.
+ *
+ * Roof is the darkest large area, trim the lightest, siding the one covering
+ * the most frame that is neither. Doors and skirting fall back to siding-family
+ * colours because on most units they are.
+ */
+export function suggestFinishRoles(palette) {
+  const p = (palette || []).filter((c) => c && typeof c.hex === 'string');
+  if (!p.length) return {};
+
+  // Ignore near-black and blown-white slivers: those are shadow and sky, not paint.
+  const usable = p.filter((c) => {
+    const l = luma(c);
+    return l > 14 && l < 246;
+  });
+  const pool = usable.length >= 3 ? usable : p;
+
+  const byLuma = [...pool].sort((a, b) => luma(a) - luma(b));
+  const roof = byLuma[0];
+  const trim = byLuma[byLuma.length - 1];
+
+  const rest = pool.filter((c) => c !== roof && c !== trim);
+  const siding = (rest.length ? rest : pool).slice().sort((a, b) => b.weight - a.weight)[0];
+
+  // The most saturated entry that is not already spoken for reads as the door
+  // on a surprising number of units; when nothing is saturated, match the trim.
+  const colourful = pool
+    .filter((c) => c !== roof && c !== trim && c !== siding)
+    .sort((a, b) => saturation(b) - saturation(a))[0];
+
+  const out = {
+    roof: roof?.hex,
+    trim: trim?.hex,
+    siding: siding?.hex,
+    belowDormerSiding: siding?.hex,
+    dormerSiding: siding?.hex,
+    gableSiding: siding?.hex,
+    skirting: trim?.hex,
+    door: (colourful && saturation(colourful) > 0.18 ? colourful.hex : trim?.hex),
+  };
+  for (const key of Object.keys(out)) if (!out[key]) delete out[key];
+  return out;
+}
