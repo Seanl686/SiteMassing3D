@@ -15,7 +15,7 @@
 
 import {
   rgbToHex, hexToRgb, sampleAverage, samplePixels, quantize, suggestFinishRoles,
-  zoomAnchoredPan, wheelZoomFactor,
+  zoomAnchoredPan, wheelZoomFactor, whiteBalanceGains, applyWhiteBalance,
 } from './eyedrop.js';
 
 const SAMPLE_SIZES = [
@@ -106,7 +106,23 @@ function build() {
   btnScreen.title = 'Uses the browser eyedropper — works on the 3D view, another window, anything visible';
   if (!window.EyeDropper) btnScreen.style.display = 'none';
 
-  tools.append(sizeWrap, zoomWrap, btnFit, advanceWrap, btnScreen);
+  // White balance. A photograph records the light of the day, not the paint:
+  // white siding under a bright sky reads as a mid grey, and reporting that
+  // grey is correct but is never what someone means by "the house is white".
+  const wbWrap = el('label', 'eyedrop-tool wb-tool');
+  const btnWhitePoint = el('button', 'wb-btn', '⬜ Set white point');
+  btnWhitePoint.type = 'button';
+  btnWhitePoint.title = 'Then click something in the photo you know is white — a trim board, a window frame. '
+    + 'Every pick after that is corrected for the light it was shot in.';
+  const wbChip = el('span', 'wb-chip');
+  wbChip.style.display = 'none';
+  const btnWhiteOff = el('button', 'wb-off', '✕');
+  btnWhiteOff.type = 'button';
+  btnWhiteOff.title = 'Back to the raw pixel values';
+  btnWhiteOff.style.display = 'none';
+  wbWrap.append(btnWhitePoint, wbChip, btnWhiteOff);
+
+  tools.append(sizeWrap, zoomWrap, btnFit, wbWrap, advanceWrap, btnScreen);
 
   // --- palette -------------------------------------------------------------
   const paletteWrap = el('div', 'eyedrop-palette-wrap');
@@ -149,6 +165,7 @@ function build() {
     canvas, ctx: canvas.getContext('2d'), loupe, lctx: loupe.getContext('2d'),
     readout, empty, sourceStrip, palette, targets, status,
     sizeSel, zoom, zoomIn, zoomOut, zoomLabel, advance,
+    btnWhitePoint, wbChip, btnWhiteOff,
     btnFit, btnScreen, btnAuto, btnReset, btnApply, btnCancel, close,
   };
 
@@ -327,12 +344,18 @@ function draw() {
 /** Canvas point (CSS px) to image pixel. */
 const toImage = (x, y) => ({ x: (x - view.ox) / view.scale, y: (y - view.oy) / view.scale });
 
+/**
+ * The colour at an image point: what the sensor recorded, and what that means
+ * once the light it was shot in is divided out.
+ */
 function sampleAt(ix, iy) {
   if (!fullData) return null;
   if (ix < 0 || iy < 0 || ix >= fullW || iy >= fullH) return null;
   const radius = SAMPLE_SIZES[parseInt(ui.sizeSel.value, 10) || 0].radius;
   const rgb = sampleAverage(fullData, fullW, fullH, ix, iy, radius);
-  return rgb ? { rgb, hex: rgbToHex(rgb) } : null;
+  if (!rgb) return null;
+  const corrected = applyWhiteBalance(rgb, session?.gains);
+  return { rgb, raw: rgbToHex(rgb), hex: rgbToHex(corrected) };
 }
 
 function drawLoupe(ix, iy) {
@@ -376,7 +399,7 @@ function positionLoupe(x, y, gap = 18) {
   loupe.style.top = `${Math.max(4, Math.min(stage.height - size - 4, ly))}px`;
 }
 
-function setReadout(hex, ix, iy) {
+function setReadout(hex, ix, iy, raw) {
   const { readout } = ui;
   if (!hex || !session) { readout.style.display = 'none'; return; }
   readout.style.display = 'flex';
@@ -384,12 +407,65 @@ function setReadout(hex, ix, iy) {
   const chip = el('span', 'eyedrop-chip');
   chip.style.background = hex;
   const armed = session.targets.find((t) => t.key === session.armedKey);
+  readout.append(chip, el('span', 'eyedrop-hex', hex.toUpperCase()));
+  // With a white point set, show what the sensor actually recorded too — the
+  // gap between the two is the light, and it is worth seeing.
+  if (session.gains && raw && raw !== hex) {
+    readout.append(el('span', 'eyedrop-coord', `was ${raw.toUpperCase()}`));
+  }
   readout.append(
-    chip,
-    el('span', 'eyedrop-hex', hex.toUpperCase()),
     el('span', 'eyedrop-coord', `${Math.round(ix)}, ${Math.round(iy)} px`),
-    el('span', 'eyedrop-armed', armed ? `→ ${armed.label}` : 'no surface armed'),
+    el('span', 'eyedrop-armed',
+      session.pickingWhite ? '→ white point' : armed ? `→ ${armed.label}` : 'no surface armed'),
   );
+}
+
+/**
+ * Adopt a pixel as the white reference and re-derive everything from it.
+ *
+ * Colours already assigned are left alone — they were the user's decision, and
+ * silently rewriting them because a later click changed the white point would be
+ * worse than leaving them to re-pick.
+ */
+function setWhitePoint(rgb) {
+  const gains = whiteBalanceGains(rgb);
+  session.pickingWhite = false;
+  if (!gains) {
+    setStatus('That is too dark to use as a white reference — click something you know is white.');
+    syncWhiteUi();
+    return;
+  }
+  session.gains = gains;
+  session.whiteRef = rgbToHex(rgb);
+  const src = session.sources.find((s2) => s2.id === session.activeId);
+  if (src) renderPalette(src);
+  syncWhiteUi();
+  setStatus(
+    `White point set from ${rgbToHex(rgb).toUpperCase()}. Picks from here on are corrected for the `
+    + 'light this photo was shot in, so a white wall reads white instead of the grey the sensor saw.',
+  );
+}
+
+function clearWhitePoint() {
+  session.gains = null;
+  session.whiteRef = null;
+  session.pickingWhite = false;
+  const src = session.sources.find((s2) => s2.id === session.activeId);
+  if (src) renderPalette(src);
+  syncWhiteUi();
+  setStatus('Back to raw pixel values — what the camera recorded, lighting and all.');
+}
+
+function syncWhiteUi() {
+  if (!ui || !session) return;
+  const { btnWhitePoint, wbChip, btnWhiteOff } = ui;
+  btnWhitePoint.classList.toggle('arming', !!session.pickingWhite);
+  btnWhitePoint.textContent = session.pickingWhite
+    ? '⬜ Now click something white…'
+    : session.gains ? '⬜ White point set' : '⬜ Set white point';
+  wbChip.style.display = session.whiteRef ? 'inline-block' : 'none';
+  if (session.whiteRef) wbChip.style.background = session.whiteRef;
+  btnWhiteOff.style.display = session.gains ? 'inline-block' : 'none';
 }
 
 function applyPick(hex) {
@@ -466,11 +542,19 @@ function loadSource(source) {
 function renderPalette(source) {
   const { palette } = ui;
   palette.textContent = '';
-  let colors = paletteCache.get(source.id + source.src.length);
-  if (!colors) {
-    colors = quantize(samplePixels(fullData, fullW, fullH, 24000), 9);
-    paletteCache.set(source.id + source.src.length, colors);
+  let raw = paletteCache.get(source.id + source.src.length);
+  if (!raw) {
+    raw = quantize(samplePixels(fullData, fullW, fullH, 24000), 12);
+    paletteCache.set(source.id + source.src.length, raw);
   }
+  // The cache holds what the sensor recorded; the white point is applied on the
+  // way out so changing it does not mean re-quantising the photo.
+  const colors = session.gains
+    ? raw.map((c) => {
+      const wb = applyWhiteBalance(c, session.gains);
+      return { ...c, ...wb, hex: rgbToHex(wb) };
+    })
+    : raw;
   session.palette = colors;
   for (const c of colors) {
     const sw = el('button', 'eyedrop-swatch');
@@ -568,7 +652,8 @@ function updateHover(x, y, pointerType = 'mouse') {
   loupe.style.display = 'block';
   positionLoupe(x, y, pointerType === 'mouse' ? 18 : 52);
   drawLoupe(ix, iy);
-  setReadout(sampleAt(ix, iy)?.hex, ix, iy);
+  const hit = sampleAt(ix, iy);
+  setReadout(hit?.hex, ix, iy, hit?.raw);
 }
 
 const hideHover = () => {
@@ -673,7 +758,8 @@ function bindEvents() {
       const up = localPoint(e);
       const { x: ix, y: iy } = toImage(up.x, up.y);
       const hit = sampleAt(ix, iy);
-      if (hit) applyPick(hit.hex);
+      if (hit && session?.pickingWhite) setWhitePoint(hit.rgb);
+      else if (hit) applyPick(hit.hex);
     }
     // A finger leaves nothing hovering behind it.
     if (e.pointerType !== 'mouse') hideHover();
@@ -706,6 +792,15 @@ function bindEvents() {
   zoomOut.addEventListener('click', () => stepZoom(1 / 1.6));
   zoom.addEventListener('input', () => setZoom(zoomFromSlider(parseFloat(zoom.value) || 0), null, null));
   btnFit.addEventListener('click', fitView);
+
+  ui.btnWhitePoint.addEventListener('click', () => {
+    session.pickingWhite = !session.pickingWhite;
+    syncWhiteUi();
+    setStatus(session.pickingWhite
+      ? 'Click something in the photo you know is white — a trim board, a window frame, a soffit.'
+      : '');
+  });
+  ui.btnWhiteOff.addEventListener('click', clearWhitePoint);
 
   dlg.addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement && e.target.type !== 'range') return;
@@ -795,6 +890,11 @@ export function openColorPicker({ sources = [], targets = [], armedKey = null, o
     armedKey: armedKey && targets.some((t) => t.key === armedKey) ? armedKey : (targets[0]?.key || null),
     activeId: null,
     palette: [],
+    // Divides the light the photo was shot in out of every pick. Null until the
+    // user points at something they know is white.
+    gains: null,
+    whiteRef: null,
+    pickingWhite: false,
     onPreview: onPreview || (() => {}),
     onCommit: onCommit || (() => {}),
     onCancel,
@@ -802,6 +902,7 @@ export function openColorPicker({ sources = [], targets = [], armedKey = null, o
 
   resetGesture();
   renderTargets();
+  syncWhiteUi();
   setStatus(sources.length
     ? 'Tip: the three-quarter catalogue shot shows siding, trim and roof under one light — it is the best single source.'
     : '');

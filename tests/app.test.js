@@ -25,6 +25,7 @@ import {
 import {
   rgbToHex, hexToRgb, luma, saturation, sampleAverage, samplePixels, quantize, suggestFinishRoles,
   zoomAnchoredPan, wheelZoomFactor, looksLikeSky,
+  whiteBalanceGains, applyWhiteBalance, REFERENCE_WHITE,
 } from '../src/eyedrop.js';
 
 test('1. Defaults & State Initialization', () => {
@@ -1490,4 +1491,62 @@ test('56. The Sky Is Not Offered As Trim', () => {
   // so the guard must not strip the palette down to nothing.
   const thin = suggestFinishRoles([sky, siding]);
   assert.ok(thin.siding && thin.roof && thin.trim, 'a thin palette still gets assigned');
+});
+
+test('57. A Palette Entry Is A Colour The Photo Actually Contains', () => {
+  // Two tight, well-separated populations — white siding and blue sky — plus a
+  // handful of pixels strung between them, as any real photo has along an edge.
+  const pixels = [];
+  for (let i = 0; i < 600; i++) pixels.push([236, 238, 235]);   // siding
+  for (let i = 0; i < 600; i++) pixels.push([120, 170, 235]);   // sky
+  for (let i = 0; i < 60; i++) pixels.push([178, 204, 235]);    // the edge between them
+
+  const pal = quantize(pixels, 4);
+  const exists = (c) => pixels.some(([r, g, b]) =>
+    Math.abs(r - c.r) <= 12 && Math.abs(g - c.g) <= 12 && Math.abs(b - c.b) <= 12);
+
+  for (const c of pal) {
+    assert.ok(exists(c), `${c.hex} is not a colour in the photo — it is an average of two that are`);
+  }
+  // Both real populations have to survive; averaging them into one grey-blue is
+  // the failure this replaced.
+  assert.ok(pal.some((c) => Math.abs(c.r - 236) < 14), 'the siding is in the palette');
+  assert.ok(pal.some((c) => Math.abs(c.b - 235) < 14 && c.r < 160), 'the sky is in the palette');
+
+  // Weights partition the image, so a legend built from them adds up.
+  const total = pal.reduce((n, c) => n + c.weight, 0);
+  assert.ok(Math.abs(total - 1) < 1e-9, `weights should sum to 1, got ${total}`);
+});
+
+test('58. A White Point Divides Out The Light The Photo Was Shot In', () => {
+  // Measured off a real listing photo: white trim and white siding both come
+  // back as mid greys, because the exposure was set for a bright sky.
+  const trim = { r: 202, g: 206, b: 205 };
+  const siding = { r: 165, g: 170, b: 170 };
+
+  const gains = whiteBalanceGains(trim);
+  assert.ok(gains);
+
+  const trimOut = applyWhiteBalance(trim, gains);
+  assert.deepEqual(trimOut, { r: REFERENCE_WHITE, g: REFERENCE_WHITE, b: REFERENCE_WHITE },
+    'the reference itself becomes neutral white');
+
+  const sidingOut = applyWhiteBalance(siding, gains);
+  assert.ok(luma(sidingOut) > luma(siding) + 30, 'the siding comes up towards white');
+  assert.ok(sidingOut.r <= 255 && sidingOut.g <= 255 && sidingOut.b <= 255, 'nothing overflows');
+  // A neutral reference must not introduce a cast of its own.
+  assert.ok(Math.max(sidingOut.r, sidingOut.g, sidingOut.b)
+    - Math.min(sidingOut.r, sidingOut.g, sidingOut.b) < 12);
+
+  // A blue cast in the reference is corrected out of everything else.
+  const blueLit = whiteBalanceGains({ r: 180, g: 200, b: 240 });
+  const grey = applyWhiteBalance({ r: 180, g: 200, b: 240 }, blueLit);
+  assert.equal(grey.r, grey.g);
+  assert.equal(grey.g, grey.b);
+
+  // Too dark to carry any information about the illuminant.
+  assert.equal(whiteBalanceGains({ r: 10, g: 12, b: 9 }), null);
+  assert.equal(whiteBalanceGains(null), null);
+  // No gains means no change, so the raw reading is always still available.
+  assert.deepEqual(applyWhiteBalance(siding, null), siding);
 });

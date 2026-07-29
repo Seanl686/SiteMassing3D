@@ -1002,3 +1002,15 @@ label.color-field { position: relative; }
   .eyedrop-main { flex-direction: column; }
   .eyedrop-side { flex: 0 0 auto; border-left: none; border-top: 1px solid var(--line); max-height: 34vh; }
 }
+
+/* White point: a photo records the light of the day, not the paint. */
+.wb-tool { display: flex; align-items: center; gap: 4px; }
+.eyedrop-tools button.wb-btn { white-space: nowrap; }
+.eyedrop-tools button.wb-btn.arming {
+  border-color: #7fd18a; color: #7fd18a; background: rgba(127,209,138,0.14);
+}
+.wb-chip {
+  width: 16px; height: 16px; flex: none; border-radius: 3px;
+  border: 1px solid rgba(255,255,255,0.45);
+}
+.eyedrop-tools button.wb-off { padding: 1px 6px; font-size: 10px; }

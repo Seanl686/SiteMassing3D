@@ -94,14 +94,54 @@ function boxRange(box) {
   return [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]];
 }
 
+const within = (p, c, tol) =>
+  Math.abs(p[0] - c.r) <= tol && Math.abs(p[1] - c.g) <= tol && Math.abs(p[2] - c.b) <= tol;
+
+/**
+ * A colour that is actually IN this box, rather than the average of it.
+ *
+ * The mean of a median-cut box is the single most tempting thing to return and
+ * it is wrong: a box straddling white siding and blue sky averages to a
+ * lifeless grey that appears nowhere in the photograph. On a real lot photo
+ * every mean-derived entry turned out to match under 2% of the pixels while
+ * claiming to represent 13% of them.
+ *
+ * So: take the per-channel median, which ignores the tail that a mean chases,
+ * then re-average only the members close to it. That one mean-shift step
+ * settles onto the box's dominant cluster instead of the midpoint between two
+ * of them, and the answer is a colour a person can actually point at.
+ */
+function representative(box, tol) {
+  if (!box.length) return null;
+  const med = [0, 1, 2].map((ch) => {
+    const v = box.map((p) => p[ch]).sort((a, b) => a - b);
+    return v[v.length >> 1];
+  });
+  const seed = { r: med[0], g: med[1], b: med[2] };
+  let inliers = box.filter((p) => within(p, seed, tol));
+  // A box with no dominant cluster (a smooth gradient) has nothing better to
+  // offer than its own middle.
+  if (inliers.length < Math.max(4, box.length * 0.05)) inliers = box;
+  let r = 0, g = 0, b = 0;
+  for (const p of inliers) { r += p[0]; g += p[1]; b += p[2]; }
+  const n = inliers.length;
+  return { r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n) };
+}
+
 /**
  * Median-cut quantisation down to at most `k` colours.
  *
  * Median cut over k-means on purpose: it is deterministic with no seeding, it
  * keeps a small strongly-coloured region (a red door) instead of averaging it
  * into the wall behind it, and at this size it runs in a frame.
+ *
+ * `tolerance` is how close two colours have to be to count as the same one. It
+ * governs both the mean-shift above and the weights, which are measured against
+ * the whole image rather than taken from the box sizes — a box holding 13% of
+ * the pixels tells you nothing if its colour only matches 0.5% of them, and the
+ * UI prints that number as "how much of the photo is this colour".
  */
-export function quantize(pixels, k = 8) {
+export function quantize(pixels, k = 8, { tolerance = 22 } = {}) {
   const px = pixels.filter(Boolean);
   if (!px.length) return [];
   let boxes = [px];
@@ -124,15 +164,81 @@ export function quantize(pixels, k = 8) {
     boxes = [...boxes.slice(0, target), left, right, ...boxes.slice(target + 1)];
   }
 
-  return boxes
-    .map((box) => {
-      let r = 0, g = 0, b = 0;
-      for (const p of box) { r += p[0]; g += p[1]; b += p[2]; }
-      const n = box.length;
-      const color = { r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n) };
-      return { ...color, hex: rgbToHex(color), weight: n / px.length };
-    })
+  // Two boxes routinely settle on the same cluster once they stop reporting
+  // their midpoints; a palette with the same grey in it three times is worse
+  // than a shorter one.
+  const merged = [];
+  for (const box of boxes) {
+    const c = representative(box, tolerance);
+    if (!c) continue;
+    if (!merged.some((m) => within([m.r, m.g, m.b], c, tolerance))) merged.push(c);
+  }
+
+  // Weight by assigning every pixel to its nearest representative. Counting
+  // "pixels within tolerance" instead would double-count the overlaps and the
+  // percentages would sum past 100, which reads as nonsense in a legend.
+  const tally = new Array(merged.length).fill(0);
+  for (const p of px) {
+    let best = 0, bestD = Infinity;
+    for (let i = 0; i < merged.length; i++) {
+      const c = merged[i];
+      const d = (p[0] - c.r) ** 2 + (p[1] - c.g) ** 2 + (p[2] - c.b) ** 2;
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    tally[best]++;
+  }
+
+  return merged
+    .map((c, i) => ({ ...c, hex: rgbToHex(c), weight: tally[i] / px.length }))
     .sort((a, b) => b.weight - a.weight);
+}
+
+// ---------------------------------------------------------------------------
+// White balance
+//
+// A photograph records the light of the day it was taken, not the colour of the
+// paint. White siding shot against a bright sky comes back around #a5aaaa, and
+// the picker faithfully reports #a5aaaa — correct, and not what anyone means
+// when they say the house is white. The eye discounts the illuminant
+// automatically and the sensor does not, so the reading looks wrong when it is
+// the perception that is doing the work.
+//
+// The fix is the same one every camera and every colour checker uses: point at
+// something known to be neutral and divide it out.
+// ---------------------------------------------------------------------------
+
+/** What a white reference is taken to be. Paint is never #ffffff. */
+export const REFERENCE_WHITE = 242;
+
+/**
+ * Per-channel (von Kries) correction that maps `reference` — a pixel the user
+ * has identified as white — onto neutral white, and carries every other colour
+ * with it.
+ *
+ * Returns null for a reference too dark to divide by safely: a black pixel
+ * carries no information about the illuminant and would scale everything to
+ * clipping.
+ */
+export function whiteBalanceGains(reference, target = REFERENCE_WHITE) {
+  if (!reference) return null;
+  const { r, g, b } = reference;
+  if (Math.max(r, g, b) < 40) return null;
+  return {
+    r: target / Math.max(1, r),
+    g: target / Math.max(1, g),
+    b: target / Math.max(1, b),
+  };
+}
+
+/** Apply gains from `whiteBalanceGains`. A null gain leaves the colour alone. */
+export function applyWhiteBalance(rgb, gains) {
+  if (!rgb) return rgb;
+  if (!gains) return { ...rgb };
+  return {
+    r: clamp255(rgb.r * gains.r),
+    g: clamp255(rgb.g * gains.g),
+    b: clamp255(rgb.b * gains.b),
+  };
 }
 
 // ---------------------------------------------------------------------------
