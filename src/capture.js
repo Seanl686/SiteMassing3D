@@ -318,30 +318,63 @@ export function withRestoredCamera(stage, fn) {
 export function contactSheetCanvas(stage, home, sceneOpts, exportOpts) {
   const cw = Math.round(exportOpts.w / 2);
   const ch = Math.round(exportOpts.h / 2);
+
+  // Dedicated header bar for main title caption so it NEVER collides with tile titles
+  const headerH = Math.max(38, Math.round((ch * 2) / 25));
+
   const sheet = document.createElement('canvas');
   sheet.width = cw * 2;
-  sheet.height = ch * 2;
+  sheet.height = headerH + ch * 2;
+
   const ctx = sheet.getContext('2d');
-  ctx.fillStyle = sceneOpts.bg;
+
+  // Fill canvas background
+  ctx.fillStyle = sceneOpts.bg || '#0f1319';
   ctx.fillRect(0, 0, sheet.width, sheet.height);
 
+  // 1. Draw top title header bar
+  ctx.fillStyle = 'rgba(10, 12, 16, 0.95)';
+  ctx.fillRect(0, 0, sheet.width, headerH);
+
+  const filename = `${slug(home?.name || 'home')}-elevation-set.png`;
+  const headerText = caption(home, 'elevation set', filename);
+
+  let fs = Math.max(13, Math.round(sheet.width / 75));
+  ctx.font = `600 ${fs}px ui-sans-serif, system-ui, sans-serif`;
+  const maxW = sheet.width - 32;
+  let textWidth = ctx.measureText(headerText).width;
+  if (textWidth > maxW) {
+    fs = Math.max(11, Math.floor(fs * (maxW / textWidth)));
+    ctx.font = `600 ${fs}px ui-sans-serif, system-ui, sans-serif`;
+  }
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(headerText, 16, headerH / 2, maxW);
+
+  // 2. Draw 2x2 quadrant elevation tiles below header bar
   withRestoredCamera(stage, () => {
     SHEET_VIEWS.forEach(([view, label], i) => {
       stage.setView(view, home.dimensions, sceneOpts);
       const tile = renderToCanvas(stage, cw, ch, false, sceneOpts, home);
       burnCaption(tile, `${i + 1}. ${label}`, 'top-left');
-      ctx.drawImage(tile, (i % 2) * cw, Math.floor(i / 2) * ch);
+      const tileX = (i % 2) * cw;
+      const tileY = headerH + Math.floor(i / 2) * ch;
+      ctx.drawImage(tile, tileX, tileY);
     });
   });
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  // 3. Grid dividing lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(cw, 0); ctx.lineTo(cw, sheet.height);
-  ctx.moveTo(0, ch); ctx.lineTo(sheet.width, ch);
+  // Header separator line
+  ctx.moveTo(0, headerH); ctx.lineTo(sheet.width, headerH);
+  // Vertical tile separator
+  ctx.moveTo(cw, headerH); ctx.lineTo(cw, sheet.height);
+  // Horizontal tile separator
+  ctx.moveTo(0, headerH + ch); ctx.lineTo(sheet.width, headerH + ch);
   ctx.stroke();
 
-  const filename = `${slug(home?.name || 'home')}-elevation-set.png`;
-  burnCaption(sheet, caption(home, 'elevation set', filename), 'bottom-left');
   return { canvas: sheet, filename };
 }
 
