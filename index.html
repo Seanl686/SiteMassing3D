@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SiteMassing3D — double-wide massing &amp; elevation renderer</title>
 <!-- ?v= bust: plain static servers hand Chrome a cached stylesheet after edits -->
-<link rel="stylesheet" href="css/app.css?v=13">
+<link rel="stylesheet" href="css/app.css?v=14">
 <script type="importmap">
 {
   "imports": {
@@ -384,6 +384,37 @@
         </div>
         <label class="row check"><input id="p_pick" type="checkbox" autocomplete="off"><span>Plan-pick mode: click plan to drop a door on nearest wall</span></label>
         <p class="hint">Scale the plate so its printed footprint matches the white outline, then trace door positions off it.</p>
+      </div>
+    </section>
+
+    <section class="panel collapsible" id="panel_readplan">
+      <div class="panel-header">
+        <h2><span class="code">RDP</span> Build The Model From The Plan</h2>
+        <span class="chevron">&#9660;</span>
+      </div>
+      <div class="panel-body">
+        <p class="hint">Typing the dimensions and tracing the doors is the slowest, least reliable step in this whole workflow &mdash; it is where 27'-7&Prime; becomes 27' and every plate downstream inherits it. The plan already holds all of it. Hand the page to a vision model and get the home back as data.</p>
+        <p class="hint" id="rdpPlanState">Load a site plan in the <b>AI Render Package</b> panel first &mdash; that page is what this reads.</p>
+
+        <h3 class="subhead">1 &middot; Without an API key</h3>
+        <p class="hint">Copy the prompt, attach the plan page in Claude / Gemini / ChatGPT, then paste the JSON it returns into the box below.</p>
+        <div class="btnrow">
+          <button id="btnCopyPlanPrompt">Copy plan-reading prompt</button>
+          <button id="btnSavePlanPage">Save plan page (.png)</button>
+        </div>
+
+        <h3 class="subhead">2 &middot; Or read it here with Claude</h3>
+        <label class="row"><span>Anthropic API key</span><input id="rdp_key" type="password" autocomplete="off" placeholder="sk-ant-&hellip;"></label>
+        <label class="row check"><input id="rdp_persist" type="checkbox" autocomplete="off"><span>Keep the key after this tab closes</span></label>
+        <p class="hint">Your own key, sent only to <code>api.anthropic.com</code>. Held for this tab unless you tick the box. A key in a browser page is readable by any script on that page &mdash; fine for a local tool on your own machine, not for a hosted one.</p>
+        <button id="btnReadPlan" class="primary block">Read the plan with Claude</button>
+
+        <h3 class="subhead">3 &middot; Paste the answer</h3>
+        <textarea id="rdp_json" rows="5" placeholder="Paste the JSON here &mdash; a code fence or surrounding prose is fine"></textarea>
+        <button id="btnApplySpec" class="block">Check and apply to the model</button>
+
+        <h3 class="subhead">What it read</h3>
+        <div id="rdpReport"><p class="hint">Nothing read yet.</p></div>
       </div>
     </section>
 

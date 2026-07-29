@@ -219,6 +219,54 @@ main.sidebar-collapsed #sidebar {
 }
 .site-view-badge.unsaved { color: #9aa4b2; font-weight: 500; font-style: italic; }
 
+/* Plan-reading: the paste box and the correction report. */
+#rdp_json {
+  width: 100%;
+  box-sizing: border-box;
+  background: #12161c;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 4px;
+  color: #dbe3ec;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 6px 7px;
+  resize: vertical;
+  margin-bottom: 6px;
+}
+#rdp_json:focus { outline: none; border-color: #6fb2ff; }
+
+.rdp-summary {
+  font-size: 12px;
+  font-weight: 700;
+  color: #cfe3ff;
+  background: rgba(111,178,255,0.12);
+  border: 1px solid rgba(111,178,255,0.35);
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+}
+.rdp-readings {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #9aa4b2;
+  margin: 0 0 7px;
+}
+.rdp-readings b { color: #cbd5e1; }
+.rdp-issue {
+  display: flex;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 4px 6px;
+  border-radius: 3px;
+  margin-top: 4px;
+  border-left: 3px solid transparent;
+}
+.rdp-issue.error { background: rgba(255,100,100,0.11); border-left-color: #ff8585; color: #ffc9c9; }
+.rdp-issue.warn  { background: rgba(255,193,90,0.10); border-left-color: #ffc15a; color: #f2ddb4; }
+.rdp-issue.ok    { background: rgba(90,220,140,0.10); border-left-color: #5adc8c; color: #c2f0d4; }
+
 /* The four standard lot photographs, one card per camera position. */
 .slot {
   display: flex;

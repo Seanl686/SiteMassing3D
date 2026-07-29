@@ -10,6 +10,7 @@ import { buildBrief } from './brief.js';
 import { measureFraming } from './framing.js';
 import { slotByKey, SITE_VIEW_SLOTS } from './siteviews.js';
 import { HOME_PHOTO_SLOTS, filledHomePhotos } from './homephotos.js';
+import { HOME_SPEC_SCHEMA, buildSpecPrompt } from './homespec.js';
 import { buildProject } from './project.js';
 import { zipStore, dataUrlToBytes, dataUrlExt } from './zip.js';
 import {
@@ -35,6 +36,7 @@ export const defaultPackageOptions = () => ({
   projectJson: true,
   allSiteViews: true,
   homePhotos: true,
+  planPrompt: true,
 });
 
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -318,6 +320,15 @@ export async function buildRenderPackage(ctx = {}) {
     const pageLabel = plan.pageCount > 1 ? ` (page ${plan.page} of ${plan.pageCount})` : '';
     add(`50-site-plan.${dataUrlExt(plan.src, 'png')}`, dataUrlToBytes(plan.src),
       `the site plan / spec sheet${pageLabel}, converted to PNG so the model can read it.`);
+  }
+  // The prompt that rebuilds this model from the plan page. Shipped alongside
+  // the plan so the package can regenerate the geometry it describes — open the
+  // JSON in the app, or hand this file and the plan to any vision model.
+  if (opts.sitePlan && plan.src && opts.planPrompt) {
+    add('52-READ-THE-PLAN.md',
+      buildSpecPrompt({ knownWidthFt: home.dimensions.widthFt, knownLengthFt: home.dimensions.lengthFt })
+      + '\n\n## Schema\n\nAnswer with a JSON object matching this schema exactly:\n\n```json\n'
+      + JSON.stringify(HOME_SPEC_SCHEMA, null, 2) + '\n```\n');
   }
   if (opts.originalPdf && plan.pdf) {
     // Carried but NOT in the manifest: attaching the PDF is the failure mode the

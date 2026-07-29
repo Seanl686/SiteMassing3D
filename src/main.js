@@ -16,6 +16,10 @@ import { measureFraming } from './framing.js';
 import { loadSitePlan, isPdf } from './siteplan.js';
 import { HOME_PHOTO_SLOTS, homeSlotByKey } from './homephotos.js';
 import {
+  HOME_SPEC_SCHEMA, buildSpecPrompt, validateHomeSpec, extractJson, applySpecToHome,
+} from './homespec.js';
+import { readPlanWithClaude, loadApiKey, saveApiKey, isPersisted } from './readplan.js';
+import {
   captureSiteView, applySiteView, cycleSiteView, indexOfView, uniqueViewName, suggestViewName,
   SITE_VIEW_SLOTS, findSlotView, slotByKey, sortSiteViews,
 } from './siteviews.js';
@@ -390,6 +394,190 @@ function updateHud() {
     `eave ${fmtFt(dv.eaveY)}   ridge ${fmtFt(dv.ridgeY)}   pitch ${d.roofPitch}/12   floor ${fmtFt(d.floorHeightFt)}`;
   $('ratioHint').textContent =
     `Front wall must read ${ratio}× as long as the gable end is wide. Roof ridge ${fmtFt(dv.ridgeY)} above grade.`;
+}
+
+// ---------------------------------------------------------------------------
+// Reading the home out of its plan
+//
+// The plan already carries the dimensions, the roof pitch and the whole opening
+// schedule. This hands that page to a vision model and applies the answer —
+// through a validator, because a silently applied misread looks authoritative
+// and propagates into every plate after it.
+// ---------------------------------------------------------------------------
+
+function updatePlanReadState() {
+  const el = $('rdpPlanState');
+  if (!el) return;
+  const plan = state.home.sitePlan || {};
+  const ready = !!plan.src;
+  el.textContent = ready
+    ? `Reading ${plan.name || 'the loaded plan'} — ${plan.width}×${plan.height} px${plan.pageCount > 1 ? `, page ${plan.page} of ${plan.pageCount}` : ''}.`
+    : 'Load a site plan in the AI Render Package panel first — that page is what this reads.';
+  for (const id of ['btnCopyPlanPrompt', 'btnSavePlanPage', 'btnReadPlan']) {
+    if ($(id)) $(id).disabled = !ready;
+  }
+}
+
+function setPlanReadReport(html) {
+  if ($('rdpReport')) $('rdpReport').innerHTML = html;
+}
+
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+/**
+ * Show what was read and every correction the validator made. This is the
+ * screen the user is meant to hold against the actual sheet — the numbers are
+ * only as good as that check, so errors are listed before anything else.
+ */
+function renderSpecReport(result, source) {
+  const errors = result.issues.filter((i) => i.level === 'error');
+  const warns = result.issues.filter((i) => i.level === 'warn');
+  const parts = [];
+  parts.push(`<div class="rdp-summary">${esc(result.summary)}</div>`);
+  parts.push(
+    `<p class="rdp-readings">Read from ${esc(source)} · confidence <b>${esc(result.spec.confidence)}</b>`
+    + (result.spec.readings.dimensionLine
+      ? `<br>Dimension line on the sheet: <b>${esc(result.spec.readings.dimensionLine)}</b>` : '')
+    + (result.spec.readings.notes ? `<br>${esc(result.spec.readings.notes)}` : '')
+    + `</p>`,
+  );
+  if (!errors.length && !warns.length) {
+    parts.push(`<div class="rdp-issue ok">Nothing needed correcting. Still check the numbers against the sheet before you build on them.</div>`);
+  }
+  for (const i of [...errors, ...warns]) {
+    parts.push(`<div class="rdp-issue ${i.level}">${esc(i.text)}</div>`);
+  }
+  parts.push(
+    `<div class="rdp-issue ${errors.length ? 'error' : 'warn'}">`
+    + `${errors.length ? `${errors.length} value${errors.length === 1 ? '' : 's'} had to be corrected. ` : ''}`
+    + `Check the footprint and every opening against the sheet before exporting a package.</div>`,
+  );
+  setPlanReadReport(parts.join(''));
+}
+
+/** Apply a validated spec, keeping colours, photos, views and the plan itself. */
+function applyReadSpec(result, source) {
+  state.home = applySpecToHome(state.home, result.spec, (prefix) => nextId(prefix));
+  selectedId = null;
+  selectedIds.clear();
+  gizmo.clear();
+  syncForm();
+  rebuild();
+  refreshList();
+  stage.setView('hero-left', state.home.dimensions, state.scene);
+  currentViewName = '¾ front-L';
+  updateFramingReadout();
+  save();
+  renderSpecReport(result, source);
+}
+
+function applyPastedSpec() {
+  const text = $('rdp_json')?.value || '';
+  let parsed;
+  try {
+    parsed = extractJson(text);
+  } catch (err) {
+    setPlanReadReport(`<div class="rdp-issue error">Could not read that as JSON: ${esc(err.message)}</div>`);
+    return;
+  }
+  const result = validateHomeSpec(parsed);
+  if (!result.ok) {
+    setPlanReadReport(result.issues.map((i) => `<div class="rdp-issue error">${esc(i.text)}</div>`).join(''));
+    return;
+  }
+  applyReadSpec(result, 'the pasted answer');
+}
+
+function planPrompt() {
+  return buildSpecPrompt({
+    knownWidthFt: state.home.dimensions.widthFt,
+    knownLengthFt: state.home.dimensions.lengthFt,
+  })
+    + '\n\n## Schema\n\nAnswer with a JSON object matching this schema exactly:\n\n```json\n'
+    + JSON.stringify(HOME_SPEC_SCHEMA, null, 2)
+    + '\n```\n';
+}
+
+let planReadAbort = null;
+
+function bindPlanReader() {
+  if ($('rdp_key')) $('rdp_key').value = loadApiKey();
+  if ($('rdp_persist')) $('rdp_persist').checked = isPersisted();
+
+  const storeKey = () => saveApiKey($('rdp_key')?.value.trim() || '', !!$('rdp_persist')?.checked);
+  if ($('rdp_key')) $('rdp_key').addEventListener('change', storeKey);
+  if ($('rdp_persist')) $('rdp_persist').addEventListener('change', storeKey);
+
+  if ($('btnCopyPlanPrompt')) {
+    $('btnCopyPlanPrompt').addEventListener('click', async () => {
+      const text = planPrompt();
+      try {
+        await navigator.clipboard.writeText(text);
+        setPlanReadReport('<div class="rdp-issue ok">Prompt copied. Attach the plan page alongside it, then paste the JSON answer into the box above.</div>');
+      } catch {
+        window.prompt('Copy the plan-reading prompt:', text.slice(0, 2000));
+      }
+    });
+  }
+
+  if ($('btnSavePlanPage')) {
+    $('btnSavePlanPage').addEventListener('click', async () => {
+      const plan = state.home.sitePlan || {};
+      if (!plan.src) return;
+      const blob = await (await fetch(plan.src)).blob();
+      const name = `${(state.home.name || 'home').replace(/[^\w-]+/g, '_')}-plan-page.png`;
+      const saved = await saveWithPicker(blob, name, 'PNG Image', 'image/png', '.png');
+      if (!saved) {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      }
+    });
+  }
+
+  if ($('btnReadPlan')) {
+    $('btnReadPlan').addEventListener('click', async () => {
+      const btn = $('btnReadPlan');
+      const key = $('rdp_key')?.value.trim() || '';
+      if (!key) {
+        setPlanReadReport('<div class="rdp-issue error">Paste an Anthropic API key first, or use the copy-the-prompt path above — it needs no key.</div>');
+        return;
+      }
+      storeKey();
+      btn.disabled = true;
+      setPlanReadReport('<div class="rdp-issue warn">Reading the plan… a dense sheet can take a minute.</div>');
+      planReadAbort?.abort();
+      planReadAbort = new AbortController();
+      try {
+        const res = await readPlanWithClaude({
+          apiKey: key,
+          planDataUrl: state.home.sitePlan.src,
+          prompt: planPrompt(),
+          schema: HOME_SPEC_SCHEMA,
+          signal: planReadAbort.signal,
+        });
+        // Keep the raw answer in the box: it is the audit trail, and it lets
+        // the user re-apply after an undo without paying for the call twice.
+        if ($('rdp_json')) $('rdp_json').value = res.raw;
+        const result = validateHomeSpec(extractJson(res.raw));
+        if (!result.ok) {
+          setPlanReadReport(result.issues.map((i) => `<div class="rdp-issue error">${esc(i.text)}</div>`).join(''));
+          return;
+        }
+        applyReadSpec(result, res.model);
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        setPlanReadReport(`<div class="rdp-issue error">${esc(err.message)}</div>`);
+      } finally {
+        btn.disabled = false;
+        updatePlanReadState();
+      }
+    });
+  }
+
+  if ($('btnApplySpec')) $('btnApplySpec').addEventListener('click', applyPastedSpec);
 }
 
 // ---------------------------------------------------------------------------
@@ -989,6 +1177,7 @@ function updateSitePlanStatus() {
   const plan = state.home.sitePlan || {};
   const row = $('row_sitePlanPage');
   if (row) row.style.display = plan.pageCount > 1 ? '' : 'none';
+  updatePlanReadState();
   if (!el) return;
   if (!plan.src) {
     el.textContent = 'No site plan loaded. A PDF is converted to PNG automatically — image models ignore PDF attachments.';
@@ -1382,6 +1571,7 @@ function loadProject(raw) {
 
 function bind() {
   initAccordions();
+  bindPlanReader();
   bindHomePhotos();
   bindPanorama();
   bindSiteViews();
