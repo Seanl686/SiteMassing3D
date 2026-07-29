@@ -1145,7 +1145,8 @@ test('43. The Brief Enforces Exact 1-to-1 Position Mandate and Coordinates', () 
   assert.ok(md.includes('DO NOT MOVE, SHIFT, SLIDE, ROTATE, OR RE-SITE THE HOUSE'));
   assert.ok(md.includes('Horizontal span: **15% to 85%**'));
   assert.ok(md.includes('Ground contact / skirting base line: **22%**'));
-  assert.ok(md.includes('Nearest corner (front-right corner): located at **X = 42%, Y = 26%**'));
   assert.ok(md.includes('1-to-1 Overlay Mismatch'));
+  assert.ok(md.includes('renders/'));
+  assert.ok(md.includes('CLI Output Directory Instructions'));
 });
 

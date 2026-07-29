@@ -14,6 +14,8 @@ import { derived, fmtFt } from './build.js';
 import { WALL_LABEL } from './defaults.js';
 import { filledHomePhotos, unphotographedWalls } from './homephotos.js';
 
+const slug = (str) => (str || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'view';
+
 /** Plain-English name for a hex colour, so the prompt reads like a description. */
 const NAMED = [
   ['white', 0xf5f5f2], ['off-white', 0xe9e7df], ['light grey', 0xc7ccd1],
@@ -411,6 +413,8 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   w(`> read, not viewpoints to render. Return a single image from the lot photo's`);
   w(`> own camera position.`);
   w(`>`);
+  w(`> **Output Location (CLI/Agent):** Save all final rendered output images into the \`renders/\` subfolder inside this package folder (${passName ? `\`views/${slug(passName)}/renders/\`` : '\`renders/\`'}).`);
+  w(`>`);
   if (shot.length) {
     w(`> **Use the attached photographs of the real home as the source of truth for`);
     w(`> finish.** Each is named for the wall it shows; reproduce its siding profile`);
@@ -603,11 +607,16 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   w(`> geometry, proportions, openings, placement and size exactly, and reapply only`);
   w(`> the lighting, contact shadow and edge blending.`);
   w();
-  w(`### Done`);
+  w(`### Done & Output Location (CLI & Automated Workflows)`);
   w();
   w(`That image is the deliverable: ${home.name || 'this home'} at ${fmtFt(d.widthFt)} × ${fmtFt(d.lengthFt)}, on this lot,`);
   w(`at a size and angle measured rather than guessed. Same package, same wording,`);
   w(`next home or next lot — the process does not change.`);
+  w();
+  w(`**CLI Output Directory Instructions:**`);
+  w(`When generating rendered images via CLI scripts, LLM tools, or automated agents:`);
+  w(`- **Target Output Folder**: Save all generated/rendered images directly into the \`renders/\` subfolder inside this package folder (${passName ? `\`views/${slug(passName)}/renders/\`` : '\`renders/\`'}).`);
+  w(`- **Recommended Filenames**: \`renders/render-01-initial.png\`, \`renders/render-02-polished.png\`, \`renders/render-final.png\`.`);
   w();
 
   if (framing) {
