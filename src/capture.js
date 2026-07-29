@@ -212,19 +212,41 @@ export function caption(home, viewName, filename) {
   return `${modelName}  ·  File: ${fname}  ·  ${fmtFt(d.widthFt)} × ${fmtFt(d.lengthFt)}  ·  1:1 EXACT POSITION REF  ·  ${viewName}`;
 }
 
-export function burnCaption(canvas, text) {
+export function burnCaption(canvas, text, position = 'bottom-left') {
   const ctx = canvas.getContext('2d');
-  const fs = Math.max(16, Math.round(canvas.width / 62));
+  let fs = Math.max(14, Math.round(canvas.width / 62));
   const pad = Math.round(fs * 0.7);
   ctx.font = `600 ${fs}px ui-sans-serif, system-ui, sans-serif`;
-  const w = ctx.measureText(text).width + pad * 2;
+
+  const maxW = canvas.width - pad * 4;
+  let textWidth = ctx.measureText(text).width;
+  if (textWidth > maxW) {
+    fs = Math.max(11, Math.floor(fs * (maxW / textWidth)));
+    ctx.font = `600 ${fs}px ui-sans-serif, system-ui, sans-serif`;
+    textWidth = ctx.measureText(text).width;
+  }
+
+  const w = Math.min(canvas.width - pad * 2, textWidth + pad * 2);
   const h = fs + pad * 1.4;
-  const x = pad, y = canvas.height - h - pad;
-  ctx.fillStyle = 'rgba(12,14,18,0.78)';
+
+  let x = pad;
+  let y = canvas.height - h - pad;
+
+  if (position === 'top-left') {
+    y = pad;
+  } else if (position === 'top-right') {
+    x = canvas.width - w - pad;
+    y = pad;
+  } else if (position === 'bottom-right') {
+    x = canvas.width - w - pad;
+    y = canvas.height - h - pad;
+  }
+
+  ctx.fillStyle = 'rgba(12,14,18,0.85)';
   ctx.fillRect(x, y, w, h);
   ctx.fillStyle = '#ffffff';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, x + pad, y + h / 2);
+  ctx.fillText(text, x + pad, y + h / 2, maxW);
   return canvas;
 }
 
@@ -307,7 +329,7 @@ export function contactSheetCanvas(stage, home, sceneOpts, exportOpts) {
     SHEET_VIEWS.forEach(([view, label], i) => {
       stage.setView(view, home.dimensions, sceneOpts);
       const tile = renderToCanvas(stage, cw, ch, false, sceneOpts, home);
-      burnCaption(tile, label);
+      burnCaption(tile, `${i + 1}. ${label}`, 'top-left');
       ctx.drawImage(tile, (i % 2) * cw, Math.floor(i / 2) * ch);
     });
   });
@@ -319,7 +341,7 @@ export function contactSheetCanvas(stage, home, sceneOpts, exportOpts) {
   ctx.stroke();
 
   const filename = `${slug(home?.name || 'home')}-elevation-set.png`;
-  burnCaption(sheet, caption(home, 'elevation set', filename));
+  burnCaption(sheet, caption(home, 'elevation set', filename), 'bottom-left');
   return { canvas: sheet, filename };
 }
 
