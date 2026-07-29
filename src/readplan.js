@@ -244,43 +244,54 @@ async function readPlanWithOpenAI({ provider, apiKey, planDataUrl, prompt, signa
 /** Send request to Google Gemini API */
 async function readPlanWithGemini({ apiKey, planDataUrl, prompt, signal }) {
   if (!apiKey) throw new Error('No API key provided for Google Gemini');
-  const model = 'gemini-2.5-flash';
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   const img = imageSource(planDataUrl);
+  const modelsToTry = ['gemini-flash-latest', 'gemini-1.5-flash', 'gemini-2.0-flash'];
 
-  let res;
-  try {
-    res = await fetch(endpoint, {
-      method: 'POST',
-      signal,
-      headers: {
-        'content-type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { inline_data: { mime_type: img.media_type, data: img.data } },
-            { text: `${prompt}\n\nIMPORTANT: Return ONLY valid JSON output matching the schema.` },
-          ],
-        }],
-        generationConfig: { responseMimeType: 'application/json' },
-      }),
-    });
-  } catch (err) {
-    if (err.name === 'AbortError') throw err;
-    throw new Error(`Could not reach Google Gemini API. (${err.message})`);
+  let lastErr = null;
+  for (const model of modelsToTry) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+    let res;
+    try {
+      res = await fetch(endpoint, {
+        method: 'POST',
+        signal,
+        headers: {
+          'content-type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { inline_data: { mime_type: img.media_type, data: img.data } },
+              { text: `${prompt}\n\nIMPORTANT: Return ONLY valid JSON output matching the schema.` },
+            ],
+          }],
+          generationConfig: { responseMimeType: 'application/json' },
+        }),
+      });
+    } catch (err) {
+      if (err.name === 'AbortError') throw err;
+      throw new Error(`Could not reach Google Gemini API. (${err.message})`);
+    }
+
+    let body = null;
+    try { body = await res.json(); } catch { /* non-JSON */ }
+    if (!res.ok) {
+      const errMsg = describeError(res.status, body, model);
+      if ((res.status === 404 || res.status === 400) && model !== modelsToTry[modelsToTry.length - 1]) {
+        lastErr = new Error(errMsg);
+        continue;
+      }
+      throw new Error(errMsg);
+    }
+
+    const text = body?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!text.trim()) throw new Error('Gemini returned no text response.');
+
+    const actualModel = body?.modelVersion || model;
+    return { raw: text, usage: body?.usageMetadata || null, model: actualModel };
   }
-
-  let body = null;
-  try { body = await res.json(); } catch { /* non-JSON */ }
-  if (!res.ok) throw new Error(describeError(res.status, body, model));
-
-  const text = body?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  if (!text.trim()) throw new Error('Gemini returned no text response.');
-
-  const actualModel = body?.modelVersion || model;
-  return { raw: text, usage: body?.usageMetadata || null, model: actualModel };
+  throw lastErr || new Error(`Gemini requests failed for models: ${modelsToTry.join(', ')}`);
 }
 
 /**
