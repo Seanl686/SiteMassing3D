@@ -18,7 +18,7 @@ import { HOME_PHOTO_SLOTS, homeSlotByKey } from './homephotos.js';
 import {
   HOME_SPEC_SCHEMA, buildSpecPrompt, validateHomeSpec, extractJson, applySpecToHome,
 } from './homespec.js';
-import { readPlanWithAI, readPlanWithClaude, loadApiKey, saveApiKey, loadApiKeys, saveApiKeys, isPersisted } from './readplan.js';
+import { readPlanWithAI, readPlanWithAutoCycle, readPlanWithClaude, loadApiKey, saveApiKey, loadApiKeys, saveApiKeys, isPersisted } from './readplan.js';
 import {
   captureSiteView, applySiteView, cycleSiteView, indexOfView, uniqueViewName, suggestViewName,
   SITE_VIEW_SLOTS, findSlotView, slotByKey, sortSiteViews,
@@ -500,13 +500,74 @@ function planPrompt() {
 
 let planReadAbort = null;
 
-function bindPlanReader() {
-  if ($('rdp_key')) $('rdp_key').value = loadApiKey();
-  if ($('rdp_persist')) $('rdp_persist').checked = isPersisted();
+function syncApiKeysUI() {
+  const keys = loadApiKeys();
+  const provider = keys.activeProvider || 'anthropic';
+  const persist = isPersisted();
 
-  const storeKey = () => saveApiKey($('rdp_key')?.value.trim() || '', !!$('rdp_persist')?.checked);
-  if ($('rdp_key')) $('rdp_key').addEventListener('change', storeKey);
-  if ($('rdp_persist')) $('rdp_persist').addEventListener('change', storeKey);
+  if ($('selAiProvider')) $('selAiProvider').value = provider;
+  if ($('key_anthropic')) $('key_anthropic').value = keys.anthropic || '';
+  if ($('key_openai')) $('key_openai').value = keys.openai || '';
+  if ($('key_grok')) $('key_grok').value = keys.grok || '';
+  if ($('key_gemini')) $('key_gemini').value = keys.gemini || '';
+  if ($('chkPersistKeys')) $('chkPersistKeys').checked = persist;
+
+  if ($('rdp_provider')) $('rdp_provider').value = provider;
+  if ($('rdp_key_anthropic')) $('rdp_key_anthropic').value = keys.anthropic || '';
+  if ($('rdp_key_openai')) $('rdp_key_openai').value = keys.openai || '';
+  if ($('rdp_key_grok')) $('rdp_key_grok').value = keys.grok || '';
+  if ($('rdp_key_gemini')) $('rdp_key_gemini').value = keys.gemini || '';
+  if ($('rdp_persist')) $('rdp_persist').checked = persist;
+}
+
+function storeApiKeysFromUI() {
+  const provider = $('rdp_provider')?.value || $('selAiProvider')?.value || 'anthropic';
+  const persist = $('rdp_persist')?.checked ?? $('chkPersistKeys')?.checked ?? false;
+  const keys = {
+    activeProvider: provider === 'autocycle' ? (loadApiKeys().activeProvider || 'anthropic') : provider,
+    anthropic: ($('rdp_key_anthropic')?.value || $('key_anthropic')?.value || '').trim(),
+    openai: ($('rdp_key_openai')?.value || $('key_openai')?.value || '').trim(),
+    grok: ($('rdp_key_grok')?.value || $('key_grok')?.value || '').trim(),
+    gemini: ($('rdp_key_gemini')?.value || $('key_gemini')?.value || '').trim(),
+  };
+  saveApiKeys(keys, persist);
+  syncApiKeysUI();
+}
+
+function cycleActiveProvider() {
+  const providers = ['anthropic', 'openai', 'grok', 'gemini', 'autocycle'];
+  const keys = loadApiKeys();
+  const curr = $('rdp_provider')?.value || keys.activeProvider || 'anthropic';
+  const nextIdx = (providers.indexOf(curr) + 1) % providers.length;
+  const nextProvider = providers[nextIdx];
+
+  if ($('rdp_provider')) $('rdp_provider').value = nextProvider;
+  if ($('selAiProvider') && nextProvider !== 'autocycle') $('selAiProvider').value = nextProvider;
+
+  if (nextProvider !== 'autocycle') {
+    keys.activeProvider = nextProvider;
+    saveApiKeys(keys, isPersisted());
+  }
+  syncApiKeysUI();
+}
+
+let planReadAbort = null;
+
+function bindPlanReader() {
+  syncApiKeysUI();
+
+  const onChange = () => storeApiKeysFromUI();
+  for (const id of ['rdp_provider', 'rdp_key_anthropic', 'rdp_key_openai', 'rdp_key_grok', 'rdp_key_gemini', 'rdp_persist']) {
+    if ($(id)) $(id).addEventListener('change', onChange);
+  }
+
+  if ($('btnCycleProvider')) {
+    $('btnCycleProvider').addEventListener('click', () => {
+      cycleActiveProvider();
+      const prov = $('rdp_provider')?.value || 'anthropic';
+      setPlanReadReport(`<div class="rdp-issue ok">Active Vision Provider set to: <b>${prov.toUpperCase()}</b></div>`);
+    });
+  }
 
   if ($('btnCopyPlanPrompt')) {
     $('btnCopyPlanPrompt').addEventListener('click', async () => {
@@ -540,33 +601,40 @@ function bindPlanReader() {
   if ($('btnReadPlan')) {
     $('btnReadPlan').addEventListener('click', async () => {
       const btn = $('btnReadPlan');
-      const key = $('rdp_key')?.value.trim() || '';
-      if (!key) {
-        setPlanReadReport('<div class="rdp-issue error">Paste an Anthropic API key first, or use the copy-the-prompt path above — it needs no key.</div>');
+      storeApiKeysFromUI();
+      const keys = loadApiKeys();
+      const provider = $('rdp_provider')?.value || keys.activeProvider || 'anthropic';
+
+      const hasAnyKey = keys.anthropic || keys.openai || keys.grok || keys.gemini;
+      if (!hasAnyKey) {
+        setPlanReadReport('<div class="rdp-issue error">Paste an API key (Anthropic, OpenAI, Grok, or Gemini) first, or use the copy-the-prompt path above.</div>');
         return;
       }
-      storeKey();
+
       btn.disabled = true;
-      setPlanReadReport('<div class="rdp-issue warn">Reading the plan… a dense sheet can take a minute.</div>');
+      setPlanReadReport(`<div class="rdp-issue warn">Reading the plan with ${provider.toUpperCase()} Vision… a dense sheet can take a minute.</div>`);
       planReadAbort?.abort();
       planReadAbort = new AbortController();
       try {
-        const res = await readPlanWithClaude({
-          apiKey: key,
+        const res = await readPlanWithAutoCycle({
+          keys,
+          provider,
           planDataUrl: state.home.sitePlan.src,
           prompt: planPrompt(),
           schema: HOME_SPEC_SCHEMA,
           signal: planReadAbort.signal,
+          onProgress: (prov) => {
+            setPlanReadReport(`<div class="rdp-issue warn">Analyzing plan with ${prov.toUpperCase()} Vision model…</div>`);
+          },
         });
-        // Keep the raw answer in the box: it is the audit trail, and it lets
-        // the user re-apply after an undo without paying for the call twice.
+
         if ($('rdp_json')) $('rdp_json').value = res.raw;
         const result = validateHomeSpec(extractJson(res.raw));
         if (!result.ok) {
           setPlanReadReport(result.issues.map((i) => `<div class="rdp-issue error">${esc(i.text)}</div>`).join(''));
           return;
         }
-        applyReadSpec(result, res.model);
+        applyReadSpec(result, `${res.providerUsed.toUpperCase()} Vision (${res.model})`);
       } catch (err) {
         if (err.name === 'AbortError') return;
         setPlanReadReport(`<div class="rdp-issue error">${esc(err.message)}</div>`);

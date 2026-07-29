@@ -404,11 +404,27 @@
           <button id="btnSavePlanPage">Save plan page (.png)</button>
         </div>
 
-        <h3 class="subhead">2 &middot; Or read it here with Claude</h3>
-        <label class="row"><span>Anthropic API key</span><input id="rdp_key" type="password" autocomplete="off" placeholder="sk-ant-&hellip;"></label>
-        <label class="row check"><input id="rdp_persist" type="checkbox" autocomplete="off"><span>Keep the key after this tab closes</span></label>
-        <p class="hint">Your own key, sent only to <code>api.anthropic.com</code>. Held for this tab unless you tick the box. A key in a browser page is readable by any script on that page &mdash; fine for a local tool on your own machine, not for a hosted one.</p>
-        <button id="btnReadPlan" class="primary block">Read the plan with Claude</button>
+        <h3 class="subhead">2 &middot; Read with AI Vision (Multi-Provider)</h3>
+        <label class="row">
+          <span>Active Provider</span>
+          <select id="rdp_provider" style="padding:4px;background:#0d1117;color:#fff;border:1px solid #333;border-radius:4px;font-size:11px;">
+            <option value="anthropic">Anthropic Claude (Claude Opus 5)</option>
+            <option value="openai">OpenAI (GPT-4o Vision)</option>
+            <option value="grok">xAI Grok (Grok-2-Vision)</option>
+            <option value="gemini">Google Gemini (Gemini 2.0 Flash)</option>
+            <option value="autocycle">🔄 Auto-Cycle / Fallback (All Added Keys)</option>
+          </select>
+        </label>
+        <button id="btnCycleProvider" type="button" class="block" style="padding:4px 8px;font-size:11px;background:#242936;border:1px solid #444;color:#6fb2ff;cursor:pointer;margin-bottom:6px;">🔄 Cycle Active AI Key / Provider</button>
+
+        <label class="row"><span>Anthropic Key</span><input id="rdp_key_anthropic" type="password" autocomplete="off" placeholder="sk-ant-&hellip;"></label>
+        <label class="row"><span>OpenAI Key</span><input id="rdp_key_openai" type="password" autocomplete="off" placeholder="sk-proj-&hellip;"></label>
+        <label class="row"><span>xAI Grok Key</span><input id="rdp_key_grok" type="password" autocomplete="off" placeholder="xai-&hellip;"></label>
+        <label class="row"><span>Gemini Key</span><input id="rdp_key_gemini" type="password" autocomplete="off" placeholder="AIza&hellip;"></label>
+
+        <label class="row check"><input id="rdp_persist" type="checkbox" autocomplete="off"><span>Remember keys in browser storage</span></label>
+        <p class="hint">Keys stay in your browser local/session storage. Sent only to the official provider endpoint (Anthropic, OpenAI, xAI, Google).</p>
+        <button id="btnReadPlan" class="primary block">Read Plan with AI Vision</button>
 
         <h3 class="subhead">3 &middot; Paste the answer</h3>
         <textarea id="rdp_json" rows="5" placeholder="Paste the JSON here &mdash; a code fence or surrounding prose is fine"></textarea>

@@ -18,7 +18,7 @@ import { createSidingMaterial } from '../src/textures.js';
 import { History, describeChange } from '../src/history.js';
 import { buildProject, readProject, PROJECT_VERSION } from '../src/project.js';
 import { validateHomeSpec, applySpecToHome, parseHexColor } from '../src/homespec.js';
-import { AI_PROVIDERS, loadApiKeys, saveApiKeys } from '../src/readplan.js';
+import { AI_PROVIDERS, loadApiKeys, saveApiKeys, readPlanWithAutoCycle } from '../src/readplan.js';
 
 test('1. Defaults & State Initialization', () => {
   const home = defaultHome();
@@ -1238,6 +1238,32 @@ test('46. Project Save Point Restoration Reads v1 and v2 JSON Files Cleanly', ()
   assert.equal(parsed.home.dimensions.lengthFt, 48);
   assert.equal(parsed.view.preset, 'hero-left');
 });
+
+test('47. Multi-Provider AI API Key Auto-Cycling & Fallback', async () => {
+  const keys = {
+    activeProvider: 'openai',
+    openai: '',
+    grok: 'xai-fake-key-123',
+    gemini: '',
+    anthropic: '',
+  };
+
+  const tried = [];
+  try {
+    await readPlanWithAutoCycle({
+      keys,
+      provider: 'autocycle',
+      planDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      prompt: 'test',
+      onProgress: (p) => tried.push(p),
+    });
+  } catch (err) {
+    // Expected fake key network error
+    assert.ok(err.message.includes('GROK') || err.message.includes('failed') || err.message.includes('401') || err.message.includes('fetch'));
+  }
+  assert.ok(tried.includes('grok'));
+});
+
 
 
 

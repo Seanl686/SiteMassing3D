@@ -248,3 +248,31 @@ export async function readPlanWithAI({ provider = 'anthropic', apiKey, planDataU
   }
   return readPlanWithClaude({ apiKey, planDataUrl, prompt, schema, signal });
 }
+
+/**
+ * Auto-cycles through available API keys (Anthropic -> OpenAI -> Grok -> Gemini)
+ * if active provider fails or if provider is set to 'autocycle'.
+ */
+export async function readPlanWithAutoCycle({ keys, provider = 'anthropic', planDataUrl, prompt, schema, signal, onProgress }) {
+  const preferred = provider === 'autocycle' ? (keys.activeProvider || 'anthropic') : provider;
+  const providerOrder = [preferred, 'anthropic', 'openai', 'grok', 'gemini'].filter(
+    (p, i, self) => p && self.indexOf(p) === i
+  );
+
+  const errors = [];
+  for (const prov of providerOrder) {
+    const key = keys[prov]?.trim();
+    if (!key) continue;
+    try {
+      if (onProgress) onProgress(prov);
+      const res = await readPlanWithAI({ provider: prov, apiKey: key, planDataUrl, prompt, schema, signal });
+      return { ...res, providerUsed: prov };
+    } catch (err) {
+      errors.push(`${prov.toUpperCase()}: ${err.message}`);
+    }
+  }
+  if (!errors.length) {
+    throw new Error('No API keys configured. Please add an API key for Anthropic, OpenAI, Grok, or Gemini.');
+  }
+  throw new Error(`All configured AI providers failed:\n${errors.join('\n')}`);
+}
