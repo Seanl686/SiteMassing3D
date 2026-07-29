@@ -190,44 +190,55 @@ async function readPlanWithOpenAI({ provider, apiKey, planDataUrl, prompt, signa
   if (!apiKey) throw new Error(`No API key provided for ${provider}`);
   const isGrok = provider === 'grok';
   const endpoint = isGrok ? 'https://api.x.ai/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions';
-  const model = isGrok ? 'grok-2-vision-1212' : 'gpt-4o';
+  const modelsToTry = isGrok ? ['grok-2-vision-1212'] : ['gpt-5.6-sol', 'gpt-4.1', 'gpt-4o'];
 
-  let res;
-  try {
-    res = await fetch(endpoint, {
-      method: 'POST',
-      signal,
-      headers: {
-        'content-type': 'application/json',
-        'authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'image_url', image_url: { url: planDataUrl } },
-              { type: 'text', text: `${prompt}\n\nIMPORTANT: Return ONLY raw valid JSON matching the requested structure.` },
-            ],
-          },
-        ],
-        response_format: { type: 'json_object' },
-      }),
-    });
-  } catch (err) {
-    if (err.name === 'AbortError') throw err;
-    throw new Error(`Could not reach ${isGrok ? 'xAI Grok' : 'OpenAI'} API. (${err.message})`);
+  let lastErr = null;
+  for (const model of modelsToTry) {
+    let res;
+    try {
+      res = await fetch(endpoint, {
+        method: 'POST',
+        signal,
+        headers: {
+          'content-type': 'application/json',
+          'authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'image_url', image_url: { url: planDataUrl } },
+                { type: 'text', text: `${prompt}\n\nIMPORTANT: Return ONLY raw valid JSON matching the requested structure.` },
+              ],
+            },
+          ],
+          response_format: { type: 'json_object' },
+        }),
+      });
+    } catch (err) {
+      if (err.name === 'AbortError') throw err;
+      throw new Error(`Could not reach ${isGrok ? 'xAI Grok' : 'OpenAI'} API. (${err.message})`);
+    }
+
+    let body = null;
+    try { body = await res.json(); } catch { /* non-JSON */ }
+    if (!res.ok) {
+      const errMsg = describeError(res.status, body, model);
+      if ((res.status === 404 || res.status === 400 || res.status === 403) && modelsToTry.length > 1 && model !== 'gpt-4o') {
+        lastErr = new Error(errMsg);
+        continue;
+      }
+      throw new Error(errMsg);
+    }
+
+    const text = body?.choices?.[0]?.message?.content || '';
+    if (!text.trim()) throw new Error(`The ${model} model returned no text.`);
+
+    return { raw: text, usage: body?.usage || null, model: body?.model || model };
   }
-
-  let body = null;
-  try { body = await res.json(); } catch { /* non-JSON */ }
-  if (!res.ok) throw new Error(describeError(res.status, body, model));
-
-  const text = body?.choices?.[0]?.message?.content || '';
-  if (!text.trim()) throw new Error(`The ${model} model returned no text.`);
-
-  return { raw: text, usage: body?.usage || null, model };
+  throw lastErr || new Error(`OpenAI requests failed for models: ${modelsToTry.join(', ')}`);
 }
 
 /** Send request to Google Gemini API */
