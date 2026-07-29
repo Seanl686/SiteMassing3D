@@ -1128,3 +1128,24 @@ test('42. The Brief Adapts To Which Home Photos Exist', () => {
   assert.equal(read.home.homePhotos.front.src, 'data:a');
   assert.deepEqual(Object.keys(read.home.homePhotos), ['front', 'hero']);
 });
+
+test('43. The Brief Enforces Exact 1-to-1 Position Mandate and Coordinates', () => {
+  const home = defaultHome();
+  const scene = defaultScene();
+  const framing = {
+    left: 0.15, right: 0.85, bottom: 0.22, top: 0.78, ridgeTop: 0.65,
+    nearCorner: 'front-right corner', nearCornerX: 0.42, nearCornerY: 0.26,
+    visibleWalls: ['front wall', 'right gable end'], viewLabel: 'hero-left',
+  };
+
+  const md = buildBrief({ home, scene, framing, site: {} });
+
+  assert.ok(md.includes('EXACT 1-TO-1 PIXEL ALIGNMENT'));
+  assert.ok(md.includes('CRITICAL 1-TO-1 POSITIONING MANDATE'));
+  assert.ok(md.includes('DO NOT MOVE, SHIFT, SLIDE, ROTATE, OR RE-SITE THE HOUSE'));
+  assert.ok(md.includes('Horizontal span: **15% to 85%**'));
+  assert.ok(md.includes('Ground contact / skirting base line: **22%**'));
+  assert.ok(md.includes('Nearest corner (front-right corner): located at **X = 42%, Y = 26%**'));
+  assert.ok(md.includes('1-to-1 Overlay Mismatch'));
+});
+

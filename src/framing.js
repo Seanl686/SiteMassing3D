@@ -73,10 +73,17 @@ export function measureFraming(stage, home, viewLabel) {
   group.worldToLocal(camLocal);
 
   let nearCorner = CORNER_LABEL(hx, -hz), nearD = Infinity;
+  let nearCornerX = 0.5, nearCornerY = 0.5;
   for (const x of [-hx, hx]) {
     for (const z of [-hz, hz]) {
       const dist = (camLocal.x - x) ** 2 + (camLocal.z - z) ** 2;
-      if (dist < nearD) { nearD = dist; nearCorner = CORNER_LABEL(x, z); }
+      if (dist < nearD) {
+        nearD = dist;
+        nearCorner = CORNER_LABEL(x, z);
+        v.set(x, 0, z).applyMatrix4(group.matrixWorld).project(stage.camera);
+        nearCornerX = clamp01((v.x + 1) / 2);
+        nearCornerY = clamp01((v.y + 1) / 2);
+      }
     }
   }
 
@@ -91,6 +98,8 @@ export function measureFraming(stage, home, viewLabel) {
     top: clamp01((maxY + 1) / 2),
     ridgeTop: clamp01((ridgeNdcY + 1) / 2),
     nearCorner,
+    nearCornerX,
+    nearCornerY,
     visibleWalls,
     viewLabel: viewLabel || stage._lastView || 'current',
     projection: stage.camera === stage.ortho ? 'orthographic' : 'perspective',

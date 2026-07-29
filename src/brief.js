@@ -131,8 +131,12 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   const light = s.light || describeLighting(scene);
   const x1 = framing ? pct(framing.left) : '{{X1}}';
   const x2 = framing ? pct(framing.right) : '{{X2}}';
+  const yBottom = framing ? pct(framing.bottom) : '{{Y_BOTTOM}}';
+  const yRidge = framing ? pct(framing.ridgeTop) : '{{Y_RIDGE}}';
+  const cornerX = framing ? pct(framing.nearCornerX) : '{{CORNER_X}}';
+  const cornerY = framing ? pct(framing.nearCornerY) : '{{CORNER_Y}}';
   const ridgeLine = framing
-    ? `its roof ridge reaches about ${pct(framing.ridgeTop)} of the way up the frame (measured from the bottom edge)`
+    ? `its roof ridge reaches about ${pct(framing.ridgeTop)} of the way up the frame from the bottom edge`
     : `its roof ridge reaches about the height of ${heightRef}`;
 
   const skirtLine = `white ribbed vinyl skirting continuous around the visible perimeter, meeting the ground with a soft contact shadow`;
@@ -250,9 +254,10 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   w();
   w(`| Image | Authority on | NOT authority on |`);
   w(`|---|---|---|`);
-  w(`| **Lot photo** | The site: ground, planting, backdrop, light, camera position | The home |`);
-  w(`| **Massing plates** (untextured 3D) | Geometry: size, proportion, roof pitch, where every door and window sits | Colour, material, texture |`);
-  w(`| **Home photographs** | Finish: how the real siding, windows, trim and roof LOOK | Size, proportion, placement |`);
+  w(`| **20-massing-hero.png** | **EXACT 1-TO-1 POSITION, SCALE, CAMERA ANGLE, & GEOMETRY** — the home is ALREADY placed in its exact spot | Material textures (untextured 3D massing) |`);
+  w(`| **10-lot-photo.jpg** | Clean site background reference (ground, trees, sky, lighting context) | Position of the home — **DO NOT RE-SITE OR MOVE THE HOUSE ON THIS EMPTY PHOTO** |`);
+  w(`| **Massing elevation plates** | Measured orthographic geometry: size, proportion, roof pitch, door/window offsets | Site placement, perspective |`);
+  w(`| **Home photographs** | Finish: siding, windows, trim, doors, and roof appearance | Position, scale, or placement on the lot |`);
   w();
   w(`The plates and the home photographs describe **the same home** and are meant to`);
   w(`be used together, one over the other — the plate is the measured drawing`);
@@ -381,12 +386,19 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   // ---- turn 1 ------------------------------------------------------------
   w(`## 6. Turn 1 — paste this`);
   w();
-  w(`> A photograph of the manufactured home shown in the massing plates, sited on`);
-  w(`> the empty lot from the lot photo.`);
+  w(`> A photorealistic rendering of the home shown in the massing plates, placed with **EXACT 1-TO-1 PIXEL ALIGNMENT** on the lot photo as defined in \`20-massing-hero.png\`.`);
   w(`>`);
-  w(`> **The home is ${fmtFt(d.widthFt)} wide by ${fmtFt(d.lengthFt)} long.** Before rendering, state those`);
-  w(`> two dimensions back to me so I can confirm you read them. The front wall`);
-  w(`> must read **${ratio}× as long** as the gable end wall is wide — not close to square.`);
+  w(`> **CRITICAL 1-TO-1 POSITIONING MANDATE:**`);
+  w(`> \`20-massing-hero.png\` shows the 3D massing model ALREADY positioned on the site photo in its exact location, scale, rotation, and perspective. **DO NOT MOVE, SHIFT, SLIDE, ROTATE, OR RE-SITE THE HOUSE.** The rendered house MUST occupy the EXACT 1-TO-1 position and bounding box shown in \`20-massing-hero.png\`.`);
+  w(`>`);
+  w(`> **The home is ${fmtFt(d.widthFt)} wide by ${fmtFt(d.lengthFt)} long.** Before rendering, state back: "Confirmed: 1-to-1 positioning on \`20-massing-hero.png\` at ${fmtFt(d.widthFt)} × ${fmtFt(d.lengthFt)}". The front wall must read **${ratio}× as long** as the gable end wall is wide — not close to square.`);
+  w(`>`);
+  w(`> **Exact 1-to-1 Bounding Box Coordinates:**`);
+  w(`> - Horizontal span: **${x1} to ${x2}** of image width.`);
+  w(`> - Ground contact / skirting base line: **${yBottom}** of image height (from bottom).`);
+  w(`> - Roof ridge height: **${yRidge}** of image height.`);
+  w(`> - Nearest corner (${nearCorner}): located at **X = ${cornerX}, Y = ${cornerY}**.`);
+  w(`> Your rendered house MUST fill this exact bounding box 1-for-1.`);
   w(`>`);
   w(`> **Use the massing plates as the source of truth for geometry.** They are a`);
   w(`> clean untextured 3D model of this exact home: footprint proportion, roof`);
@@ -470,7 +482,7 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   w(`| 2 | The footprint | The front wall reads about **${ratio}× as long** as the gable end is wide, clearly not square | Proportion |`);
   w(`| 3 | The walls in view | Openings match the schedule in section 5 — right count, right spacing, none invented | Openings |`);
   w(`| 4 | The roof | ${d.roofStyle === 'flat' ? 'Flat / low slope' : `A ${d.roofPitch}/12 gable with the ridge along the length`}, ${dormers} | Proportion |`);
-  w(`| 5 | Where it sits | On ${pad}, nearest corner the ${nearCorner} | Position |`);
+  w(`| 5 | Where it sits | 1-to-1 Overlay: Matches the exact pixel location, scale, and bounding box (${x1}–${x2}, base at Y=${yBottom}) shown in \`20-massing-hero.png\` | Position |`);
   w(`| 6 | How big it reads | Spans about **${x1} to ${x2}** of the image width | Scale |`);
   w(`| 7 | The site | ${keep} unchanged from the lot photo — nothing re-drawn, re-framed or invented | re-paste Turn 1 |`);
   w();
@@ -513,10 +525,9 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   w(`> right gable end — ${wallSummary(home, 'right')}. Correct the visible walls to match`);
   w(`> and change nothing else in the image.`);
   w();
-  w(`**Position**`);
+  w(`**Position — 1-to-1 Overlay Mismatch**`);
   w();
-  w(`> Move the home {{left|right|further back|closer}} so that`);
-  w(`> {{LANDMARK_RELATION}}. Keep its size, angle, design, and the site identical.`);
+  w(`> You moved or re-sited the house to a different spot on the lot. The house MUST be rendered at the exact 1-to-1 position and bounding box shown in 20-massing-hero.png (spanning X=${x1} to ${x2}, with ground contact base line at Y=${yBottom}, nearest corner ${nearCorner} at X=${cornerX}, Y=${cornerY}). Re-render keeping the house in that EXACT 1-to-1 position without moving it.`);
   w();
   w(`**Fidelity** — when the finish drifts from the specification`);
   w();
@@ -606,8 +617,9 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
     w(`camera at export time:`);
     w();
     w(`- Home spans **${x1} to ${x2}** of the frame width (${pct(framing.right - framing.left)} of the image).`);
-    w(`- Roof ridge sits at **${pct(framing.ridgeTop)}** of the frame height from the bottom.`);
-    w(`- Nearest corner to the camera: **${framing.nearCorner}**.`);
+    w(`- Ground contact / skirting base line sits at **${yBottom}** of frame height from bottom.`);
+    w(`- Roof ridge sits at **${yRidge}** of frame height from bottom.`);
+    w(`- Nearest corner (${framing.nearCorner}): located at **X = ${cornerX}, Y = ${cornerY}**.`);
     if (framing.visibleWalls?.length) {
       w(`- Walls the camera can see: ${framing.visibleWalls.join(', ')}.`);
     }
