@@ -621,8 +621,12 @@ function bindPlanReader() {
           prompt: planPrompt(),
           schema: HOME_SPEC_SCHEMA,
           signal: planReadAbort.signal,
-          onProgress: (prov) => {
-            setPlanReadReport(`<div class="rdp-issue warn">Analyzing plan with ${prov.toUpperCase()} Vision model…</div>`);
+          onProgress: (prov, retryMsg) => {
+            if (retryMsg) {
+              setPlanReadReport(`<div class="rdp-issue warn">⏳ ${prov.toUpperCase()}: ${retryMsg}</div>`);
+            } else {
+              setPlanReadReport(`<div class="rdp-issue warn">Analyzing plan with ${prov.toUpperCase()} Vision model…</div>`);
+            }
           },
         });
 

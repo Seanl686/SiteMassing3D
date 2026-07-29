@@ -96,15 +96,40 @@ function imageSource(dataUrl) {
   return { type: 'base64', media_type: mediaType, data: m[2] };
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Distinguishes retryable rate-limits from hard errors. */
+class Rate429Error extends Error {
+  constructor(msg) { super(msg); this.name = 'Rate429Error'; }
+}
+
 /** Turn an API error body into something worth showing a user. */
 function describeError(status, body, model) {
   const message = body?.error?.message || body?.message || '';
   if (status === 401) return 'That API key was rejected. Please check your key and make sure it is active.';
   if (status === 403) return `The key does not have access to ${model}. ${message}`;
-  if (status === 429) return 'Rate limited by the API. Wait a moment and try again.';
+  if (status === 429) throw new Rate429Error('Rate limited by the API — will retry automatically.');
   if (status === 413) return 'The image is too large to send. Re-load it — image is capped at 2200 px.';
   if (status >= 500) return `The API service returned status ${status}. Try again shortly.`;
   return message || `The API returned status ${status}.`;
+}
+
+/**
+ * Retry a function up to `maxRetries` times on Rate429Error with exponential backoff.
+ * onRetry(attempt, delaySec, providerName) is called before each wait.
+ */
+async function withRetry(fn, { maxRetries = 3, baseDelay = 2000, signal, onRetry, providerName } = {}) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (err.name !== 'Rate429Error' || attempt >= maxRetries) throw err;
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      const delay = baseDelay * (2 ** attempt);          // 2 s → 4 s → 8 s
+      if (onRetry) onRetry(attempt + 1, delay / 1000, providerName);
+      await sleep(delay);
+    }
+  }
 }
 
 /** Send request to Claude API */
@@ -252,6 +277,8 @@ export async function readPlanWithAI({ provider = 'anthropic', apiKey, planDataU
 /**
  * Auto-cycles through available API keys (Anthropic -> OpenAI -> Grok -> Gemini)
  * if active provider fails or if provider is set to 'autocycle'.
+ * Each provider gets up to 3 retries with exponential backoff on 429 rate limits
+ * before the cycle moves to the next provider.
  */
 export async function readPlanWithAutoCycle({ keys, provider = 'anthropic', planDataUrl, prompt, schema, signal, onProgress }) {
   const preferred = provider === 'autocycle' ? (keys.activeProvider || 'anthropic') : provider;
@@ -265,9 +292,21 @@ export async function readPlanWithAutoCycle({ keys, provider = 'anthropic', plan
     if (!key) continue;
     try {
       if (onProgress) onProgress(prov);
-      const res = await readPlanWithAI({ provider: prov, apiKey: key, planDataUrl, prompt, schema, signal });
+      const res = await withRetry(
+        () => readPlanWithAI({ provider: prov, apiKey: key, planDataUrl, prompt, schema, signal }),
+        {
+          maxRetries: 3,
+          baseDelay: 2000,
+          signal,
+          providerName: prov,
+          onRetry: (attempt, delaySec, name) => {
+            if (onProgress) onProgress(name, `rate-limited, retry ${attempt} in ${delaySec}s…`);
+          },
+        },
+      );
       return { ...res, providerUsed: prov };
     } catch (err) {
+      if (err.name === 'AbortError') throw err;
       errors.push(`${prov.toUpperCase()}: ${err.message}`);
     }
   }
