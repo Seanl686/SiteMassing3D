@@ -227,7 +227,8 @@ async function readPlanWithOpenAI({ provider, apiKey, planDataUrl, prompt, signa
 /** Send request to Google Gemini API */
 async function readPlanWithGemini({ apiKey, planDataUrl, prompt, signal }) {
   if (!apiKey) throw new Error('No API key provided for Google Gemini');
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  const model = 'gemini-2.5-flash';
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   const img = imageSource(planDataUrl);
 
   let res;
@@ -235,7 +236,10 @@ async function readPlanWithGemini({ apiKey, planDataUrl, prompt, signal }) {
     res = await fetch(endpoint, {
       method: 'POST',
       signal,
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
       body: JSON.stringify({
         contents: [{
           parts: [
@@ -253,12 +257,13 @@ async function readPlanWithGemini({ apiKey, planDataUrl, prompt, signal }) {
 
   let body = null;
   try { body = await res.json(); } catch { /* non-JSON */ }
-  if (!res.ok) throw new Error(describeError(res.status, body, 'gemini-2.0-flash'));
+  if (!res.ok) throw new Error(describeError(res.status, body, model));
 
   const text = body?.candidates?.[0]?.content?.parts?.[0]?.text || '';
   if (!text.trim()) throw new Error('Gemini returned no text response.');
 
-  return { raw: text, usage: body?.usageMetadata || null, model: 'gemini-2.0-flash' };
+  const actualModel = body?.modelVersion || model;
+  return { raw: text, usage: body?.usageMetadata || null, model: actualModel };
 }
 
 /**
