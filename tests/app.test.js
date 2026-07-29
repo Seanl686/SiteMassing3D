@@ -10,6 +10,9 @@ import {
   captureSiteView, applySiteView, cycleSiteView, indexOfView, uniqueViewName,
   readSiteView, sortSiteViews, SITE_VIEW_SLOTS, slotByKey, findSlotView,
 } from '../src/siteviews.js';
+import {
+  HOME_PHOTO_SLOTS, homeSlotByKey, readHomePhotos, filledHomePhotos, unphotographedWalls,
+} from '../src/homephotos.js';
 import { derived, wallFrames, fmtAllUnits, buildHome, getWallHeight, dormerSize, applyHeadAlign } from '../src/build.js';
 import { createSidingMaterial } from '../src/textures.js';
 import { History, describeChange } from '../src/history.js';
@@ -1045,4 +1048,83 @@ test('39. A Slotted Pass Tells The Model Where The Photo Was Taken From', () => 
   // Without a slot there is no shooting note to make up.
   const free = buildBrief({ home, scene, framing, site: {}, passName: 'From the gate' });
   assert.ok(!free.includes('Where the photograph was taken from'));
+});
+
+test('40. Home Photos Are Keyed To Walls And Paired With Plates', () => {
+  assert.equal(HOME_PHOTO_SLOTS.length, 5);
+  // Four walls plus the catalogue shot, each naming the plate it overlays.
+  assert.deepEqual(
+    HOME_PHOTO_SLOTS.map((s) => s.wall),
+    ['front', 'back', 'left', 'right', null],
+  );
+  for (const s of HOME_PHOTO_SLOTS) assert.ok(s.plate.endsWith('.png'), `${s.key} names a plate`);
+  assert.equal(homeSlotByKey('left').plate, '33-left-end-elevation.png');
+  assert.equal(homeSlotByKey('nope'), null);
+
+  // Only known slots with a real src survive the read.
+  const read = readHomePhotos({
+    front: { src: 'data:a', name: 'front.jpg' },
+    rear: { name: 'no src' },
+    bogus: { src: 'data:b' },
+  });
+  assert.deepEqual(Object.keys(read), ['front']);
+  assert.equal(read.front.name, 'front.jpg');
+  assert.deepEqual(readHomePhotos(null), {});
+
+  assert.deepEqual(filledHomePhotos(read).map((s) => s.key), ['front']);
+  // The walls the plates alone have to answer for.
+  assert.deepEqual(unphotographedWalls(read), ['back', 'left', 'right']);
+  assert.deepEqual(unphotographedWalls({}), ['front', 'back', 'left', 'right']);
+});
+
+test('41. The Brief States Purpose, Authority And The Polish Step Explicitly', () => {
+  const home = defaultHome();
+  home.name = 'Marlette Tuscarora';
+  const scene = defaultScene();
+  const md = buildBrief({ home, scene, site: {} });
+
+  // What it is for, and that it is a repeatable pattern rather than a one-off.
+  assert.ok(md.includes('## What you are making'));
+  assert.ok(md.includes('repeatable pattern, not a one-off'));
+
+  // A stated run order, with the polish pass last and called out.
+  assert.ok(md.includes('## How to run it — the order matters'));
+  assert.ok(md.includes('## 9. The polish pass — run this ONCE, and only last'));
+  assert.ok(md.includes('### When to run it'));
+  assert.ok(md.includes('### If the polish drifts'));
+  assert.ok(md.indexOf('## 7. Check the result') < md.indexOf('## 9. The polish pass'),
+    'The acceptance check comes before the polish pass');
+
+  // Model-agnostic, so the same package runs anywhere.
+  assert.ok(md.includes('### Running this on any image model'));
+  assert.ok(md.includes('Midjourney'));
+});
+
+test('42. The Brief Adapts To Which Home Photos Exist', () => {
+  const scene = defaultScene();
+
+  const none = defaultHome();
+  const mdNone = buildBrief({ home: none, scene, site: {} });
+  assert.ok(mdNone.includes('No photographs of the home are attached'));
+  assert.ok(!mdNone.includes('Pair each photograph with its plate'));
+
+  const some = defaultHome();
+  some.homePhotos = { front: { src: 'data:a', name: 'f.jpg' }, hero: { src: 'data:b', name: 'h.jpg' } };
+  const mdSome = buildBrief({ home: some, scene, site: {} });
+  assert.ok(mdSome.includes('Pair each photograph with its plate'));
+  assert.ok(mdSome.includes('31-front-elevation.png'), 'Names the plate each photo overlays');
+  assert.ok(mdSome.includes('There is no photograph of the rear (long wall), the left end (gable) or the right end (gable)'));
+  assert.ok(mdSome.includes('invent nothing'));
+
+  const all = defaultHome();
+  all.homePhotos = Object.fromEntries(HOME_PHOTO_SLOTS.map((s) => [s.key, { src: 'data:x', name: '' }]));
+  const mdAll = buildBrief({ home: all, scene, site: {} });
+  assert.ok(mdAll.includes('Pair each photograph with its plate'));
+  assert.ok(!mdAll.includes('Walls with no photograph'), 'No blind-wall warning when every wall is covered');
+
+  // Home photos round-trip through a project file.
+  const file = buildProject({ home: some, scene, exportOpts: defaultExport(), view: null });
+  const read = readProject(JSON.parse(JSON.stringify(file)));
+  assert.equal(read.home.homePhotos.front.src, 'data:a');
+  assert.deepEqual(Object.keys(read.home.homePhotos), ['front', 'hero']);
 });

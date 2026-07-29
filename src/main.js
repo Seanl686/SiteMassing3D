@@ -14,6 +14,7 @@ import { exportRenderPackage, buildRenderPackage } from './package.js';
 import { buildBrief } from './brief.js';
 import { measureFraming } from './framing.js';
 import { loadSitePlan, isPdf } from './siteplan.js';
+import { HOME_PHOTO_SLOTS, homeSlotByKey } from './homephotos.js';
 import {
   captureSiteView, applySiteView, cycleSiteView, indexOfView, uniqueViewName, suggestViewName,
   SITE_VIEW_SLOTS, findSlotView, slotByKey, sortSiteViews,
@@ -389,6 +390,99 @@ function updateHud() {
     `eave ${fmtFt(dv.eaveY)}   ridge ${fmtFt(dv.ridgeY)}   pitch ${d.roofPitch}/12   floor ${fmtFt(d.floorHeightFt)}`;
   $('ratioHint').textContent =
     `Front wall must read ${ratio}× as long as the gable end is wide. Roof ridge ${fmtFt(dv.ridgeY)} above grade.`;
+}
+
+// ---------------------------------------------------------------------------
+// Photos of the real home — one per wall, the authority on finish
+// ---------------------------------------------------------------------------
+
+/** Reuses the lot-slot card markup; the two lists read the same on purpose. */
+function renderHomePhotoList() {
+  const host = $('homePhotoList');
+  if (!host) return;
+  host.textContent = '';
+  const photos = state.home.homePhotos || {};
+
+  HOME_PHOTO_SLOTS.forEach((slot, i) => {
+    const photo = photos[slot.key];
+    const filled = !!photo?.src;
+
+    const card = document.createElement('div');
+    card.className = `slot ${filled ? 'filled' : 'empty'}`;
+
+    const thumb = document.createElement(filled ? 'img' : 'div');
+    thumb.className = `slot-thumb${filled ? ' has-photo' : ''}`;
+    if (filled) { thumb.src = photo.src; thumb.alt = slot.name; }
+    else thumb.textContent = '+';
+    thumb.title = filled ? photo.name || slot.name : `Load the ${slot.name} photo`;
+    thumb.addEventListener('click', () => pickHomePhoto(slot.key));
+    card.appendChild(thumb);
+
+    const body = document.createElement('div');
+    body.className = 'slot-body';
+
+    const name = document.createElement('div');
+    name.className = 'slot-name';
+    const num = document.createElement('span');
+    num.className = 'slot-num';
+    num.textContent = `${i + 1}`;
+    name.appendChild(num);
+    name.appendChild(document.createTextNode(slot.name));
+    body.appendChild(name);
+
+    const shoot = document.createElement('div');
+    shoot.className = 'slot-shoot';
+    shoot.textContent = filled
+      ? `${photo.name || 'Loaded'} — pairs with ${slot.plate}`
+      : slot.shoot;
+    body.appendChild(shoot);
+
+    const actions = document.createElement('div');
+    actions.className = 'slot-actions';
+    const load = document.createElement('button');
+    load.textContent = filled ? 'Replace photo' : 'Load photo';
+    load.addEventListener('click', () => pickHomePhoto(slot.key));
+    actions.appendChild(load);
+    if (filled) {
+      const clear = document.createElement('button');
+      clear.textContent = 'Clear';
+      clear.addEventListener('click', () => {
+        delete state.home.homePhotos[slot.key];
+        renderHomePhotoList();
+        save();
+      });
+      actions.appendChild(clear);
+    }
+    body.appendChild(actions);
+    card.appendChild(body);
+    host.appendChild(card);
+  });
+}
+
+let pendingHomePhotoKey = null;
+
+function pickHomePhoto(key) {
+  pendingHomePhotoKey = key;
+  $('fileHomePhoto')?.click();
+}
+
+function bindHomePhotos() {
+  if (!$('fileHomePhoto')) return;
+  $('fileHomePhoto').addEventListener('change', (e) => {
+    const f = e.target.files[0];
+    const key = pendingHomePhotoKey;
+    pendingHomePhotoKey = null;
+    e.target.value = '';
+    if (!f || !homeSlotByKey(key)) return;
+    // 1800 on the long edge: the model reads siding profile and window
+    // proportion off these, which survives downscaling; the file size does not.
+    downscaleImage(f, 1800, 0.86).then((src) => {
+      state.home.homePhotos = { ...state.home.homePhotos, [key]: { src, name: f.name } };
+      renderHomePhotoList();
+      save();
+      setPackageStatus(`Loaded the ${homeSlotByKey(key).name} photo of the home.`);
+    }).catch(() => alert('Could not read that image.'));
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -862,7 +956,7 @@ const packageChecks = [
   ['pk_contactSheet', 'contactSheet'], ['pk_elevations', 'elevations'],
   ['pk_cutout', 'cutout'], ['pk_lotPhoto', 'lotPhoto'], ['pk_sitePlan', 'sitePlan'],
   ['pk_originalPdf', 'originalPdf'], ['pk_projectJson', 'projectJson'],
-  ['pk_allSiteViews', 'allSiteViews'],
+  ['pk_allSiteViews', 'allSiteViews'], ['pk_homePhotos', 'homePhotos'],
 ];
 
 /** Original PDFs are kept for the human, not the model — a 40 MB one is not
@@ -1245,6 +1339,7 @@ function syncForm() {
   }
   if ($('pn_show')) $('pn_show').checked = state.home.panorama?.show !== false;
   updatePanoStatus();
+  renderHomePhotoList();
   renderSlotList();
   renderSiteViewList();
 }
@@ -1287,6 +1382,7 @@ function loadProject(raw) {
 
 function bind() {
   initAccordions();
+  bindHomePhotos();
   bindPanorama();
   bindSiteViews();
   bindPackage();
@@ -2193,8 +2289,14 @@ function pruneImagePool() {
       if (v?.photo?.srcKey) live.add(v.photo.srcKey);
     }
     if (snap.home?.panorama?.srcKey) live.add(snap.home.panorama.srcKey);
+    for (const p of Object.values(snap.home?.homePhotos || {})) {
+      if (p?.srcKey) live.add(p.srcKey);
+    }
   }
   if (state.home.panorama?.src) live.add(poolKey(state.home.panorama.src));
+  for (const p of Object.values(state.home.homePhotos || {})) {
+    if (p?.src) live.add(poolKey(p.src));
+  }
   if (state.home.plan?.src) live.add(poolKey(state.home.plan.src));
   if (state.home.sitePhoto?.src) live.add(poolKey(state.home.sitePhoto.src));
   for (const v of state.home.siteViews || []) {
@@ -2222,6 +2324,9 @@ function snapshotState() {
     photo: { ...v.photo, src: undefined, srcKey: poolKey(v.photo?.src) },
   }));
   home.panorama = { ...home.panorama, src: undefined, srcKey: poolKey(home.panorama?.src) };
+  home.homePhotos = Object.fromEntries(
+    Object.entries(home.homePhotos || {}).map(([k, p]) => [k, { name: p.name, srcKey: poolKey(p.src) }]),
+  );
   const scene = { ...state.scene, eye: undefined };
   return JSON.parse(JSON.stringify({ home, scene }));
 }
@@ -2245,6 +2350,11 @@ function applySnapshot(snap) {
     });
     const panoKey = snap.home.panorama?.srcKey;
     home.panorama = { ...home.panorama, src: panoKey ? imagePool.get(panoKey) ?? null : null };
+    home.homePhotos = Object.fromEntries(
+      Object.entries(snap.home.homePhotos || {})
+        .map(([k, p]) => [k, { name: p.name || '', src: p.srcKey ? imagePool.get(p.srcKey) ?? null : null }])
+        .filter(([, p]) => p.src),
+    );
     state.home = home;
     state.scene = { ...defaultScene(), ...snap.scene, eye: state.scene.eye };
 
@@ -2328,13 +2438,22 @@ function save() {
           sitePlan: { ...state.home.sitePlan, src: null, pdf: null },
           siteViews: state.home.siteViews.map((v) => ({ ...v, photo: { ...v.photo, src: null } })),
           panorama: { ...state.home.panorama, src: null },
+          homePhotos: {},
         },
       };
       localStorage.setItem(STORE_KEY, JSON.stringify(lean));
     } catch { /* give up quietly; the JSON export is the real save path */ }
     if (!warnedQuota) {
       warnedQuota = true;
-      alert('Storage is full, so the site photo / plan images could not be saved with this project. They will be missing after a reload — use "Save JSON" to keep a full copy, or upload a smaller image.');
+      alert(
+        'Browser storage is full, so the images could not be autosaved with this project — '
+        + 'the lot photos, the site plan, the panorama and the photos of the home will all be '
+        + 'missing after a reload.\n\n'
+        + 'This gets easier to hit than it looks: every filled lot-photo slot carries its own '
+        + 'full-size image, and the site plan page is another one.\n\n'
+        + 'Use "Save JSON" now to keep a complete copy on disk. That file always holds '
+        + 'everything; the browser autosave is only a convenience.',
+      );
     }
   }
 }

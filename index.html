@@ -184,6 +184,19 @@
       </div>
     </section>
 
+    <section class="panel collapsible" id="panel_homephotos">
+      <div class="panel-header">
+        <h2><span class="code">HOM</span> Photos Of The Real Home</h2>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="panel-body">
+        <p class="hint">Not the lot — <b>the home itself</b>. Dealer-lot or catalogue shots of this model, one per wall. These are what the finished render must <i>look</i> like: the real siding profile and colour, the real window proportions, the trim, the roof as photographed. The massing plates stay the authority on <i>where</i> everything is; each photo is laid over its matching plate, not used instead of it.</p>
+        <p class="hint">Load the ones you have. <b>Walls you cannot photograph are exactly why the plates exist</b> — the package tells the model to follow the plate and the written spec there, and to invent nothing.</p>
+        <div id="homePhotoList"></div>
+        <input type="file" id="fileHomePhoto" accept="image/*" hidden>
+      </div>
+    </section>
+
     <section class="panel collapsible open" id="panel_openings">
       <div class="panel-header">
         <h2><span class="code">OPN</span> Openings <span class="count" id="openCount"></span></h2>
@@ -413,6 +426,7 @@
         <label class="row check"><input id="pk_cutout" type="checkbox" autocomplete="off" checked><span>Transparent cutout of the current view</span></label>
         <label class="row check"><input id="pk_allSiteViews" type="checkbox" autocomplete="off" checked><span>One folder per saved site view <i>(a render pass each)</i></span></label>
         <label class="row check"><input id="pk_lotPhoto" type="checkbox" autocomplete="off" checked><span>Lot photo (unmodified)</span></label>
+        <label class="row check"><input id="pk_homePhotos" type="checkbox" autocomplete="off" checked><span>Photos of the real home, paired to their plates</span></label>
         <label class="row check"><input id="pk_sitePlan" type="checkbox" autocomplete="off" checked><span>Site plan page (PNG)</span></label>
         <label class="row check"><input id="pk_projectJson" type="checkbox" autocomplete="off" checked><span>Project JSON, so the package can be rebuilt</span></label>
 

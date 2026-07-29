@@ -1,7 +1,15 @@
 # SiteMassing3D
 
-A parametric 3D massing model of a double-wide, built to produce the plate images
-that the site-render prompt in `../SITE-RENDER-PROMPT-TEMPLATE.md` asks for.
+**A repeatable way to show what a house package would look like on a lot.**
+
+Someone asks "what would that home look like on my land?" This turns that into a
+photorealistic image, the same way every time, for any home and any lot: build
+the massing model to the spec sheet, photograph the lot, load the photos of the
+real home, export one package, run the brief inside it. Swap either half and
+export again — the process does not change, so neither does the quality.
+
+The app is the measuring half. It produces geometry you can trust and hands it
+to an image model with wording precise enough to survive the handoff.
 
 The point is not a pretty render. The point is **geometry you can trust**: the
 front wall really is `L/W` times as long as the gable end, the roof ridge really
@@ -65,6 +73,23 @@ printed footprint matches the blue outline (turn on *Dimension outline on ground
 to see it), then nudge Offset X/Z and Rotation until it lines up. With *Plan-pick
 mode* on, clicking the plate drops a door on the nearest wall at that position.
 
+**Photos Of The Real Home** (`HOM` panel) — dealer-lot or catalogue shots of this
+model, one slot per wall plus a ¾ catalogue shot. These are a different class of
+asset from the lot photos and the brief keeps them strictly apart:
+
+| Asset | Authority on | Not authority on |
+|---|---|---|
+| Lot photo | the site — ground, planting, backdrop, light, camera position | the home |
+| Massing plates | geometry — size, proportion, roof pitch, every opening | colour, material, texture |
+| Home photos | finish — how the real siding, windows, trim and roof look | size, proportion, placement |
+
+Each home photo is named for the wall it shows and states the plate it pairs
+with, so the model is told to lay the photograph over that plate rather than
+choose between them — measured drawing underneath, photographed finish on top.
+Walls you have no photo of are exactly why the plates carry every opening on all
+four sides; the brief names those walls and says to extend the siding plainly and
+invent nothing.
+
 **AI Render Package** — the app's actual output. *Export render package (.zip)*
 writes one archive containing:
 
@@ -76,8 +101,33 @@ writes one archive containing:
 | `20-massing-hero.png` | the current view — the plate matched to the lot photo |
 | `21-massing-hero-cutout.png` | the same view with an alpha channel, for compositing |
 | `30-elevation-set.png`, `31`–`35` | the four elevations and the roof plan |
+| `40-home-*.jpg` | photos of the real home, each named for its wall |
 | `50-site-plan.png` | page 1 of the site plan PDF, converted |
 | `90-project.json` | the project, so the package can be rebuilt |
+
+The brief inside it states, in order: what you are making, which attachment is
+the authority on what, the measured geometry, the opening schedule, the Turn 1
+prompt, a **seven-point acceptance check**, the corrections, and finally the
+**polish pass**.
+
+**The polish pass is the step to understand.** Everything before it is about
+being *correct* — right size, right proportions, right openings, right place on
+the lot. None of that makes the picture look real; a correct image still reads
+as a cut-out. The polish pass matches the lot's colour temperature, beds the
+skirting into the ground with a contact shadow, softens the roofline against the
+sky and matches grain and depth of field. It changes no geometry and no
+placement.
+
+It runs **once, and only after all seven checks pass**. Polishing early does not
+fix a wrong image — it makes it believable, which is the failure you cannot
+recover from, because nobody catches it. Running it repeatedly compounds the
+contrast and drifts away from the lot photo's real light.
+
+The wording is model-agnostic and the brief says how to adapt it: many-image chat
+models take everything as written; two- or three-image editors take the lot
+photo, the hero plate and one home photo, with the tables carrying the rest in
+text; prompt-and-reference models use the lot photo and hero plate as references.
+The run order never changes and the polish pass stays last.
 
 **One lot photo renders one view.** The hero plate is the only one shot from the
 lot photo's camera position, so it is the only one the model can site. The

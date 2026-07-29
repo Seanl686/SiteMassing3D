@@ -9,6 +9,7 @@
 import { buildBrief } from './brief.js';
 import { measureFraming } from './framing.js';
 import { slotByKey, SITE_VIEW_SLOTS } from './siteviews.js';
+import { HOME_PHOTO_SLOTS, filledHomePhotos } from './homephotos.js';
 import { buildProject } from './project.js';
 import { zipStore, dataUrlToBytes, dataUrlExt } from './zip.js';
 import {
@@ -33,6 +34,7 @@ export const defaultPackageOptions = () => ({
   originalPdf: true,
   projectJson: true,
   allSiteViews: true,
+  homePhotos: true,
 });
 
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -42,9 +44,20 @@ const usingPanorama = (stage, pano) => !!pano?.src && pano.show !== false && !!s
 
 const README = (name, multi, pano) => `# ${name} — render package
 
-Everything in this folder was exported together from SiteMassing3D so it stays
-consistent: the plates, the lot photo, the site plan and the brief all describe
-the same model at the same moment.
+## What this is for
+
+This package exists to produce **one photorealistic image of ${name} standing on
+this specific lot** — the picture you show someone who asked "what would it look
+like on my land?"
+
+It is a repeatable pattern, not a one-off. Every home and every lot goes through
+the same steps and comes out the same quality: build the massing model to the
+spec sheet, photograph the lot, export this package, run the brief. Swap either
+half and export again.
+
+Everything in this folder was exported together, so it stays consistent: the
+plates, the lot photo, the site plan and the brief all describe the same model
+at the same moment.
 
 ${multi ? `## Several render passes
 
@@ -57,10 +70,32 @@ lot photo, its own massing plate framed from that photo's position, and its own
 
 1. Open \`${multi ? '01-INDEX.md, then a view folder\'s BRIEF.md' : '01-BRIEF.md'}\`. Section 1 lists the files to attach, in order.
 2. Attach them to the image model (Gemini / Nano Banana, ChatGPT, Firefly,
-   Midjourney edit — the wording is model-agnostic).
-3. Paste section 5 as your first message. The model is asked to echo the
-   dimensions back before it renders, so a misread costs one turn, not four.
-4. Use section 6 for corrections — **one change per turn**, never stacked.
+   Midjourney edit — the wording is model-agnostic; section 2 says how to adapt
+   it for tools that only take two or three images). Section 2 also sets out
+   which attachment is the authority on what: **the lot photo owns the site, the
+   massing plates own the geometry, the home photographs own the finish.** The
+   plates and the home photographs describe the same home and are used one over
+   the other — measured drawing underneath, photographed finish on top.
+3. **Place it.** Paste section 6 as your first message. The model is asked to
+   echo the dimensions back before it renders, so a misread costs one turn, not
+   four.
+4. **Check it.** Run the seven-point list in section 7 against what came back.
+   Twenty seconds, every time. Do not skip it.
+5. **Correct it.** Section 8, one change per turn, re-checking after each.
+6. **Polish it.** Section 9 — once, and only when all seven checks pass.
+
+### Step 6 is the one people get wrong
+
+The polish pass is what turns a *correct* image into a *photograph*: it matches
+the lot's colour temperature, beds the skirting into the ground with a contact
+shadow, softens the roofline against the sky, matches grain and depth of field.
+It changes no geometry and no placement.
+
+It is deliberately last. Polishing an image whose proportions or openings are
+still wrong does not fix them — it makes them believable, and a convincing wrong
+picture is worse than an obviously wrong one, because nobody catches it. Run it
+once; running it repeatedly compounds the contrast and drifts away from the lot
+photo's real light.
 
 ${pano ? `## The lot is a 360 panorama
 
@@ -104,6 +139,7 @@ lighting; a clean massing plate reads as geometry.
 /** Root index when the package holds several render passes. */
 function buildViewIndex(home, passes) {
   const L = [`# ${home.name || 'Untitled model'} — ${passes.length} render passes`, ''];
+  // (buildViewIndex is only reached with two or more passes, so the plural holds.)
   L.push(`This package holds one folder per saved site view. **Each folder is a`);
   L.push(`separate conversation with the image model** — its own lot photo, its own`);
   L.push(`massing plate framed from that photo's position, and its own brief.`);
@@ -150,7 +186,11 @@ export async function buildRenderPackage(ctx = {}) {
   // each one is its own render pass and gets its own folder. Without any, the
   // package describes the single set-up currently on screen.
   const siteViews = opts.allSiteViews && ctx.applyView ? (home.siteViews || []) : [];
-  const multi = siteViews.length > 0;
+  // Folders and an index only earn their keep from two passes up. With exactly
+  // one saved view the package stays flat — it is still that view's photo and
+  // camera that get rendered, just at the root where a single brief belongs.
+  const multi = siteViews.length > 1;
+  if (siteViews.length === 1) ctx.applyView(siteViews[0]);
 
   // One panorama covers the whole site, however many passes there are, so it is
   // added once and every brief points at the same file.
@@ -253,6 +293,23 @@ export async function buildRenderPackage(ctx = {}) {
     }
   } finally {
     if (sp) sp.show = photoWas;
+  }
+
+  // ---- 3b. photographs of the real home -----------------------------------
+  // Shared across every pass: the home looks the same from wherever the lot was
+  // photographed. Each one is named for the wall it shows and states the plate
+  // it pairs with, so the model never has to guess which image goes with which
+  // elevation.
+  if (opts.homePhotos) {
+    let n = 40;
+    for (const slot of filledHomePhotos(home.homePhotos)) {
+      const photo = home.homePhotos[slot.key];
+      add(`${n}-home-${slot.key}.${dataUrlExt(photo.src, 'jpg')}`, dataUrlToBytes(photo.src),
+        `PHOTOGRAPH OF THE REAL HOME — ${slot.name}. This is what that wall must LOOK like: `
+        + `siding profile and colour, window proportions, trim, roof. Lay it over the geometry `
+        + `in ${slot.plate}, which stays the authority on sizes and positions.`);
+      n++;
+    }
   }
 
   // ---- 4. the site plan ---------------------------------------------------

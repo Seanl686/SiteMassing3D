@@ -2,6 +2,7 @@
 // one three.js world unit == one foot.
 
 import { readSiteViews, sortSiteViews } from './siteviews.js';
+import { readHomePhotos } from './homephotos.js';
 
 export const WALLS = ['front', 'back', 'left', 'right'];
 
@@ -96,6 +97,10 @@ export function defaultHome() {
       brightness: 1,
       opacity: 1,
     },
+    // Photographs of the REAL home, keyed by the wall each one shows. These are
+    // the authority on how the home looks; the plates are the authority on where
+    // everything is. See homephotos.js.
+    homePhotos: {},
     // Named lot-photo + camera set-ups. One lot photo renders one view, so a
     // site shot from four positions is four of these — see siteviews.js.
     siteViews: [],
@@ -207,6 +212,7 @@ export function migrate(home) {
     sitePhoto,
     sitePlan: { ...base.sitePlan, ...(home.sitePlan || {}) },
     panorama: { ...base.panorama, ...(home.panorama || {}) },
+    homePhotos: readHomePhotos(home.homePhotos),
     siteViews: sortSiteViews(readSiteViews(home.siteViews)),
     activeSiteViewId: home.activeSiteViewId || null,
     brief: { ...base.brief, ...(home.brief || {}) },
