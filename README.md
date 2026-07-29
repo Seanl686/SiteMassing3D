@@ -87,11 +87,31 @@ from the position matching its view. The brief says this to the model in as many
 words, because rendering a viewpoint the lot photo was never shot from is the
 failure this workflow hits most.
 
-**Saved site views** (in the Site Photo panel) are how you do that without
-rebuilding the set-up each time. A site view stores the lot photo, its
-alignment *and* the camera framed onto it, under a name. Save one per position,
-then cycle with `‹ Prev` / `Next ›`, the badge in the view bar, or the `[` and
-`]` keys. With *One folder per saved site view* ticked, the package writes
+**The four lot photos.** The top of the Site Photo panel has a labelled slot for
+each of the four standard camera positions, so it is unambiguous which
+photograph goes where:
+
+| # | Slot | Where to stand with the camera |
+|---|---|---|
+| 1 | ¾ front-left | Off the front-**left** corner of the pad. Long front wall running away, left gable end facing you. |
+| 2 | ¾ front-right | Mirror image: off the front-**right** corner. |
+| 3 | ¾ rear-left | Behind the pad, off the rear-left corner — the side no dealer photo covers. |
+| 4 | Straight on, eye level | Square to the long side of the pad, camera at eye height, ~1.5× the home length back. |
+
+All four are perspective positions. The orthographic elevations measure true but
+no photograph is orthographic, so they are geometry reference and never a slot.
+
+Loading a photo into a slot jumps the 3D camera to that position — align the
+model to the photo from there and the slot keeps the alignment and the camera.
+You do not need all four; each one you fill becomes its own render pass, and the
+package's `01-INDEX.md` and per-pass briefs repeat the shooting note so the image
+model knows which position it is rendering.
+
+**Saved site views** below the slots hold the same thing for any other angle:
+the lot photo, its alignment *and* the camera, under a name. Save one with
+`+ Save current`. Slots and free-form views cycle together with `‹ Prev` /
+`Next ›`, the badge in the view bar, or the `[` and `]` keys — slots first in
+shooting order, free-form after. With *One folder per saved site view* ticked, the package writes
 `views/01-<name>/` … each with its own lot photo, hero plate, cutout and
 `BRIEF.md`, plus a root `01-INDEX.md`. One export, one render pass per photo.
 

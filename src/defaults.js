@@ -1,7 +1,7 @@
 // Default home spec and shared constants. Units are FEET throughout the app;
 // one three.js world unit == one foot.
 
-import { readSiteViews } from './siteviews.js';
+import { readSiteViews, sortSiteViews } from './siteviews.js';
 
 export const WALLS = ['front', 'back', 'left', 'right'];
 
@@ -207,7 +207,7 @@ export function migrate(home) {
     sitePhoto,
     sitePlan: { ...base.sitePlan, ...(home.sitePlan || {}) },
     panorama: { ...base.panorama, ...(home.panorama || {}) },
-    siteViews: readSiteViews(home.siteViews),
+    siteViews: sortSiteViews(readSiteViews(home.siteViews)),
     activeSiteViewId: home.activeSiteViewId || null,
     brief: { ...base.brief, ...(home.brief || {}) },
   };

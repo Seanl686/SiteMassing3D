@@ -16,6 +16,7 @@ import { measureFraming } from './framing.js';
 import { loadSitePlan, isPdf } from './siteplan.js';
 import {
   captureSiteView, applySiteView, cycleSiteView, indexOfView, uniqueViewName, suggestViewName,
+  SITE_VIEW_SLOTS, findSlotView, slotByKey, sortSiteViews,
 } from './siteviews.js';
 
 const STORE_KEY = 'sitemassing3d.v1';
@@ -481,6 +482,170 @@ function activeSiteView() {
   return state.home.siteViews.find((v) => v.id === state.home.activeSiteViewId) || null;
 }
 
+/**
+ * While a view is active, the alignment work the user does — panning the photo,
+ * setting the ground baseline, orbiting — belongs to that view. Without this,
+ * you align a photo, cycle to the next one, come back, and the alignment is
+ * gone. Suspended while a view is being applied or while the packager is
+ * stepping through them, or a half-applied state would be written back.
+ */
+let suspendViewSync = false;
+
+function syncActiveSiteView() {
+  if (suspendViewSync || applyingHistory) return;
+  const view = activeSiteView();
+  if (!view) return;
+  const fresh = captureSiteView({
+    id: view.id,
+    name: view.name,
+    slotKey: view.slotKey,
+    sitePhoto: state.home.sitePhoto,
+    camera: stage.cameraState(),
+    viewLabel: currentViewName,
+    savedAt: view.savedAt,
+  });
+  Object.assign(view, fresh);
+}
+
+/** Run `fn` without the active view absorbing the intermediate state. */
+function withoutViewSync(fn) {
+  const was = suspendViewSync;
+  suspendViewSync = true;
+  const restore = () => { suspendViewSync = was; };
+  let out;
+  try {
+    out = fn();
+  } catch (err) {
+    restore();
+    throw err;
+  }
+  // The packager is async and steps through every view, so the guard has to
+  // outlive the synchronous call.
+  if (out && typeof out.then === 'function') {
+    return out.then((v) => { restore(); return v; }, (e) => { restore(); throw e; });
+  }
+  restore();
+  return out;
+}
+
+/** One card per standard lot photograph, filled or not. */
+function renderSlotList() {
+  const host = $('slotList');
+  if (!host) return;
+  host.textContent = '';
+  const views = state.home.siteViews;
+
+  SITE_VIEW_SLOTS.forEach((slot, i) => {
+    const view = findSlotView(views, slot.key);
+    const filled = !!view?.photo?.src;
+    const isActive = view && view.id === state.home.activeSiteViewId;
+
+    const card = document.createElement('div');
+    card.className = `slot ${filled ? 'filled' : 'empty'}${isActive ? ' active' : ''}`;
+
+    const thumb = document.createElement(filled ? 'img' : 'div');
+    thumb.className = `slot-thumb${filled ? ' has-photo' : ''}`;
+    if (filled) { thumb.src = view.photo.src; thumb.alt = slot.name; }
+    else thumb.textContent = '+';
+    thumb.title = filled ? 'Show this lot photo' : `Load the ${slot.name} photo`;
+    thumb.addEventListener('click', () => (filled ? applySiteViewById(view.id) : pickSlotPhoto(slot.key)));
+    card.appendChild(thumb);
+
+    const body = document.createElement('div');
+    body.className = 'slot-body';
+
+    const name = document.createElement('div');
+    name.className = 'slot-name';
+    const num = document.createElement('span');
+    num.className = 'slot-num';
+    num.textContent = `${i + 1}`;
+    name.appendChild(num);
+    name.appendChild(document.createTextNode(slot.name));
+    body.appendChild(name);
+
+    const shoot = document.createElement('div');
+    shoot.className = 'slot-shoot';
+    shoot.textContent = slot.shoot;
+    body.appendChild(shoot);
+
+    const actions = document.createElement('div');
+    actions.className = 'slot-actions';
+
+    const load = document.createElement('button');
+    load.textContent = filled ? 'Replace photo' : 'Load photo';
+    load.addEventListener('click', () => pickSlotPhoto(slot.key));
+    actions.appendChild(load);
+
+    if (filled) {
+      const use = document.createElement('button');
+      use.textContent = isActive ? '● Showing' : 'Show';
+      use.disabled = isActive;
+      use.addEventListener('click', () => applySiteViewById(view.id));
+      actions.appendChild(use);
+
+      const clear = document.createElement('button');
+      clear.textContent = 'Clear';
+      clear.addEventListener('click', () => deleteSiteView(view.id));
+      actions.appendChild(clear);
+    }
+
+    body.appendChild(actions);
+    card.appendChild(body);
+    host.appendChild(card);
+  });
+}
+
+let pendingSlotKey = null;
+
+function pickSlotPhoto(key) {
+  pendingSlotKey = key;
+  $('fileSlotPhoto')?.click();
+}
+
+/**
+ * Load a photograph into one of the four slots. The camera jumps to the preset
+ * that slot is defined by, because that is the framing the plate has to be
+ * rendered at for the photo to be usable — the user then nudges the alignment
+ * from there and the slot keeps it.
+ */
+function loadSlotPhoto(key, dataUrl) {
+  const slot = slotByKey(key);
+  if (!slot) return;
+  const views = state.home.siteViews;
+  const existing = findSlotView(views, key);
+
+  withoutViewSync(() => {
+    state.home.sitePhoto = { ...state.home.sitePhoto, ...(existing?.photo || {}), src: dataUrl, show: true };
+    currentViewName = slot.name;
+    rebuild();
+    // An existing slot keeps the framing already dialled in for it; a new one
+    // starts from the preset the slot is named after.
+    if (existing?.camera) stage.applyCameraState(existing.camera);
+    else stage.setView(slot.preset, state.home.dimensions, state.scene);
+  });
+
+  const view = captureSiteView({
+    id: existing?.id,
+    name: existing?.name || uniqueViewName(views, slot.name),
+    slotKey: key,
+    sitePhoto: state.home.sitePhoto,
+    camera: stage.cameraState(),
+    viewLabel: slot.name,
+    savedAt: new Date().toISOString(),
+  });
+  if (existing) Object.assign(existing, view);
+  else state.home.siteViews = sortSiteViews([...views, view]);
+
+  state.home.activeSiteViewId = view.id;
+  syncForm();
+  updateSitePhotoPlate();
+  updateFramingReadout();
+  renderSlotList();
+  renderSiteViewList();
+  save();
+  setPackageStatus(`Loaded the ${slot.name} lot photo. Align the model to it — this slot keeps the alignment and the camera.`);
+}
+
 function updateSiteViewBadge() {
   const bar = $('siteViewBar');
   const badge = $('siteViewBadge');
@@ -592,6 +757,7 @@ function addSiteView() {
   });
   views.push(view);
   state.home.activeSiteViewId = view.id;
+  renderSlotList();
   renderSiteViewList();
   save();
   setPackageStatus(`Saved site view "${view.name}". The render package can render every saved view in one pass.`);
@@ -610,6 +776,7 @@ function updateSiteViewFromLive(id) {
     savedAt: new Date().toISOString(),
   });
   state.home.activeSiteViewId = id;
+  renderSlotList();
   renderSiteViewList();
   save();
   setPackageStatus(`Updated site view "${views[at].name}".`);
@@ -619,9 +786,11 @@ function deleteSiteView(id) {
   const views = state.home.siteViews;
   const at = indexOfView(views, id);
   if (at < 0) return;
-  if (!confirm(`Delete the site view "${views[at].name}"? The lot photo it holds goes with it.`)) return;
+  const what = views[at].slotKey ? `Clear the ${views[at].name} slot` : `Delete the site view "${views[at].name}"`;
+  if (!confirm(`${what}? The lot photo it holds goes with it.`)) return;
   views.splice(at, 1);
   if (state.home.activeSiteViewId === id) state.home.activeSiteViewId = null;
+  renderSlotList();
   renderSiteViewList();
   save();
 }
@@ -634,18 +803,21 @@ function deleteSiteView(id) {
 function applySiteViewById(id) {
   const view = state.home.siteViews.find((v) => v.id === id);
   if (!view) return;
-  state.home.sitePhoto = applySiteView(view, state.home.sitePhoto);
-  state.home.activeSiteViewId = view.id;
-  if (view.viewLabel) currentViewName = view.viewLabel;
-  syncForm();
-  rebuild();
-  if (view.camera && stage.applyCameraState(view.camera)) {
-    // The frustum was rebuilt for the aspect the view was saved at; re-apply
-    // the live one so the plate and the photo stay registered.
-    fit();
-  }
+  withoutViewSync(() => {
+    state.home.sitePhoto = applySiteView(view, state.home.sitePhoto);
+    state.home.activeSiteViewId = view.id;
+    if (view.viewLabel) currentViewName = view.viewLabel;
+    syncForm();
+    rebuild();
+    if (view.camera && stage.applyCameraState(view.camera)) {
+      // The frustum was rebuilt for the aspect the view was saved at; re-apply
+      // the live one so the plate and the photo stay registered.
+      fit();
+    }
+  });
   updateSitePhotoPlate();
   updateFramingReadout();
+  renderSlotList();
   renderSiteViewList();
   save();
 }
@@ -656,6 +828,18 @@ function cycleSiteViews(step) {
 }
 
 function bindSiteViews() {
+  if ($('fileSlotPhoto')) {
+    $('fileSlotPhoto').addEventListener('change', (e) => {
+      const f = e.target.files[0];
+      const key = pendingSlotKey;
+      pendingSlotKey = null;
+      e.target.value = '';
+      if (!f || !key) return;
+      downscaleImage(f, 1600, 0.85)
+        .then((dataUrl) => loadSlotPhoto(key, dataUrl))
+        .catch(() => alert('Could not read that image.'));
+    });
+  }
   if ($('btnAddSiteView')) $('btnAddSiteView').addEventListener('click', addSiteView);
   for (const id of ['btnPrevSiteView', 'btnPrevSiteViewBar']) {
     if ($(id)) $(id).addEventListener('click', () => cycleSiteViews(-1));
@@ -873,14 +1057,16 @@ function bindPackage() {
       btn.disabled = true;
       setPackageStatus('Rendering plates…');
       try {
-        const res = await exportRenderPackage({
+        // Stepping through the views must not write each one's photo back into
+        // whichever view happens to be active.
+        const res = await withoutViewSync(() => exportRenderPackage({
           stage,
           state,
           viewName: currentViewName,
           options: packageOptions(),
           savedAt: new Date().toISOString().slice(0, 10),
           ...packageRenderContext(),
-        });
+        }));
         const kb = Math.round(res.bytes / 1024);
         const passes = res.passes?.length
           ? `${res.passes.length} render pass${res.passes.length === 1 ? '' : 'es'}, one per site view. `
@@ -1059,6 +1245,7 @@ function syncForm() {
   }
   if ($('pn_show')) $('pn_show').checked = state.home.panorama?.show !== false;
   updatePanoStatus();
+  renderSlotList();
   renderSiteViewList();
 }
 
@@ -1416,6 +1603,9 @@ function bind() {
 
     updateHud();
     updateFramingReadout();
+    // Orbiting IS the alignment work for a site view, so the active one takes
+    // the new camera even when nothing else about the state changed.
+    syncActiveSiteView();
     // OrbitControls damping keeps firing 'change' for as long as the camera is
     // easing, so saving unconditionally here wrote to localStorage several times
     // a second and, once history existed, filled the undo stack with camera drift.
@@ -2120,6 +2310,7 @@ function doRedo() {
 }
 
 function save() {
+  syncActiveSiteView();
   scheduleHistory();
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(state));
@@ -2224,11 +2415,11 @@ window.__app = {
   state, stage, rebuild, refreshList, renderToCanvas,
   // Package internals, so a package can be inspected without going through the
   // save dialog: __app.buildPackage().then(p => p.files.map(f => f.name)).
-  buildPackage: (options) => buildRenderPackage({
+  buildPackage: (options) => withoutViewSync(() => buildRenderPackage({
     stage, state, viewName: currentViewName, options,
     savedAt: new Date().toISOString().slice(0, 10),
     ...packageRenderContext(),
-  }),
+  })),
   siteViews: { add: addSiteView, apply: applySiteViewById, cycle: cycleSiteViews },
   brief: currentBrief,
   framing: () => measureFraming(stage, state.home, currentViewName),

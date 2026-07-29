@@ -8,6 +8,7 @@
 
 import { buildBrief } from './brief.js';
 import { measureFraming } from './framing.js';
+import { slotByKey, SITE_VIEW_SLOTS } from './siteviews.js';
 import { buildProject } from './project.js';
 import { zipStore, dataUrlToBytes, dataUrlExt } from './zip.js';
 import {
@@ -82,16 +83,11 @@ So a four-view contact sheet does **not** yield four renders. Four renders need
 four lot photos, each shot from the position that matches its view, and one
 pass per pair:
 
-| Want this render | Shoot the lot from | Frame this view in the app |
-|---|---|---|
-| front three-quarter | facing the pad's front-left | ¾ front-L |
-| opposite three-quarter | facing the pad's front-right | ¾ front-R |
-| straight-on front | square to the long side of the pad | Front elev |
-| end view | square to the short side | Left / Right end |
+${SITE_VIEW_SLOTS.map((s, i) => `${i + 1}. **${s.name}** — ${s.shoot}`).join('\n')}
 
-Save each of those set-ups as a **site view** in the app and the package renders
-one folder per view in a single pass. A 360 panorama removes the constraint
-entirely — one shot, any angle.
+The app has a labelled slot for each of those four. Fill the ones you shot and
+the package renders one folder per slot in a single pass. A 360 panorama removes
+the constraint entirely — one shot, any angle.
 `}
 Re-frame the app's camera before exporting either way, because the scale and
 ridge-height percentages in the brief are measured off that camera.
@@ -115,10 +111,11 @@ function buildViewIndex(home, passes) {
   L.push(`Do not mix them. A plate framed for one lot photo cannot be sited on`);
   L.push(`another; that mismatch is what makes a composite read as pasted on.`);
   L.push('');
-  L.push(`| # | Site view | Folder | Start with |`);
+  L.push(`| # | Site view | Shot from | Folder |`);
   L.push(`|---|---|---|---|`);
   passes.forEach((p, i) => {
-    L.push(`| ${i + 1} | ${p.view.name} | \`${p.dir}/\` | \`${p.dir}/BRIEF.md\` |`);
+    const shoot = slotByKey(p.view.slotKey)?.shoot || 'a free-form camera position';
+    L.push(`| ${i + 1} | ${p.view.name} | ${shoot} | \`${p.dir}/BRIEF.md\` |`);
   });
   L.push('');
   L.push(`The shared geometry plates (contact sheet, elevations, roof plan) and the`);
@@ -294,6 +291,7 @@ export async function buildRenderPackage(ctx = {}) {
         manifest: localManifest,
         savedAt,
         passName: p.view.name,
+        passShoot: slotByKey(p.view.slotKey)?.shoot || null,
       }),
     });
   }

@@ -16,6 +16,50 @@
 let seq = 0;
 const nextId = () => `sv${(++seq).toString(36)}${Date.now().toString(36).slice(-4)}`;
 
+/**
+ * The four standard lot photographs, and the camera position each one has to be
+ * shot from. A render can only be made from a position the lot was photographed
+ * at, so these are not arbitrary labels: the preset named here is the framing
+ * the plate is rendered at, and `shoot` is where the person with the camera has
+ * to stand for the two to agree.
+ *
+ * All four are perspective presets. The orthographic elevations measure true but
+ * no photograph is orthographic, so they are geometry reference only and never
+ * a slot.
+ */
+export const SITE_VIEW_SLOTS = [
+  {
+    key: 'hero-left',
+    name: '¾ front-left',
+    preset: 'hero-left',
+    shoot: 'Stand off the front-LEFT corner of the pad. The long front wall runs away from you; the left gable end faces you.',
+  },
+  {
+    key: 'hero-right',
+    name: '¾ front-right',
+    preset: 'hero-right',
+    shoot: 'Mirror image: off the front-RIGHT corner. Front wall receding the other way, right gable end facing you.',
+  },
+  {
+    key: 'rear-left',
+    name: '¾ rear-left',
+    preset: 'rear-left',
+    shoot: 'Behind the pad, off the rear-left corner. This is the side no dealer photo ever covers.',
+  },
+  {
+    key: 'eye',
+    name: 'Straight on, eye level',
+    preset: 'eye',
+    shoot: 'Square to the long side of the pad, camera at eye height, roughly 1.5× the home length back.',
+  },
+];
+
+export const slotByKey = (key) => SITE_VIEW_SLOTS.find((s) => s.key === key) || null;
+
+/** The saved view filling a given slot, if the user has loaded a photo for it. */
+export const findSlotView = (views, key) =>
+  (Array.isArray(views) ? views : []).find((v) => v && v.slotKey === key) || null;
+
 /** The site-photo fields a view owns. Anything else on sitePhoto is transient. */
 export const PHOTO_KEYS = [
   'src', 'show', 'fitMode', 'opacity', 'scale', 'panX', 'panY', 'panBasis',
@@ -33,13 +77,16 @@ function pickPhoto(sitePhoto) {
  * `viewLabel` is the preset name shown in the UI, carried so a restored view
  * captions its plate the way it was captioned when saved.
  */
-export function captureSiteView({ name, sitePhoto, camera, viewLabel, id, savedAt } = {}) {
+export function captureSiteView({ name, sitePhoto, camera, viewLabel, id, slotKey, savedAt } = {}) {
   return {
     id: id || nextId(),
     name: (name || '').trim() || 'Untitled view',
     photo: pickPhoto(sitePhoto),
     camera: camera || null,
     viewLabel: viewLabel || null,
+    // Which of the four standard lot photographs this is, if any. Free-form
+    // views saved with "+ Save current" have none.
+    slotKey: slotKey || null,
     savedAt: savedAt || null,
   };
 }
@@ -53,12 +100,29 @@ export function readSiteView(raw) {
     photo: pickPhoto(raw.photo || {}),
     camera: raw.camera && typeof raw.camera === 'object' ? raw.camera : null,
     viewLabel: raw.viewLabel || null,
+    slotKey: slotByKey(raw.slotKey) ? raw.slotKey : null,
     savedAt: raw.savedAt || null,
   };
 }
 
 export const readSiteViews = (raw) =>
   (Array.isArray(raw) ? raw : []).map(readSiteView).filter(Boolean);
+
+/**
+ * Slot views in the canonical shooting order, then free-form ones in the order
+ * they were saved. Cycling and the package's folder numbering both read this
+ * order, so a slot filled last should still sit where its label says it does.
+ */
+export function sortSiteViews(views) {
+  const rank = (v) => {
+    const at = SITE_VIEW_SLOTS.findIndex((s) => s.key === v.slotKey);
+    return at < 0 ? SITE_VIEW_SLOTS.length : at;
+  };
+  return (Array.isArray(views) ? views : [])
+    .map((v, i) => [v, i])
+    .sort((a, b) => (rank(a[0]) - rank(b[0])) || (a[1] - b[1]))
+    .map(([v]) => v);
+}
 
 /** Index of `id` in `views`, or -1. */
 export const indexOfView = (views, id) =>

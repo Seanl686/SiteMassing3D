@@ -114,7 +114,7 @@ const pct = (v) => `${Math.round(v * 100)}%`;
  * measuring the live camera (see framing.js) — when it is absent, the brief
  * falls back to the blanks the user filled in, and says so.
  */
-export function buildBrief({ home, scene, framing, site, manifest, savedAt, passName } = {}) {
+export function buildBrief({ home, scene, framing, site, manifest, savedAt, passName, passShoot } = {}) {
   if (!home || !home.dimensions) throw new Error('buildBrief needs a home');
   const d = home.dimensions;
   const dv = derived(d);
@@ -155,6 +155,10 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
     w(`This is the **${passName}** pass — one lot photo, shot from one position, and`);
     w(`the massing plate framed to match it. Other passes in this package use`);
     w(`different photos and different camera positions; do not mix their files.`);
+    if (passShoot) {
+      w();
+      w(`Where the photograph was taken from: ${passShoot}`);
+    }
   }
   w();
 

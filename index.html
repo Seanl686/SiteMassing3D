@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SiteMassing3D — double-wide massing &amp; elevation renderer</title>
 <!-- ?v= bust: plain static servers hand Chrome a cached stylesheet after edits -->
-<link rel="stylesheet" href="css/app.css?v=12">
+<link rel="stylesheet" href="css/app.css?v=13">
 <script type="importmap">
 {
   "imports": {
@@ -277,6 +277,13 @@
         <span class="chevron">▲</span>
       </div>
       <div class="panel-body">
+        <h3 class="subhead">The Four Lot Photos</h3>
+        <p class="hint">A render can only be made from a position the lot was actually photographed from, so each slot below is a <b>specific place to stand with the camera</b>. Load the matching shot into each. Loading one jumps the 3D camera to that position — align the model to the photo, and the slot remembers it. You do not need all four; each one you fill becomes its own render pass in the package.</p>
+        <div id="slotList"></div>
+        <input type="file" id="fileSlotPhoto" accept="image/*" hidden>
+
+        <h3 class="subhead">Free-form Photo</h3>
+        <p class="hint">Any other angle — loads into the live view without claiming a slot.</p>
         <label class="btn block" for="fileSitePhoto">Load site photo (PNG/JPG)</label>
         <input type="file" id="fileSitePhoto" accept="image/*" hidden>
         <div class="grid2">

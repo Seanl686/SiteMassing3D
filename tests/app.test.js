@@ -8,6 +8,7 @@ import {
 } from '../src/brief.js';
 import {
   captureSiteView, applySiteView, cycleSiteView, indexOfView, uniqueViewName,
+  readSiteView, sortSiteViews, SITE_VIEW_SLOTS, slotByKey, findSlotView,
 } from '../src/siteviews.js';
 import { derived, wallFrames, fmtAllUnits, buildHome, getWallHeight, dormerSize, applyHeadAlign } from '../src/build.js';
 import { createSidingMaterial } from '../src/textures.js';
@@ -976,4 +977,72 @@ test('36. A Panorama Backdrop Changes What The Brief Asks For', () => {
   const pass = buildBrief({ home, scene, framing, site: {}, passName: 'From the gate' });
   assert.ok(pass.includes('From the gate'));
   assert.ok(pass.includes('do not mix their files'));
+});
+
+test('37. The Four Lot-Photo Slots Are Named Camera Positions', () => {
+  assert.equal(SITE_VIEW_SLOTS.length, 4);
+  for (const s of SITE_VIEW_SLOTS) {
+    assert.ok(s.key && s.name && s.preset && s.shoot, `${s.key} is fully described`);
+    // The user is told where to stand, not just what the view is called.
+    assert.ok(s.shoot.length > 30, `${s.key} says where to shoot from`);
+  }
+  // All four are perspective presets — no photograph is orthographic, so the
+  // elevations are geometry reference and can never back a lot photo.
+  assert.deepEqual(
+    SITE_VIEW_SLOTS.map((s) => s.preset),
+    ['hero-left', 'hero-right', 'rear-left', 'eye'],
+  );
+  assert.equal(slotByKey('hero-left').name, '¾ front-left');
+  assert.equal(slotByKey('nope'), null);
+
+  const filled = captureSiteView({ name: '¾ front-left', slotKey: 'hero-left', sitePhoto: { src: 'a' } });
+  const freeform = captureSiteView({ name: 'From the gate', sitePhoto: { src: 'b' } });
+  assert.equal(freeform.slotKey, null, 'A free-form view claims no slot');
+  assert.equal(findSlotView([freeform, filled], 'hero-left').name, '¾ front-left');
+  assert.equal(findSlotView([freeform], 'hero-left'), null);
+
+  // A slotKey that is not one of the four is dropped rather than trusted.
+  assert.equal(readSiteView({ name: 'x', slotKey: 'made-up' }).slotKey, null);
+  assert.equal(readSiteView({ name: 'x', slotKey: 'eye' }).slotKey, 'eye');
+});
+
+test('38. Slots Sort Into Shooting Order However They Were Filled', () => {
+  const eye = captureSiteView({ name: 'd', slotKey: 'eye', sitePhoto: {} });
+  const free1 = captureSiteView({ name: 'free one', sitePhoto: {} });
+  const left = captureSiteView({ name: 'a', slotKey: 'hero-left', sitePhoto: {} });
+  const free2 = captureSiteView({ name: 'free two', sitePhoto: {} });
+  const rear = captureSiteView({ name: 'c', slotKey: 'rear-left', sitePhoto: {} });
+
+  const sorted = sortSiteViews([eye, free1, left, free2, rear]);
+  assert.deepEqual(
+    sorted.map((v) => v.slotKey),
+    ['hero-left', 'rear-left', 'eye', null, null],
+    'Slots first in canonical order, free-form after',
+  );
+  // Free-form views keep the order they were saved in.
+  assert.deepEqual(sorted.slice(3).map((v) => v.name), ['free one', 'free two']);
+
+  // Sorting is applied on the way in, so a reopened project reads the same.
+  const home = migrate({
+    dimensions: defaultHome().dimensions,
+    openings: [],
+    siteViews: [eye, left].map((v) => JSON.parse(JSON.stringify(v))),
+  });
+  assert.deepEqual(home.siteViews.map((v) => v.slotKey), ['hero-left', 'eye']);
+});
+
+test('39. A Slotted Pass Tells The Model Where The Photo Was Taken From', () => {
+  const home = defaultHome();
+  const scene = defaultScene();
+  const framing = { left: 0.2, right: 0.7, ridgeTop: 0.5, nearCorner: 'front-left corner', visibleWalls: [], viewLabel: 'x' };
+  const slot = slotByKey('rear-left');
+
+  const md = buildBrief({ home, scene, framing, site: {}, passName: slot.name, passShoot: slot.shoot });
+  assert.ok(md.includes(slot.name));
+  assert.ok(md.includes('Where the photograph was taken from:'));
+  assert.ok(md.includes('rear-left corner'));
+
+  // Without a slot there is no shooting note to make up.
+  const free = buildBrief({ home, scene, framing, site: {}, passName: 'From the gate' });
+  assert.ok(!free.includes('Where the photograph was taken from'));
 });
