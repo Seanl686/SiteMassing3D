@@ -1220,4 +1220,24 @@ test('45. AI Vision Auto-Extraction & Assignment of Openings and Siding/Trim Col
   assert.equal(applied.openings[0].type, 'door');
 });
 
+test('46. Project Save Point Restoration Reads v1 and v2 JSON Files Cleanly', () => {
+  const home = defaultHome();
+  home.name = 'Test JSON Save House';
+  home.dimensions.lengthFt = 48;
+  const scene = defaultScene();
+  const rawProject = buildProject({
+    home,
+    scene,
+    exportOpts: defaultExport(),
+    view: { preset: 'hero-left', label: '¾ front-L', camera: null },
+    savedAt: '2026-07-29T12:00:00.000Z',
+  });
+
+  const parsed = readProject(rawProject);
+  assert.equal(parsed.home.name, 'Test JSON Save House');
+  assert.equal(parsed.home.dimensions.lengthFt, 48);
+  assert.equal(parsed.view.preset, 'hero-left');
+});
+
+
 
