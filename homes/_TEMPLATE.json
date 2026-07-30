@@ -9,7 +9,13 @@
     "roofPitch": 4,
     "eaveOverhangFt": 1,
     "rakeOverhangFt": 0.75,
-    "roofStyle": "gable"
+    "roofStyle": "gable",
+    "asymmetricRoof": false,
+    "frontPitch": null,
+    "backPitch": null,
+    "ridgeOffsetFt": 0,
+    "ridgeStepFt": 0,
+    "roofSections": []
   },
   "colors": {
     "siding": "#8d9299",

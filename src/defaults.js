@@ -32,6 +32,19 @@ export function defaultHome() {
       eaveOverhangFt: 1.0,   // horizontal overhang past the long walls
       rakeOverhangFt: 0.75,  // horizontal overhang past the gable ends
       roofStyle: 'gable',
+      // Asymmetric roof: independent slopes either side of the ridge, a ridge
+      // that can sit off-center, and a step that lifts one plane's peak above
+      // the other. All ignored while `asymmetricRoof` is false.
+      asymmetricRoof: false,
+      frontPitch: null,      // rise per 12 on the front (-Z) plane; null = roofPitch
+      backPitch: null,       // rise per 12 on the back (+Z) plane; null = roofPitch
+      ridgeOffsetFt: 0,      // + moves the ridge toward the back wall
+      ridgeStepFt: 0,        // + lifts the back plane's peak above the front's
+      // Roof sections along the length. Empty = one roof over the whole home.
+      // Each entry: { id, label, startFt, pitch, frontPitch, backPitch,
+      //   ridgeOffsetFt, ridgeStepFt, frontWallHeightFt, backWallHeightFt,
+      //   roofStyle } — every field but startFt may be null to inherit.
+      roofSections: [],
       dormerCount: 0,         // 0 (none), 1 (single), 2 (double)
       dormerStyle: 'gable',   // 'gable', 'shed', 'hip'
       dormerWidthFt: 10.0,
@@ -91,11 +104,54 @@ export function defaultExport() {
   return { w: 2400, h: 1600, alpha: false, burn: true };
 }
 
+const SECTION_NUMS = [
+  'startFt', 'pitch', 'frontPitch', 'backPitch', 'ridgeOffsetFt', 'ridgeStepFt',
+  'frontWallHeightFt', 'backWallHeightFt',
+];
+
+/** A roof section over the whole length unless told otherwise. */
+export function newRoofSection(startFt = 0, label = '') {
+  return {
+    id: nextId('rs'),
+    label,
+    startFt,
+    pitch: null,
+    frontPitch: null,
+    backPitch: null,
+    ridgeOffsetFt: null,
+    ridgeStepFt: null,
+    frontWallHeightFt: null,
+    backWallHeightFt: null,
+    roofStyle: null,
+  };
+}
+
+/** Coerce whatever a JSON file offers into well-formed section records. */
+export function normalizeRoofSections(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((s) => s && typeof s === 'object')
+    .map((s) => {
+      const out = { ...newRoofSection(0), ...s, id: s.id || nextId('rs') };
+      for (const k of SECTION_NUMS) {
+        const v = s[k];
+        out[k] = v === null || v === undefined || v === '' || Number.isNaN(+v) ? null : +v;
+      }
+      out.startFt = out.startFt ?? 0;
+      out.roofStyle = s.roofStyle || null;
+      out.label = s.label || '';
+      return out;
+    })
+    .sort((a, b) => a.startFt - b.startFt);
+}
+
 export function migrate(home) {
   const base = defaultHome();
+  const dims = { ...base.dimensions, ...(home.dimensions || {}) };
+  dims.roofSections = normalizeRoofSections(dims.roofSections);
   const out = {
     name: home.name || base.name,
-    dimensions: { ...base.dimensions, ...(home.dimensions || {}) },
+    dimensions: dims,
     colors: { ...base.colors, ...(home.colors || {}) },
     openings: (home.openings || []).map((o) => ({
       id: o.id || nextId('o'),

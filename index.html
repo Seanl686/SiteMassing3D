@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SiteMassing3D — double-wide massing &amp; elevation renderer</title>
 <!-- ?v= bust: plain static servers hand Chrome a cached stylesheet after edits -->
-<link rel="stylesheet" href="css/app.css?v=2">
+<link rel="stylesheet" href="css/app.css?v=3">
 <script type="importmap">
 {
   "imports": {
@@ -71,7 +71,12 @@
           <label><span>Eave overhang (ft)</span><input id="f_eaveOverhang" type="number" autocomplete="off" step="0.1" min="0"></label>
           <label><span>Rake overhang (ft)</span><input id="f_rakeOverhang" type="number" autocomplete="off" step="0.1" min="0"></label>
           <label><span>Roof style</span>
-            <select id="f_roofStyle"><option value="gable">Gable (ridge along length)</option><option value="flat">Flat / low slope</option></select>
+            <select id="f_roofStyle">
+              <option value="gable">Gable (ridge along length)</option>
+              <option value="shed">Shed — high at back</option>
+              <option value="shedFront">Shed — high at front</option>
+              <option value="flat">Flat / low slope</option>
+            </select>
           </label>
         </div>
 
@@ -83,6 +88,32 @@
           <label><span>Right wall (ft)</span><input id="f_rightWallHeight" type="number" autocomplete="off" step="0.1" placeholder="Auto"></label>
         </div>
         <p class="hint" id="ratioHint"></p>
+      </div>
+    </section>
+
+    <section class="panel collapsible" id="panel_roof">
+      <div class="panel-header">
+        <h2><span class="icon">🏔️</span> Asymmetric Roof &amp; Sections</h2>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="panel-body">
+        <label class="row check"><input id="f_asymRoof" type="checkbox" autocomplete="off"><span style="color:#6fb2ff;font-weight:600;">Independent front / back roof slopes</span></label>
+        <div class="grid2" id="asymFields">
+          <label><span>Front pitch (/12)</span><input id="f_frontPitch" type="number" autocomplete="off" step="0.5" min="0" max="24" placeholder="Auto"></label>
+          <label><span>Back pitch (/12)</span><input id="f_backPitch" type="number" autocomplete="off" step="0.5" min="0" max="24" placeholder="Auto"></label>
+          <label><span>Ridge offset (ft)</span><input id="f_ridgeOffset" type="number" autocomplete="off" step="0.25"></label>
+          <label><span>Ridge step / peak rise (ft)</span><input id="f_ridgeStep" type="number" autocomplete="off" step="0.25"></label>
+        </div>
+        <p class="hint">Ridge offset moves the peak off center (+ toward the rear wall). Ridge step lifts the rear plane's peak above the front's, opening a clerestory wall between them — negative drops it.</p>
+        <p class="hint" id="roofPeakHint"></p>
+
+        <h3 style="margin:12px 0 4px;font-size:10px;color:#6fb2ff;font-weight:600;text-transform:uppercase;">Roof Sections Along the Length</h3>
+        <div id="roofSectionList"></div>
+        <div class="btnrow">
+          <button id="btnAddRoofSection" type="button">+ Split section</button>
+          <button id="btnResetRoofSections" type="button">Reset to one roof</button>
+        </div>
+        <p class="hint">Split the home into sections measured from the <b>left end</b>. Each section can carry its own pitches, ridge offset, ridge step, eave heights and roof style, so one half of the house can sit at a different pitch and peak than the other. Where two sections disagree, the gap between their roofs is closed with a wall automatically.</p>
       </div>
     </section>
 

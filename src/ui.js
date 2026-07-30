@@ -1,5 +1,5 @@
 import { WALLS, WALL_LABEL, OPENING_PRESETS } from './defaults.js';
-import { fmtAllUnits } from './build.js';
+import { fmtAllUnits, fmtFt, ROOF_STYLES, ROOF_STYLE_LABEL } from './build.js';
 
 const TYPES = [['door', 'Door'], ['slider', 'Slider'], ['window', 'Window']];
 const NUMS = [
@@ -22,6 +22,193 @@ export function initAccordions() {
       }
     });
   });
+}
+
+// ---------------------------------------------------------------------------
+// Roof sections
+// ---------------------------------------------------------------------------
+
+const SECTION_NUMS = [
+  ['Start ft', 'startFt', '0.5'],
+  ['Front /12', 'frontPitch', '0.5'],
+  ['Back /12', 'backPitch', '0.5'],
+  ['Ridge off ft', 'ridgeOffsetFt', '0.25'],
+  ['Ridge step ft', 'ridgeStepFt', '0.25'],
+  ['Front eave ft', 'frontWallHeightFt', '0.25'],
+  ['Back eave ft', 'backWallHeightFt', '0.25'],
+];
+
+/** "front peak 13'-2" · rear peak 11'-4"" — the numbers this section resolves to. */
+function sectionReadout(sec) {
+  const el = document.createElement('div');
+  el.className = 'readout';
+  if (!sec) {
+    el.textContent = 'Too narrow to build — widen or remove this section.';
+    return el;
+  }
+  const step = sec.backPeakY - sec.frontPeakY;
+  const pitch = (s) => `${(s * 12).toFixed(1)}/12`;
+  const stepNote = Math.abs(step) > 0.02
+    ? ` · <b>${step > 0 ? 'rear' : 'front'} peak ${fmtFt(Math.abs(step))} higher</b>`
+    : ' · peaks level';
+  el.innerHTML =
+    `front peak <b>${fmtFt(sec.frontPeakY)}</b> at ${pitch(sec.frontSlope)} · ` +
+    `rear peak <b>${fmtFt(sec.backPeakY)}</b> at ${pitch(sec.backSlope)}${stepNote}<br>` +
+    `eaves ${fmtFt(sec.frontEaveY)} front / ${fmtFt(sec.backEaveY)} rear · ` +
+    `ridge ${sec.ridgeZ === 0 ? 'on center' : `${fmtFt(Math.abs(sec.ridgeZ))} ${sec.ridgeZ > 0 ? 'rear' : 'front'} of center`}`;
+  return el;
+}
+
+/**
+ * The roof-section editor. Rows map one-to-one onto `dim.roofSections`; when
+ * that list is empty the roof is a single implicit section and we show it as a
+ * read-only summary of the whole-home settings above.
+ */
+const sortedSpecs = (dim) => (Array.isArray(dim?.roofSections) ? dim.roofSections : [])
+  .slice()
+  .sort((a, b) => (a.startFt ?? 0) - (b.startFt ?? 0));
+
+export function renderRoofSectionList(container, dim, resolved, cb) {
+  container.textContent = '';
+  const specs = sortedSpecs(dim);
+  const byId = new Map(resolved.map((s) => [s.id, s]));
+
+  if (!specs.length) {
+    const card = document.createElement('div');
+    card.className = 'opening roof-section locked';
+    const head = document.createElement('header');
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.textContent = 'whole roof';
+    const name = document.createElement('span');
+    name.textContent = 'One roof over the full length';
+    name.style.cssText = 'flex:1;font-size:12px;';
+    const span = document.createElement('span');
+    span.className = 'span';
+    span.textContent = `0 – ${fmtFt(dim.lengthFt)}`;
+    head.append(tag, name, span);
+    card.appendChild(head);
+    card.appendChild(sectionReadout(resolved[0]));
+    container.appendChild(card);
+    return;
+  }
+
+  for (let i = 0; i < specs.length; i++) {
+    const spec = specs[i];
+    const sec = byId.get(spec.id);
+    const card = document.createElement('div');
+    card.className = 'opening roof-section';
+    card.dataset.id = spec.id;
+
+    const head = document.createElement('header');
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.textContent = `S${i + 1}`;
+    head.appendChild(tag);
+
+    const lbl = document.createElement('input');
+    lbl.className = 'lbl';
+    lbl.type = 'text';
+    lbl.autocomplete = 'off';
+    lbl.placeholder = 'section label';
+    lbl.value = spec.label || '';
+    lbl.addEventListener('input', () => { spec.label = lbl.value; cb.onEdit(false); });
+    head.appendChild(lbl);
+
+    const span = document.createElement('span');
+    span.className = 'span';
+    span.textContent = sec ? `${fmtFt(sec.startFt)} – ${fmtFt(sec.endFt)}` : '—';
+    head.appendChild(span);
+    card.appendChild(head);
+
+    const grid = document.createElement('div');
+    grid.className = 'grid4 sec-grid';
+    for (const [name, key, step] of SECTION_NUMS) {
+      const l = document.createElement('label');
+      const s = document.createElement('span');
+      s.textContent = name;
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.step = step;
+      input.autocomplete = 'off';
+      input.dataset.key = key;
+      // Blank means "inherit from the whole-home settings", which is not the
+      // same as zero — so the field has to be able to hold nothing at all.
+      input.placeholder = key === 'startFt' ? '0' : 'Auto';
+      input.value = spec[key] ?? '';
+      if (key === 'startFt' && i === 0) {
+        input.value = 0;
+        input.disabled = true;
+        input.title = 'The first section always starts at the left end';
+      }
+      input.addEventListener('input', () => {
+        const raw = input.value.trim();
+        if (raw === '') {
+          spec[key] = key === 'startFt' ? 0 : null;
+        } else {
+          const v = parseFloat(raw);
+          if (Number.isNaN(v)) return; // mid-typing
+          spec[key] = v;
+        }
+        cb.onEdit(key === 'startFt');
+      });
+      l.append(s, input);
+      grid.appendChild(l);
+    }
+    card.appendChild(grid);
+
+    const foot = document.createElement('div');
+    foot.className = 'foot';
+    const styleSel = document.createElement('select');
+    const inheritOpt = document.createElement('option');
+    inheritOpt.value = '';
+    inheritOpt.textContent = 'Roof style: inherit';
+    styleSel.appendChild(inheritOpt);
+    for (const v of ROOF_STYLES) {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = ROOF_STYLE_LABEL[v];
+      styleSel.appendChild(opt);
+    }
+    styleSel.value = ROOF_STYLES.includes(spec.roofStyle) ? spec.roofStyle : '';
+    styleSel.addEventListener('change', () => {
+      spec.roofStyle = styleSel.value || null;
+      cb.onEdit(true);
+    });
+    foot.appendChild(styleSel);
+
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'danger';
+    del.textContent = '✕';
+    del.title = 'Remove this section';
+    del.addEventListener('click', () => cb.onDelete(spec.id));
+    foot.appendChild(del);
+    card.appendChild(foot);
+
+    card.appendChild(sectionReadout(sec));
+    container.appendChild(card);
+  }
+}
+
+/** Refresh each card's resolved numbers in place, leaving the inputs alone. */
+export function syncRoofSectionReadouts(container, resolved, dim) {
+  if (!container) return;
+  const byId = new Map(resolved.map((s) => [s.id, s]));
+  const cards = container.querySelectorAll('.roof-section');
+  const specs = sortedSpecs(dim);
+  for (const card of cards) {
+    const sec = card.dataset.id ? byId.get(card.dataset.id) : resolved[0];
+    const old = card.querySelector('.readout');
+    if (old) card.replaceChild(sectionReadout(sec), old);
+    const span = card.querySelector('.span');
+    if (span) span.textContent = sec ? `${fmtFt(sec.startFt)} – ${fmtFt(sec.endFt)}` : '—';
+  }
+  // A start offset can reorder the sections; when it does, the rows have to be
+  // rebuilt rather than patched.
+  const order = specs.map((s) => s.id).join(',');
+  const shown = [...cards].map((c) => c.dataset.id).filter(Boolean).join(',');
+  return order !== shown;
 }
 
 export function renderOpeningList(container, home, cb) {

@@ -58,6 +58,26 @@ presets stop re-fitting your framing on export.
 Every value is also typeable in the sidebar row. `Offset` is measured left→right
 as you face that wall from outside.
 
+**Asymmetric roof & sections** — the roof does not have to be one symmetric
+gable. Two independent controls stack:
+
+*Across the ridge.* Tick **Independent front / back roof slopes** and each plane
+gets its own pitch. Because the two planes then climb different amounts over the
+same run, one peaks higher than the other and the gap between them is closed with
+a clerestory wall. **Ridge offset** slides the ridge off center (+ toward the rear
+wall), which changes how far each plane runs before it gets there. **Ridge step**
+lifts the rear plane's peak by a fixed amount on top of all that — negative drops
+it. The panel prints the resolved peak heights and effective pitches as you type.
+
+*Along the length.* **+ Split section** cuts the home into roof sections measured
+from the left end. Each section carries its own pitches, ridge offset, ridge step,
+front and rear eave heights, and roof style (gable, shed either way, or flat) — or
+inherits any of them by leaving the field blank. So one half of the house can run
+a 3/12 shed over 11′ walls while the other runs a 10/12 gable over 8′ walls. Where
+two neighbouring sections disagree, the wall closing the gap between their roofs
+is built for you, the long walls step at the boundary, and each gable end traces
+whatever cross-section its end section resolves to.
+
 **Floor plan plate** — load the spec-sheet PNG, set *Plate width (ft)* so the
 printed footprint matches the blue outline (turn on *Dimension outline on ground*
 to see it), then nudge Offset X/Z and Rotation until it lines up. With *Plan-pick
@@ -95,6 +115,33 @@ Drop it in `homes/`, add a line to `homes/index.json`, and it shows up in the
 }
 ```
 
+An asymmetric or sectioned roof adds a few more `dimensions` keys. All of them are
+optional; a file without them is a plain symmetric gable.
+
+```json
+"dimensions": {
+  "asymmetricRoof": true,
+  "frontPitch": 9, "backPitch": 3,
+  "ridgeOffsetFt": 2.5, "ridgeStepFt": 0,
+  "roofSections": [
+    { "startFt": 0,  "label": "Main", "pitch": null },
+    { "startFt": 28, "label": "Wing", "pitch": 3,
+      "frontWallHeightFt": 11, "roofStyle": "shed" }
+  ]
+}
+```
+
+- `asymmetricRoof` — until this is `true`, `frontPitch`, `backPitch`,
+  `ridgeOffsetFt` and `ridgeStepFt` are ignored and the roof stays symmetric.
+- `roofSections` — ordered by `startFt`, measured in feet from the **left end**.
+  The first section always starts at 0 and the last runs to the far end; anything
+  narrower than a foot is dropped. `null` (or a missing key) on any field but
+  `startFt` means "inherit from the whole-home settings above".
+- `pitch` sets both slopes of a section at once; `frontPitch` / `backPitch`
+  override it per plane.
+- `roofStyle` — `gable`, `shed` (high edge at the rear wall), `shedFront` (high
+  edge at the front wall), or `flat`. A shed grows the wall on its high side to
+  meet the plane, and a flat deck levels both walls onto one height.
 - `wall` — `front` and `back` are the long walls, `left` and `right` the gable ends.
 - `type` — `door`, `slider`, or `window`.
 - `offsetFt` — from the wall's left corner, viewed from outside.
@@ -116,8 +163,13 @@ result against the sheet before you trust a render made from it.
 
 ## Known limits
 
-- Single rectangular footprint. No L-shapes, dormers, porch roofs, or bay windows.
-- One roof pitch, ridge always along the length.
+- Single rectangular footprint. No L-shapes, porch roofs, or bay windows.
+- The ridge always runs along the length. It can sit off center, step vertically,
+  and change pitch or height from one section to the next, but it never turns a
+  corner — a cross-gable would need a second ridge axis.
+- Roof sections split along the length only. There is no way to give the front
+  half of the *width* a different treatment from the rear half beyond the two
+  slopes either side of the ridge.
 - Massing-level materials: flat colors, no siding or shingle texture. That is
   deliberate — a textured render fights the lot photo's lighting, while a clean
   massing plate reads as a geometry reference.
