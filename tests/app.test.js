@@ -545,3 +545,62 @@ test('24. Asymmetric Roof Assembles With Dormers and Steps', () => {
   });
   assert.ok(meshes > 20, 'A full home worth of geometry');
 });
+
+test('25. Raised Roof Sections Carry an Overhang Past the Step', () => {
+  const home = defaultHome(); // 56 ft long, 0.75 ft rake overhang
+  home.dimensions.roofSections = [
+    newRoofSection(0),
+    { ...newRoofSection(28), frontWallHeightFt: 14, backWallHeightFt: 14 },
+  ];
+
+  const planes = (h) => {
+    const roof = buildHome(h, defaultScene()).children.find((c) => c.name === 'roof');
+    const out = {};
+    for (const s of roof.children.filter((c) => c.name?.startsWith('roofSection:'))) {
+      const p = s.children.find((c) => c.name === 'roofPlane:front');
+      out[s.name] = { len: p.geometry.parameters.width, cx: p.position.x,
+        rakes: s.children.filter((c) => c.name === 'rakeBoard').length };
+    }
+    return out;
+  };
+
+  // Default 'raised': the tall section reaches 0.75 ft past the boundary and
+  // out over the gable end; the low one still butts.
+  const raised = planes(home);
+  assert.ok(near(raised['roofSection:1'].len, 28 + 0.75 * 2), 'Raised section overhangs both of its ends');
+  assert.ok(near(raised['roofSection:1'].cx, 14), 'Reaching equally at both ends leaves it centred');
+  assert.ok(near(raised['roofSection:0'].len, 28 + 0.75), 'Low section keeps only its gable-end rake');
+  assert.ok(near(raised['roofSection:0'].cx, -14 - 0.375), 'Reaching at one end only shifts its centre');
+  assert.equal(raised['roofSection:1'].rakes, 2, 'Both raked edges of the raised roof get a board');
+  assert.equal(raised['roofSection:0'].rakes, 0, 'A butted joint has no exposed edge to trim');
+
+  // 'both' hangs the low roof out under the step as well.
+  home.dimensions.stepOverhang = 'both';
+  assert.ok(near(planes(home)['roofSection:0'].len, 28 + 0.75 * 2), 'Both sides of the step overhang');
+
+  // 'none' restores the flush butt joint.
+  home.dimensions.stepOverhang = 'none';
+  const butted = planes(home);
+  assert.ok(near(butted['roofSection:0'].len, 28 + 0.75), 'Low section butts');
+  assert.ok(near(butted['roofSection:1'].len, 28 + 0.75), 'Raised section butts too');
+  assert.equal(butted['roofSection:1'].rakes, 0, 'No overhang, no rake board');
+
+  // The step overhang has its own distance, and the boards can be switched off.
+  home.dimensions.stepOverhang = 'raised';
+  home.dimensions.stepOverhangFt = 2;
+  assert.ok(near(planes(home)['roofSection:1'].len, 28 + 0.75 + 2), 'Custom step overhang honoured');
+  home.dimensions.stepRakeFascia = false;
+  assert.equal(planes(home)['roofSection:1'].rakes, 0, 'Rake boards switched off');
+
+  // Gable-end rake boards are opt-in and leave existing plates alone by default.
+  const plain = defaultHome();
+  const plainRoof = buildHome(plain, defaultScene()).children.find((c) => c.name === 'roof');
+  const plainSection = plainRoof.children.find((c) => c.name === 'roofSection:0');
+  assert.equal(plainSection.children.filter((c) => c.name === 'rakeBoard').length, 0,
+    'A single-section home is unchanged by default');
+  plain.dimensions.endRakeFascia = true;
+  const trimmed = buildHome(plain, defaultScene()).children.find((c) => c.name === 'roof')
+    .children.find((c) => c.name === 'roofSection:0');
+  assert.equal(trimmed.children.filter((c) => c.name === 'rakeBoard').length, 4,
+    'Opting in trims all four raked edges — both planes at both ends');
+});

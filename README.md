@@ -78,6 +78,15 @@ two neighbouring sections disagree, the wall closing the gap between their roofs
 is built for you, the long walls step at the boundary, and each gable end traces
 whatever cross-section its end section resolves to.
 
+*Overhangs at the step.* A section whose roof stands above its neighbour has
+nothing to butt against, so by default it carries the overhang past the step on
+every side that hangs free — the same eave it gets at a gable end — with a rake
+board along the exposed sloping edge. **Step overhang** switches that between
+*Raised roof only*, *Both sides of the step* (the lower roof gets one too) and
+*None*, and the distance defaults to the rake overhang unless you type your own.
+*Rake board on the gable ends too* extends the same trim to the outer ends; it is
+off by default so existing plates render exactly as they did.
+
 **Floor plan plate** — load the spec-sheet PNG, set *Plate width (ft)* so the
 printed footprint matches the blue outline (turn on *Dimension outline on ground*
 to see it), then nudge Offset X/Z and Rotation until it lines up. With *Plan-pick
@@ -123,6 +132,8 @@ optional; a file without them is a plain symmetric gable.
   "asymmetricRoof": true,
   "frontPitch": 9, "backPitch": 3,
   "ridgeOffsetFt": 2.5, "ridgeStepFt": 0,
+  "stepOverhang": "raised", "stepOverhangFt": null,
+  "stepRakeFascia": true, "endRakeFascia": false,
   "roofSections": [
     { "startFt": 0,  "label": "Main", "pitch": null },
     { "startFt": 28, "label": "Wing", "pitch": 3,
@@ -139,6 +150,10 @@ optional; a file without them is a plain symmetric gable.
   `startFt` means "inherit from the whole-home settings above".
 - `pitch` sets both slopes of a section at once; `frontPitch` / `backPitch`
   override it per plane.
+- `stepOverhang` — `raised` (default), `both` or `none`. How far a roof reaches
+  past a section boundary; `stepOverhangFt` sets the distance, `null` inherits
+  `rakeOverhangFt`. `stepRakeFascia` / `endRakeFascia` put a barge board along the
+  raked edges of those overhangs and of the gable ends.
 - `roofStyle` — `gable`, `shed` (high edge at the rear wall), `shedFront` (high
   edge at the front wall), or `flat`. A shed grows the wall on its high side to
   meet the plane, and a flat deck levels both walls onto one height.

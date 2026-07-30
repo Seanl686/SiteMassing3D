@@ -12,6 +12,7 @@ const TRIM_PROUD = 0.06;  // ft, how far casing stands off the siding
 const GLASS_INSET = 0.16; // ft, how far glass/door slab sits back from the face
 const ROOF_THICK = 0.45;  // ft
 const FASCIA_H = 0.55;    // ft
+const RAKE_W = 0.18;      // ft, thickness of a raked (sloping) barge board
 
 /**
  * Wall frames, each expressed as an origin at the wall's bottom-left corner as
@@ -521,44 +522,110 @@ function fasciaBoard(cx, len, z, dripY, material) {
   const fascia = new THREE.Mesh(new THREE.BoxGeometry(len, FASCIA_H, 0.16), material);
   fascia.position.set(cx, dripY - FASCIA_H / 2 + 0.05, z);
   fascia.castShadow = true;
+  fascia.name = 'eaveFascia';
   return fascia;
 }
 
+/**
+ * The raked (sloping) board closing the open end of a roof plane, hung just
+ * under the deck so it reads as a finished edge rather than a cut slab.
+ */
+function rakeBoard(xEdge, z0, y0, z1, y1, material) {
+  const angle = Math.atan2(y1 - y0, z1 - z0);
+  const runLen = Math.hypot(z1 - z0, y1 - y0);
+  const board = new THREE.Mesh(new THREE.BoxGeometry(RAKE_W, FASCIA_H, runLen), material);
+  const n = new THREE.Vector3(0, Math.cos(angle), -Math.sin(angle));
+  board.rotation.x = -angle;
+  board.position.set(
+    xEdge,
+    (y0 + y1) / 2 - n.y * (FASCIA_H / 2 - 0.05),
+    (z0 + z1) / 2 - n.z * (FASCIA_H / 2 - 0.05),
+  );
+  board.castShadow = true;
+  board.name = 'rakeBoard';
+  return board;
+}
+
+/**
+ * How far a section's roof plane reaches past a boundary with its neighbour.
+ *
+ * A section that stands above the next one has nothing to butt against, so its
+ * roof wants an overhang there just as it does at a gable end — otherwise the
+ * raised roof reads as a slab sheared off flush with the wall below it.
+ */
+function stepOverhang(sec, neighbour, which, dim) {
+  const mode = dim.stepOverhang || 'raised';
+  if (!neighbour || mode === 'none') return 0;
+  const amt = Math.max(0, num(dim.stepOverhangFt, num(dim.rakeOverhangFt, 0.75)));
+  if (amt <= 0) return 0;
+  if (mode === 'both') return amt;
+  // Sample the plane halfway along its own run and overhang only when this
+  // section clears the neighbour's roof by more than the deck is thick —
+  // anything tighter would bury the overhang inside the roof it hangs over.
+  const z = which === 'front'
+    ? (sec.frontEdgeZ + sec.ridgeZ) / 2
+    : (sec.ridgeZ + sec.backEdgeZ) / 2;
+  return roofTopAt(sec, z) - roofTopAt(neighbour, z) > ROOF_THICK + 0.05 ? amt : 0;
+}
+
 /** One roof section: its planes, its fascia, and the clerestory at its ridge. */
-function buildRoofSection(sec, xa, xb, dim, materials) {
+function buildRoofSection(sec, span, dim, materials) {
   const ov = num(dim.eaveOverhangFt, 1);
   const W = num(dim.widthFt, 27);
   const g = new THREE.Group();
   g.name = `roofSection:${sec.index}`;
   g.userData.roofSection = sec.index;
 
-  const len = Math.max(0.05, xb - xa);
-  const cx = (xa + xb) / 2;
+  // The body (flat deck, clerestory wall) stops at the section boundary; only
+  // the roof planes reach past it, and each plane reaches its own distance.
+  const bodyLen = Math.max(0.05, span.body[1] - span.body[0]);
+  const bodyCx = (span.body[0] + span.body[1]) / 2;
 
   if (sec.roofStyle === 'flat') {
+    const len = Math.max(0.05, span.front[1] - span.front[0]);
     const slab = new THREE.Mesh(
       new THREE.BoxGeometry(len, ROOF_THICK, W + 2 * ov),
       materials.roof,
     );
-    slab.position.set(cx, sec.peakY + ROOF_THICK / 2, 0);
+    slab.position.set((span.front[0] + span.front[1]) / 2, sec.peakY + ROOF_THICK / 2, 0);
     slab.castShadow = true;
     slab.receiveShadow = true;
+    slab.name = 'roofPlane:flat';
     g.add(slab);
+    for (const [i, x] of [[0, span.front[0] + RAKE_W / 2], [1, span.front[1] - RAKE_W / 2]]) {
+      if (!span.rake.front[i]) continue;
+      const board = new THREE.Mesh(new THREE.BoxGeometry(RAKE_W, FASCIA_H, W + 2 * ov), materials.trim);
+      board.position.set(x, sec.peakY - FASCIA_H / 2 + 0.05, 0);
+      board.castShadow = true;
+      board.name = 'rakeBoard';
+      g.add(board);
+    }
     return g;
   }
 
   const frontDripZ = sec.frontEdgeZ - ov;
   const backDripZ = sec.backEdgeZ + ov;
 
+  /** Build one plane over its own X extent, with its eave fascia and rake boards. */
+  const plane = (which, z0, y0, z1, y1) => {
+    const [xa, xb] = span[which];
+    const len = Math.max(0.05, xb - xa);
+    const cx = (xa + xb) / 2;
+    const dripEnd = which === 'front' ? [z0, y0] : [z1, y1];
+    const mesh = slopePlane(cx, len, z0, y0, z1, y1, materials.roof);
+    mesh.name = `roofPlane:${which}`;
+    g.add(mesh);
+    g.add(fasciaBoard(cx, len, dripEnd[0], dripEnd[1], materials.trim));
+    for (const [i, x] of [[0, xa + RAKE_W / 2], [1, xb - RAKE_W / 2]]) {
+      if (span.rake[which][i]) g.add(rakeBoard(x, z0, y0, z1, y1, materials.trim));
+    }
+  };
+
   if (sec.ridgeZ - frontDripZ > 0.02) {
-    const dripY = sec.frontEaveY - ov * sec.frontSlope;
-    g.add(slopePlane(cx, len, frontDripZ, dripY, sec.ridgeZ, sec.frontPeakY, materials.roof));
-    g.add(fasciaBoard(cx, len, frontDripZ, dripY, materials.trim));
+    plane('front', frontDripZ, sec.frontEaveY - ov * sec.frontSlope, sec.ridgeZ, sec.frontPeakY);
   }
   if (backDripZ - sec.ridgeZ > 0.02) {
-    const dripY = sec.backEaveY - ov * sec.backSlope;
-    g.add(slopePlane(cx, len, sec.ridgeZ, sec.backPeakY, backDripZ, dripY, materials.roof));
-    g.add(fasciaBoard(cx, len, backDripZ, dripY, materials.trim));
+    plane('back', sec.ridgeZ, sec.backPeakY, backDripZ, sec.backEaveY - ov * sec.backSlope);
   }
 
   // When the two planes peak at different heights they cannot meet: the gap
@@ -568,17 +635,17 @@ function buildRoofSection(sec, xa, xb, dim, materials) {
   if (highY - lowY > 0.02) {
     const bottom = lowY - ROOF_THICK - 0.1;
     const wall = new THREE.Mesh(
-      new THREE.BoxGeometry(len, highY - bottom, 0.36),
+      new THREE.BoxGeometry(bodyLen, highY - bottom, 0.36),
       materials.siding,
     );
-    wall.position.set(cx, (highY + bottom) / 2, sec.ridgeZ);
+    wall.position.set(bodyCx, (highY + bottom) / 2, sec.ridgeZ);
     wall.castShadow = true;
     wall.receiveShadow = true;
     wall.name = 'ridgeStep';
     g.add(wall);
 
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(len, 0.42, 0.6), materials.trim);
-    cap.position.set(cx, highY - 0.16, sec.ridgeZ);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(bodyLen, 0.42, 0.6), materials.trim);
+    cap.position.set(bodyCx, highY - 0.16, sec.ridgeZ);
     cap.castShadow = true;
     g.add(cap);
   }
@@ -655,12 +722,39 @@ function buildRoof(dim, materials) {
   g.name = 'roof';
 
   const sections = resolveRoofSections(dim);
+  const endRake = dim.endRakeFascia !== false && rake > 0;
+  const stepRake = dim.stepRakeFascia !== false;
+
   for (let i = 0; i < sections.length; i++) {
     const s = sections[i];
-    // Only the outer ends carry a rake overhang; interior sections butt.
-    const xa = s.x0 - (i === 0 ? rake : 0);
-    const xb = s.x1 + (i === sections.length - 1 ? rake : 0);
-    g.add(buildRoofSection(s, xa, xb, dim, materials));
+    const prev = sections[i - 1];
+    const next = sections[i + 1];
+    const first = i === 0;
+    const last = i === sections.length - 1;
+
+    // Each end of each plane reaches out on its own: the gable ends by the rake
+    // overhang, an interior boundary by the step overhang when this section's
+    // roof stands above its neighbour's.
+    const reach = (which) => [
+      first ? rake : stepOverhang(s, prev, which, dim),
+      last ? rake : stepOverhang(s, next, which, dim),
+    ];
+    const extent = (out) => [s.x0 - out[0], s.x1 + out[1]];
+    // A board goes on an end only where the roof actually hangs past something —
+    // a butted interior joint has no exposed edge to trim.
+    const trim = (out) => [
+      (first ? endRake : stepRake) && out[0] > 0.01,
+      (last ? endRake : stepRake) && out[1] > 0.01,
+    ];
+    const frontOut = reach('front');
+    const backOut = reach('back');
+
+    g.add(buildRoofSection(s, {
+      body: [s.x0 - (first ? rake : 0), s.x1 + (last ? rake : 0)],
+      front: extent(frontOut),
+      back: extent(backOut),
+      rake: { front: trim(frontOut), back: trim(backOut) },
+    }, dim, materials));
   }
   for (let i = 0; i + 1 < sections.length; i++) {
     const wall = buildSectionTransition(sections[i], sections[i + 1], dim, materials);

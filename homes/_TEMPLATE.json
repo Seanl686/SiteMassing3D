@@ -15,6 +15,10 @@
     "backPitch": null,
     "ridgeOffsetFt": 0,
     "ridgeStepFt": 0,
+    "stepOverhang": "raised",
+    "stepOverhangFt": null,
+    "stepRakeFascia": true,
+    "endRakeFascia": false,
     "roofSections": []
   },
   "colors": {

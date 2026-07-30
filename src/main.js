@@ -244,6 +244,10 @@ function syncForm() {
   for (const [id, key] of asymFields) {
     if ($(id)) $(id).value = state.home.dimensions[key] ?? '';
   }
+  if ($('f_stepOverhang')) $('f_stepOverhang').value = state.home.dimensions.stepOverhang || 'raised';
+  if ($('f_stepOverhangFt')) $('f_stepOverhangFt').value = state.home.dimensions.stepOverhangFt ?? '';
+  if ($('f_stepRakeFascia')) $('f_stepRakeFascia').checked = state.home.dimensions.stepRakeFascia !== false;
+  if ($('f_endRakeFascia')) $('f_endRakeFascia').checked = !!state.home.dimensions.endRakeFascia;
   syncAsymFields();
   if ($('f_dormerCount')) $('f_dormerCount').value = state.home.dimensions.dormerCount ?? 0;
   if ($('f_dormerStyle')) $('f_dormerStyle').value = state.home.dimensions.dormerStyle || 'gable';
@@ -357,6 +361,32 @@ function bind() {
       rebuild(); save();
       syncRoofSectionReadouts($('roofSectionList'), resolveRoofSections(state.home.dimensions), state.home.dimensions);
       syncList();
+    });
+  }
+  if ($('f_stepOverhang')) {
+    $('f_stepOverhang').addEventListener('change', (e) => {
+      state.home.dimensions.stepOverhang = e.target.value;
+      rebuild(); save();
+    });
+  }
+  if ($('f_stepOverhangFt')) {
+    $('f_stepOverhangFt').addEventListener('input', (e) => {
+      const raw = e.target.value.trim();
+      if (raw === '') {
+        state.home.dimensions.stepOverhangFt = null; // fall back to the rake overhang
+      } else {
+        const v = parseFloat(raw);
+        if (Number.isNaN(v)) return;
+        state.home.dimensions.stepOverhangFt = v;
+      }
+      rebuild(); save();
+    });
+  }
+  for (const [id, key] of [['f_stepRakeFascia', 'stepRakeFascia'], ['f_endRakeFascia', 'endRakeFascia']]) {
+    if (!$(id)) continue;
+    $(id).addEventListener('change', (e) => {
+      state.home.dimensions[key] = e.target.checked;
+      rebuild(); save();
     });
   }
   if ($('btnAddRoofSection')) {

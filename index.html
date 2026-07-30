@@ -107,6 +107,21 @@
         <p class="hint">Ridge offset moves the peak off center (+ toward the rear wall). Ridge step lifts the rear plane's peak above the front's, opening a clerestory wall between them — negative drops it.</p>
         <p class="hint" id="roofPeakHint"></p>
 
+        <h3 style="margin:12px 0 4px;font-size:10px;color:#6fb2ff;font-weight:600;text-transform:uppercase;">Overhangs Where Roofs Step</h3>
+        <div class="grid2">
+          <label><span>Step overhang</span>
+            <select id="f_stepOverhang">
+              <option value="raised">Raised roof only</option>
+              <option value="both">Both sides of the step</option>
+              <option value="none">None (butt joint)</option>
+            </select>
+          </label>
+          <label><span>Overhang (ft)</span><input id="f_stepOverhangFt" type="number" autocomplete="off" step="0.25" min="0" placeholder="Auto (rake)"></label>
+        </div>
+        <label class="row check"><input id="f_stepRakeFascia" type="checkbox" autocomplete="off"><span>Rake board on step overhangs</span></label>
+        <label class="row check"><input id="f_endRakeFascia" type="checkbox" autocomplete="off"><span>Rake board on the gable ends too</span></label>
+        <p class="hint">A section whose roof stands above its neighbour has nothing to butt against, so it carries an eave past the step the same way it does at a gable end — on every side that hangs free. <i>Both sides</i> gives the lower roof one too.</p>
+
         <h3 style="margin:12px 0 4px;font-size:10px;color:#6fb2ff;font-weight:600;text-transform:uppercase;">Roof Sections Along the Length</h3>
         <div id="roofSectionList"></div>
         <div class="btnrow">

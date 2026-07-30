@@ -40,6 +40,13 @@ export function defaultHome() {
       backPitch: null,       // rise per 12 on the back (+Z) plane; null = roofPitch
       ridgeOffsetFt: 0,      // + moves the ridge toward the back wall
       ridgeStepFt: 0,        // + lifts the back plane's peak above the front's
+      // Where one section's roof stands above the next, it has nothing to butt
+      // against — these say how far it reaches past the boundary and whether the
+      // exposed raked edge gets a barge board.
+      stepOverhang: 'raised',   // 'none' (butt), 'raised' (tall side), 'both'
+      stepOverhangFt: null,     // ft past the boundary; null = rakeOverhangFt
+      stepRakeFascia: true,     // board along a step overhang's raked edge
+      endRakeFascia: false,     // the same board on the outer gable-end rakes
       // Roof sections along the length. Empty = one roof over the whole home.
       // Each entry: { id, label, startFt, pitch, frontPitch, backPitch,
       //   ridgeOffsetFt, ridgeStepFt, frontWallHeightFt, backWallHeightFt,
