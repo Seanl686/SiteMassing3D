@@ -3,6 +3,7 @@
 
 import { readSiteViews, sortSiteViews } from './siteviews.js';
 import { readHomePhotos } from './homephotos.js';
+import { readBumps } from './bumps.js';
 
 export const WALLS = ['front', 'back', 'left', 'right'];
 
@@ -31,7 +32,12 @@ export function defaultHome() {
       lengthFt: 56,
       wallHeightFt: 8,
       floorHeightFt: 2.5,
-      roofPitch: 4,          // rise per 12 of run
+      roofPitch: 4,          // rise per 12 of run — the FRONT slope
+      // Split-pitch roofs ("4/12 Split Pitch" on a Redman sheet) run a
+      // different pitch on the rear slope, which pushes the ridge off the
+      // centreline and makes one side of the peak higher and shorter than the
+      // other. null = both slopes match and the ridge sits over the middle.
+      roofPitchBack: null,
       eaveOverhangFt: 1.0,   // horizontal overhang past the long walls
       rakeOverhangFt: 0.75,  // horizontal overhang past the gable ends
       roofStyle: 'gable',
@@ -79,6 +85,9 @@ export function defaultHome() {
       { id: nextId('w'), type: 'window', wall: 'left',  offsetFt: 9,  widthFt: 4, heightFt: 3.5, sillFt: 3.5, label: 'Primary bedroom' },
       { id: nextId('w'), type: 'window', wall: 'right', offsetFt: 9,  widthFt: 3, heightFt: 3.5, sillFt: 3.5, label: 'Bedroom 3' },
     ],
+    // Departures from the plain rectangle: 16" box-outs, recessed corners, and
+    // the covered porch the spec sheet draws inside the footprint. See bumps.js.
+    bumps: [],
     plan: { src: null, widthFt: 56, offsetX: 0, offsetZ: 0, rotation: 0, opacity: 0.65, show: true },
     sitePhoto: { src: null, show: true, fitMode: 'camera', opacity: 0.85, scale: 1.0, panX: 0, panY: 0, rotation: 0, baselineY: 0, camDist: 60, posX: 0, posZ: 0, rotY: 0 },
     // The site plan / spec sheet that ships with the render package. `src` is
@@ -133,6 +142,7 @@ export function defaultScene() {
     eye: 5.5,         // eye height in ft for the "Eye level" preset
     bg: '#20242a',
     grid: true,
+    groundExtentFt: 150,  // ground plane / grid radius; keeps the lot from reading as infinite
     shadow: true,
     steps: true,
     stepLanding: true,
@@ -176,6 +186,10 @@ export function migrate(home) {
   const base = defaultHome();
   const dimensions = { ...base.dimensions, ...(home.dimensions || {}) };
   dimensions.dormerSizes = normalizeDormerSizes(dimensions.dormerSizes);
+  // A blank, zero or junk rear pitch means "mirror the front", not "flat".
+  dimensions.roofPitchBack = Number.isFinite(+dimensions.roofPitchBack) && +dimensions.roofPitchBack > 0
+    ? +dimensions.roofPitchBack
+    : null;
   dimensions.dormerPositions = Array.isArray(dimensions.dormerPositions)
     ? dimensions.dormerPositions.map((v) => +v).filter((v) => Number.isFinite(v))
     : [];
@@ -212,6 +226,7 @@ export function migrate(home) {
       railMat: o.railMat,
       balusterStyle: o.balusterStyle,
     })),
+    bumps: readBumps(home.bumps),
     plan: { ...base.plan, ...(home.plan || {}) },
     sitePhoto,
     sitePlan: { ...base.sitePlan, ...(home.sitePlan || {}) },

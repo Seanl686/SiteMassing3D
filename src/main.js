@@ -11,6 +11,9 @@ import {
   supportsOutputFolder, chooseOutputFolder, clearOutputFolder, outputFolderName,
 } from './outdir.js';
 import { defaultHome, defaultScene, defaultExport, nextId, OPENING_PRESETS, migrate } from './defaults.js';
+import {
+  defaultBump, clampBump, BUMP_ROOFS, BUMP_ROOF_LABEL, BUMP_KIND_LABEL, isRecess,
+} from './bumps.js';
 import { History, describeChange } from './history.js';
 import { buildProject, readProject } from './project.js';
 import { exportRenderPackage, buildRenderPackage } from './package.js';
@@ -20,6 +23,7 @@ import { loadSitePlan, isPdf } from './siteplan.js';
 import { HOME_PHOTO_SLOTS, homeSlotByKey } from './homephotos.js';
 import {
   collectAssets, assetInventory, finishSampleAssets, planPlateLinked, missingHomePhotoNames,
+  removeAsset,
 } from './assets.js';
 import { openColorPicker } from './colorpick.js';
 import {
@@ -84,6 +88,10 @@ function downscaleImage(file, maxDim, quality) {
 
 function rebuild() {
   for (const o of state.home.openings) clampOpening(o, state.home.dimensions);
+  if (!Array.isArray(state.home.bumps)) state.home.bumps = [];
+  for (const b of state.home.bumps) clampBump(b, state.home.dimensions);
+  // What projects past the rectangle has to be in the frame the presets fit.
+  stage.bumps = state.home.bumps;
 
   while (stage.homeGroup.children.length) {
     const c = stage.homeGroup.children.pop();
@@ -393,6 +401,13 @@ function updateCounts() {
   const doors = state.home.openings.filter((o) => o.type !== 'window').length;
   const wins = state.home.openings.length - doors;
   $('openCount').textContent = `${doors} door${doors === 1 ? '' : 's'} / ${wins} window${wins === 1 ? '' : 's'}`;
+  if ($('bumpCount')) {
+    const bumps = state.home.bumps || [];
+    const porches = bumps.filter((b) => b.kind === 'porch').length;
+    $('bumpCount').textContent = bumps.length
+      ? `${porches ? `${porches} porch${porches === 1 ? '' : 'es'}` : ''}${porches && bumps.length - porches ? ' / ' : ''}${bumps.length - porches ? `${bumps.length - porches} bump${bumps.length - porches === 1 ? '' : 's'}` : ''}`
+      : '';
+  }
 }
 
 function updateHud() {
@@ -405,6 +420,11 @@ function updateHud() {
     `eave ${fmtFt(dv.eaveY)}   ridge ${fmtFt(dv.ridgeY)}   pitch ${d.roofPitch}/12   floor ${fmtFt(d.floorHeightFt)}`;
   $('ratioHint').textContent =
     `Front wall must read ${ratio}× as long as the gable end is wide. Roof ridge ${fmtFt(dv.ridgeY)} above grade.`;
+  if ($('ridgeHint')) {
+    $('ridgeHint').textContent = dv.split
+      ? `Split pitch: ridge sits ${fmtFt(Math.abs(dv.ridgeZ))} ${dv.ridgeZ > 0 ? 'behind' : 'in front of'} the centreline, peak ${fmtFt(dv.ridgeY)} above grade.`
+      : '';
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -713,14 +733,11 @@ function renderHomePhotoList() {
     load.addEventListener('click', () => pickHomePhoto(slot.key));
     actions.appendChild(load);
     if (filled) {
-      const clear = document.createElement('button');
-      clear.textContent = 'Clear';
-      clear.addEventListener('click', () => {
-        delete state.home.homePhotos[slot.key];
-        renderHomePhotoList();
-        assetsChanged();
-        save();
-      });
+      // Routed through the shared deleter so it confirms and cleans up the same
+      // way removing it from the asset rail does.
+      const clear = makeButton('Delete', `Delete the ${slot.name} photo`, () => {
+        deleteAssetById(`homePhoto:${slot.key}`);
+      }, 'danger');
 
       const pick = document.createElement('button');
       pick.textContent = '🎯 Colours';
@@ -801,6 +818,82 @@ function makeButton(text, title, onClick, cls) {
   return b;
 }
 
+/**
+ * Remove one loaded image, whichever panel owns it.
+ *
+ * An upload that cannot be undone forces the whole project to be rebuilt to fix
+ * one wrong file, and a stale image is worse than a missing one: the package
+ * ships it and the render follows it. So every kind in the asset registry is
+ * deletable from the rail, and each deletion goes through the same clean-up the
+ * owning panel would do — the scene, the status lines and the package
+ * checkboxes all have to hear about it.
+ *
+ * Returns true when something was removed.
+ */
+function deleteAssetById(id, { confirmFirst = true, label = '' } = {}) {
+  const name = label || collectAssets(state.home).find((a) => a.id === id)?.label || 'this image';
+  if (confirmFirst && !confirm(`Delete ${name}? It leaves the project and the render package.`)) return false;
+
+  const res = removeAsset(state.home, id);
+  if (!res.removed) return false;
+
+  // The state is already gone; everything below is the visible consequence.
+  switch (res.kind) {
+    case 'homePhoto':
+      renderHomePhotoList();
+      break;
+    case 'lotPhoto':
+      renderSlotList();
+      renderSiteViewList();
+      break;
+    case 'sitePlan':
+      // The picked file is what re-renders another PDF page; with the page gone
+      // holding on to it would offer a re-render of a plan that is not loaded.
+      sitePlanFile = null;
+      if (res.alsoPlate) updatePlanPlate(stage, state.home.plan);
+      updateSitePlanStatus();
+      break;
+    case 'planPlate':
+      updatePlanPlate(stage, state.home.plan);
+      updatePlanReadState();
+      break;
+    case 'panorama':
+      if ($('pn_show')) $('pn_show').checked = false;
+      rebuild();
+      updatePanoStatus();
+      updateSitePhotoPlate();
+      break;
+  }
+
+  assetsChanged();
+  save();
+  setPackageStatus(res.alsoPlate
+    ? `Deleted ${res.label}, and the tracing plate that was the same drawing.`
+    : `Deleted ${res.label}.`);
+  return true;
+}
+
+/**
+ * The free-form lot photo, which lives on `sitePhoto` rather than in a saved
+ * view and so has no entry in the asset registry to delete.
+ */
+function deleteFreePhoto() {
+  if (!state.home.sitePhoto?.src) return false;
+  if (!confirm('Delete the free-form site photo? It is not saved in any view, so it cannot be got back.')) return false;
+  state.home.sitePhoto = { ...state.home.sitePhoto, src: null, show: false };
+  state.home.activeSiteViewId = null;
+  if ($('sp_show')) $('sp_show').checked = false;
+  updateSitePhotoPlate();
+  rebuild();
+  assetsChanged();
+  save();
+  setPackageStatus('Deleted the free-form site photo.');
+  return true;
+}
+
+/** From the rail, where the card already knows which asset it is. */
+const deleteAsset = (a) => (a ? deleteAssetById(a.id, { label: a.label }) : false);
+
 /** The live inventory in the package panel: every image, and who loaded it. */
 function renderAssetRail() {
   const host = $('assetRail');
@@ -833,7 +926,13 @@ function renderAssetRail() {
     detail.className = 'asset-detail';
     detail.textContent = a.detail;
     body.append(name, detail);
-    card.append(img, body);
+    // stopPropagation: the card itself jumps to the owning panel, and a click
+    // that both deletes the image and scrolls somewhere else reads as a bug.
+    const del = makeButton('✕', `Delete ${a.label} from the project`, (e) => {
+      e.stopPropagation();
+      deleteAsset(a);
+    }, 'asset-del danger');
+    card.append(img, body, del);
     card.title = `Loaded in the ${a.panelName} panel — click to go there`;
     card.addEventListener('click', () => revealPanel(a.panel));
     host.appendChild(card);
@@ -1027,7 +1126,25 @@ function renderFreePhotoLinks() {
       () => loadSlotPhoto(slot.key, src),
     ));
   }
+  // The free-form photo is in no view, so nothing else can remove it — without
+  // this the only way to drop a wrong one is to load another over it.
+  row.appendChild(makeButton('Delete photo', 'Remove this free-form photo from the live view', deleteFreePhoto, 'danger'));
   host.appendChild(row);
+}
+
+/**
+ * Show a panel's delete button only while it has something loaded. A live
+ * "Delete" beside an empty slot is a promise the panel cannot keep.
+ */
+function syncDeleteButtons() {
+  const has = {
+    btnDeleteSitePlan: !!state.home.sitePlan?.src,
+    btnDeletePlate: !!state.home.plan?.src,
+    btnDeletePano: !!state.home.panorama?.src,
+  };
+  for (const [id, on] of Object.entries(has)) {
+    if ($(id)) $(id).style.display = on ? '' : 'none';
+  }
 }
 
 /** One broadcast: every panel that could care about a loaded image re-reads. */
@@ -1038,6 +1155,7 @@ function assetsChanged() {
   renderMatPhotoSources();
   renderHomePhotoLinks();
   renderFreePhotoLinks();
+  syncDeleteButtons();
 }
 
 // ---------------------------------------------------------------------------
@@ -1193,6 +1311,10 @@ function bindPanorama() {
     });
   }
 
+  if ($('btnDeletePano')) {
+    $('btnDeletePano').addEventListener('click', () => deleteAssetById('panorama:pano'));
+  }
+
   if ($('btnPanoSpin')) {
     $('btnPanoSpin').addEventListener('click', () => {
       stage.rotateView(45);
@@ -1314,9 +1436,8 @@ function renderSlotList() {
       use.addEventListener('click', () => applySiteViewById(view.id));
       actions.appendChild(use);
 
-      const clear = document.createElement('button');
-      clear.textContent = 'Clear';
-      clear.addEventListener('click', () => deleteSiteView(view.id));
+      const clear = makeButton('Delete', `Delete the ${slot.name} photo and the view saved with it`,
+        () => deleteSiteView(view.id), 'danger');
       actions.appendChild(clear);
     }
 
@@ -1560,6 +1681,12 @@ function deleteSiteView(id) {
   if (at < 0) return;
   const what = views[at].slotKey ? `Clear the ${views[at].name} slot` : `Delete the site view "${views[at].name}"`;
   if (!confirm(`${what}? The lot photo it holds goes with it.`)) return;
+  // A view without a photo is not in the asset registry, so it is deleted here;
+  // one with a photo goes through the shared deleter, which drops the view too.
+  if (views[at].photo?.src) {
+    deleteAssetById(`lotPhoto:${id}`, { confirmFirst: false });
+    return;
+  }
   views.splice(at, 1);
   if (state.home.activeSiteViewId === id) state.home.activeSiteViewId = null;
   renderSlotList();
@@ -1787,6 +1914,10 @@ function bindPackage() {
     });
   }
 
+  if ($('btnDeleteSitePlan')) {
+    $('btnDeleteSitePlan').addEventListener('click', () => deleteAssetById('sitePlan:page'));
+  }
+
   if ($('btnSitePlanPage')) {
     $('btnSitePlanPage').addEventListener('click', async () => {
       const page = parseInt($('sp_planPage').value, 10) || 1;
@@ -1891,7 +2022,7 @@ const photoFields = [
   ['sp_panY', 'panY'], ['sp_rot', 'rotation'], ['sp_baselineY', 'baselineY'],
   ['sp_camDist', 'camDist'], ['sp_posX', 'posX'], ['sp_posZ', 'posZ'], ['sp_rotY', 'rotY'],
 ];
-const sceneNums = [['s_focal', 'focal'], ['s_eye', 'eye'], ['s_landingDepth', 'landingDepthFt']];
+const sceneNums = [['s_focal', 'focal'], ['s_eye', 'eye'], ['s_landingDepth', 'landingDepthFt'], ['s_groundExtent', 'groundExtentFt']];
 const sceneRanges = [['s_sunAz', 'sunAz'], ['s_sunEl', 'sunEl'], ['s_flat', 'flat']];
 const sceneChecks = [['s_grid', 'grid'], ['s_shadow', 'shadow'], ['s_steps', 'steps'], ['s_stepLanding', 'stepLanding'], ['s_wireframe', 'wireframe'], ['s_trueColor', 'trueColor'], ['s_blockLandscape', 'blockLandscape'], ['s_labels', 'labels'], ['s_dims', 'dims']];
 
@@ -1946,6 +2077,93 @@ function renderDormerSizeRows() {
   host.innerHTML = html;
 }
 
+// ---------------------------------------------------------------------------
+// Porches and wall bump-outs
+//
+// One row per departure from the rectangle. Everything is typed rather than
+// dragged: these come off a dimension line on a spec sheet, and a sheet that
+// says 6'-0" deserves 6'-0", not whatever the mouse landed on.
+// ---------------------------------------------------------------------------
+
+const BUMP_WALL_LABEL = {
+  front: 'Front (long wall)', back: 'Rear (long wall)',
+  left: 'Left end (gable)', right: 'Right end (gable)',
+};
+
+function renderBumpList() {
+  const host = $('bumpList');
+  if (!host) return;
+  const bumps = state.home.bumps || [];
+  if (!bumps.length) {
+    host.innerHTML = '<p class="hint">No porches or bump-outs — the footprint is the plain rectangle above.</p>';
+    return;
+  }
+  const opt = (map, val) => Object.entries(map)
+    .map(([k, label]) => `<option value="${k}"${k === val ? ' selected' : ''}>${label}</option>`).join('');
+
+  host.innerHTML = bumps.map((b, i) => {
+    const porch = b.kind === 'porch';
+    return `<div class="opening" data-bump="${b.id}">
+      <div class="grid2">
+        <label><span>Label</span><input type="text" autocomplete="off" data-bk="label" value="${(b.label || '').replace(/"/g, '&quot;')}"></label>
+        <label><span>Kind</span><select data-bk="kind">${opt(BUMP_KIND_LABEL, b.kind)}</select></label>
+        <label><span>Wall</span><select data-bk="wall">${opt(BUMP_WALL_LABEL, b.wall)}</select></label>
+        <label><span>Roof</span><select data-bk="roof">${BUMP_ROOFS.map((r) => `<option value="${r}"${r === b.roof ? ' selected' : ''}>${BUMP_ROOF_LABEL[r]}</option>`).join('')}</select></label>
+        <label><span>Offset (ft)</span><input type="number" autocomplete="off" step="0.25" data-bk="offsetFt" value="${b.offsetFt}"></label>
+        <label><span>Length (ft)</span><input type="number" autocomplete="off" step="0.25" min="0.5" data-bk="lengthFt" value="${b.lengthFt}"></label>
+        <label><span>Depth (ft, −&nbsp;=&nbsp;in)</span><input type="number" autocomplete="off" step="0.25" data-bk="depthFt" value="${b.depthFt}"></label>
+        <label><span>Height (ft)</span><input type="number" autocomplete="off" step="0.25" min="1" placeholder="Wall height" data-bk="heightFt" value="${b.heightFt ?? ''}"></label>
+        ${porch ? `<label><span>Posts</span><input type="number" autocomplete="off" step="1" min="2" max="12" data-bk="posts" value="${b.posts}"></label>` : `<label><span>Accent window</span><input type="checkbox" data-bk="window"${b.window ? ' checked' : ''}></label>`}
+        ${porch ? `<label><span>Railing</span><input type="checkbox" data-bk="railing"${b.railing !== false ? ' checked' : ''}></label>` : ''}
+      </div>
+      <p class="hint">${i + 1}. ${isRecess(b) ? 'Recessed into' : 'Projecting out from'} the ${BUMP_WALL_LABEL[b.wall].toLowerCase()} · ${fmtFt(b.lengthFt)} × ${fmtFt(Math.abs(b.depthFt))}</p>
+      <div class="btnrow"><button data-bump-del="${b.id}">Delete</button></div>
+    </div>`;
+  }).join('');
+
+  host.querySelectorAll('[data-bk]').forEach((el) => {
+    const id = el.closest('[data-bump]').dataset.bump;
+    const key = el.dataset.bk;
+    const ev = el.tagName === 'SELECT' || el.type === 'checkbox' ? 'change' : 'input';
+    el.addEventListener(ev, () => {
+      const b = (state.home.bumps || []).find((x) => x.id === id);
+      if (!b) return;
+      if (el.type === 'checkbox') b[key] = el.checked;
+      else if (el.type === 'number') {
+        if (el.value === '' && key === 'heightFt') b[key] = null;
+        else {
+          const v = parseFloat(el.value);
+          if (Number.isNaN(v)) return;   // let the field be empty mid-edit
+          b[key] = v;
+        }
+      } else b[key] = el.value;
+      clampBump(b, state.home.dimensions);
+      rebuild();
+      save();
+      // The kind and the wall change which controls the row needs.
+      if (key === 'kind' || key === 'wall') renderBumpList();
+    });
+  });
+
+  host.querySelectorAll('[data-bump-del]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.bumpDel;
+      state.home.bumps = (state.home.bumps || []).filter((b) => b.id !== id);
+      rebuild(); save(); renderBumpList();
+    });
+  });
+}
+
+function addBump(kind) {
+  const b = defaultBump('front', kind);
+  // A porch reads off the sheet as tucked under the main roof, so start it
+  // recessed — the commonest case, and the one nothing else in the app can do.
+  if (kind === 'porch') { b.depthFt = -6; b.roof = 'none'; }
+  clampBump(b, state.home.dimensions);
+  state.home.bumps = [...(state.home.bumps || []), b];
+  rebuild(); save(); renderBumpList();
+}
+
 /** Seed dormerSizes from the current global size so unlinking starts from the
  *  shape already on screen instead of snapping every dormer back to defaults. */
 function seedDormerSizes() {
@@ -1984,6 +2202,8 @@ function syncForm() {
   if ($('f_cornerTrimWidth')) $('f_cornerTrimWidth').value = Math.round((state.home.dimensions.cornerTrimWidthFt ?? 0.5) * 12);
   syncHeadAlignRows();
   renderDormerSizeRows();
+  renderBumpList();
+  if ($('f_pitchBack')) $('f_pitchBack').value = state.home.dimensions.roofPitchBack ?? '';
   for (const [id, key] of colorFields) {
     if ($(id)) $(id).value = state.home.colors[key] || state.home.colors.siding || '#8d9299';
   }
@@ -2109,6 +2329,16 @@ function bind() {
     state.home.dimensions.roofStyle = e.target.value;
     rebuild();
   });
+  if ($('f_pitchBack')) {
+    // Blank is not zero: it means "the rear slope matches the front".
+    $('f_pitchBack').addEventListener('input', (e) => {
+      const v = parseFloat(e.target.value);
+      state.home.dimensions.roofPitchBack = Number.isFinite(v) && v > 0 ? v : null;
+      rebuild(); save();
+    });
+  }
+  if ($('btnAddPorch')) $('btnAddPorch').addEventListener('click', () => addBump('porch'));
+  if ($('btnAddBump')) $('btnAddBump').addEventListener('click', () => addBump('wall'));
   if ($('f_headAlign')) {
     $('f_headAlign').addEventListener('change', (e) => {
       state.home.dimensions.headAlign = e.target.checked;
@@ -2287,6 +2517,10 @@ function bind() {
     };
     r.readAsDataURL(f);
   });
+
+  if ($('btnDeletePlate')) {
+    $('btnDeletePlate').addEventListener('click', () => deleteAssetById('planPlate:plate'));
+  }
 
   function setPhotoDragMode(active) {
     const badge = $('photoDragBadge');

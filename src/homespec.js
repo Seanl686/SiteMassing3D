@@ -22,6 +22,7 @@
 // DOM-free and network-free so it can be unit-tested.
 
 import { WALLS } from './defaults.js';
+import { readBumps } from './bumps.js';
 
 /**
  * The JSON Schema the model must answer in.
@@ -67,17 +68,45 @@ export const HOME_SPEC_SCHEMA = {
       additionalProperties: false,
       required: [
         'widthFt', 'lengthFt', 'wallHeightFt', 'floorHeightFt',
-        'roofPitch', 'eaveOverhangFt', 'rakeOverhangFt', 'roofStyle',
+        'roofPitch', 'roofPitchBack', 'eaveOverhangFt', 'rakeOverhangFt', 'roofStyle',
       ],
       properties: {
         widthFt: { type: 'number', description: 'Overall width in feet — the SHORT side, the gable end.' },
         lengthFt: { type: 'number', description: 'Overall length in feet — the LONG side, the front wall.' },
         wallHeightFt: { type: 'number', description: 'Sidewall height. Use 8 if the sheet does not say.' },
         floorHeightFt: { type: 'number', description: 'Floor deck above grade. Use 2.5 if the sheet does not say.' },
-        roofPitch: { type: 'number', description: 'Rise per 12 of run. Use 4 if the sheet does not say.' },
+        roofPitch: { type: 'number', description: 'Rise per 12 of run on the FRONT slope. Use 4 if the sheet does not say.' },
+        roofPitchBack: {
+          type: ['number', 'null'],
+          description: 'Rise per 12 on the REAR slope, when the sheet says "split pitch" and states a second number. null when both slopes match — which is the normal case.',
+        },
         eaveOverhangFt: { type: 'number', description: 'Overhang past the long walls. Use 1 if not stated.' },
         rakeOverhangFt: { type: 'number', description: 'Overhang past the gable ends. Use 0.75 if not stated.' },
         roofStyle: { type: 'string', enum: ['gable', 'flat'] },
+      },
+    },
+    bumps: {
+      type: 'array',
+      description: 'Every place the outline is NOT the plain rectangle: a covered porch drawn inside or outside the footprint, and any wall section stepped in or out (a "+16\"" note on a plan is a 1.33 ft bump-out). Empty array when the outline is a clean rectangle.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['kind', 'wall', 'offsetFt', 'lengthFt', 'depthFt', 'label'],
+        properties: {
+          kind: {
+            type: 'string',
+            enum: ['wall', 'porch'],
+            description: '"porch" for a covered deck/porch drawn open to the outside; "wall" for enclosed living space stepped in or out.',
+          },
+          wall: { type: 'string', enum: ['front', 'back', 'left', 'right'] },
+          offsetFt: { type: 'number', description: 'Distance from that wall\'s LEFT corner to where the section starts, seen from outside.' },
+          lengthFt: { type: 'number', description: 'How much of the wall it runs along.' },
+          depthFt: {
+            type: 'number',
+            description: 'POSITIVE if it projects OUT past the wall, NEGATIVE if it is recessed INTO the footprint. A porch tucked under the main roof inside the overall dimension is negative.',
+          },
+          label: { type: 'string', description: 'What the plan calls it, e.g. "6\' Porch".' },
+        },
       },
     },
     openings: {
@@ -200,6 +229,21 @@ export function buildSpecPrompt({ knownWidthFt, knownLengthFt } = {}) {
   w(`is on. Set \`confidence\` honestly: \`high\` only if the dimension line and the`);
   w(`openings were all legible.`);
   w();
+  w();
+  w(`## Where the outline is not a rectangle`);
+  w();
+  w(`Two dimension lines that disagree — 58'-8" across one side and 56'-0" across`);
+  w(`the other — mean the footprint steps. So does a "+16\"" note against a wall,`);
+  w(`and so does a porch drawn inside the outline. Put each one in \`bumps\`:`);
+  w(`\`depthFt\` positive if it projects out, **negative if it is recessed in**. A`);
+  w(`porch printed inside the overall dimension is recessed; a porch drawn hanging`);
+  w(`off the front of it projects. Read the offset the same way as an opening's —`);
+  w(`from that wall's left corner, standing outside.`);
+  w();
+  w(`If the sheet says "split pitch", the two roof slopes have different pitches.`);
+  w(`Put the front slope in \`roofPitch\` and the rear slope in \`roofPitchBack\`.`);
+  w(`If only one number is printed, leave \`roofPitchBack\` null.`);
+  w();
   w(`Return only the JSON object.`);
 
   return L.join('\n');
@@ -293,6 +337,49 @@ export function validateHomeSpec(raw) {
 
   dim.roofStyle = raw.dimensions.roofStyle === 'flat' ? 'flat' : 'gable';
 
+  // A split-pitch rear slope is optional by design: null means "same as the
+  // front", which is what all but a handful of sheets mean.
+  const backPitch = num(raw.dimensions.roofPitchBack);
+  if (backPitch === null) {
+    dim.roofPitchBack = null;
+  } else if (backPitch <= 0 || backPitch > 12) {
+    dim.roofPitchBack = null;
+    note('warn', `roofPitchBack came back as ${backPitch}, which is not a pitch — treated the roof as a single ${dim.roofPitch}/12.`);
+  } else {
+    dim.roofPitchBack = round2(backPitch);
+    if (Math.abs(dim.roofPitchBack - dim.roofPitch) < 0.01) dim.roofPitchBack = null;
+  }
+
+  const rawBumps = Array.isArray(raw.bumps) ? raw.bumps : [];
+  const bumps = [];
+  rawBumps.forEach((b, i) => {
+    if (!b || typeof b !== 'object') {
+      note('warn', `Bump ${i + 1} was not an object — skipped.`);
+      return;
+    }
+    const wall = WALLS.includes(b.wall) ? b.wall : 'front';
+    if (wall !== b.wall) note('error', `Bump ${i + 1} named wall "${b.wall}", which does not exist — put on the front wall.`);
+    const kind = b.kind === 'porch' ? 'porch' : 'wall';
+    const span = wall === 'front' || wall === 'back' ? dim.lengthFt : dim.widthFt;
+    const across = wall === 'front' || wall === 'back' ? dim.widthFt : dim.lengthFt;
+    const len = Math.min(Math.max(0.5, num(b.lengthFt) ?? 6), span);
+    const offset = Math.min(Math.max(0, num(b.offsetFt) ?? 0), span - len);
+    let depth = num(b.depthFt);
+    if (depth === null || Math.abs(depth) < 0.05) {
+      depth = kind === 'porch' ? -6 : 1.33;
+      note('warn', `Bump ${i + 1} had no usable depth — assumed ${depth} ft. Check it against the sheet.`);
+    }
+    depth = Math.max(-across * 0.75, Math.min(depth, 40));
+    bumps.push({
+      kind,
+      wall,
+      offsetFt: round2(offset),
+      lengthFt: round2(len),
+      depthFt: round2(depth),
+      label: typeof b.label === 'string' ? b.label.slice(0, 60) : (kind === 'porch' ? 'Covered porch' : 'Bump-out'),
+    });
+  });
+
   const rawOpenings = Array.isArray(raw.openings) ? raw.openings : [];
   if (!Array.isArray(raw.openings)) note('warn', 'No `openings` array — the model read no doors or windows.');
 
@@ -373,6 +460,7 @@ export function validateHomeSpec(raw) {
   const spec = {
     name: typeof raw.modelName === 'string' && raw.modelName.trim() ? raw.modelName.trim() : 'Untitled double-wide',
     dimensions: dim,
+    bumps,
     openings,
     confidence,
     finishes: Object.keys(finishes).length > 0 ? finishes : null,
@@ -385,7 +473,8 @@ export function validateHomeSpec(raw) {
   const doors = openings.filter((o) => o.type !== 'window').length;
   const summary =
     `${spec.name} — ${round2(dim.widthFt)} × ${round2(dim.lengthFt)} ft, `
-    + `${dim.roofStyle === 'flat' ? 'flat roof' : `${dim.roofPitch}/12 gable`}, `
+    + `${dim.roofStyle === 'flat' ? 'flat roof' : `${dim.roofPitch}/12${dim.roofPitchBack ? `-${dim.roofPitchBack}/12 split-pitch` : ''} gable`}, `
+    + `${bumps.length ? `${bumps.length} bump/porch section${bumps.length === 1 ? '' : 's'}, ` : ''}`
     + `${doors} door${doors === 1 ? '' : 's'} and ${openings.length - doors} window${openings.length - doors === 1 ? '' : 's'}`
     + `${spec.finishes?.sidingColor ? `, ${spec.finishes.sidingTexture || 'lap'} siding (${spec.finishes.sidingColor})` : ''}`;
 
@@ -442,11 +531,20 @@ export function applySpecToHome(home, spec, nextId) {
     if (spec.finishes.sidingTexture) dimensions.sidingTexture = spec.finishes.sidingTexture;
   }
 
+  // A spec that read no bumps says nothing about bumps — it does not wipe the
+  // porch someone already placed by hand. An empty array from a plan that HAS
+  // been read for bumps is indistinguishable from that, so the sheet wins only
+  // when it found something.
+  const bumps = Array.isArray(spec.bumps) && spec.bumps.length
+    ? readBumps(spec.bumps.map((b, i) => ({ ...b, id: nextId('b', i) })))
+    : (home.bumps || []);
+
   return {
     ...home,
     name: spec.name,
     colors,
     dimensions,
+    bumps,
     openings: spec.openings.map((o, i) => ({
       id: nextId(o.type[0], i),
       type: o.type,

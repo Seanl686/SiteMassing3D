@@ -12,6 +12,7 @@
 
 import { derived, fmtFt } from './build.js';
 import { WALL_LABEL } from './defaults.js';
+import { describeBump, bumpsOnWall, isRecess, isProjecting } from './bumps.js';
 import { filledHomePhotos, unphotographedWalls } from './homephotos.js';
 
 const slug = (str) => (str || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'view';
@@ -56,6 +57,25 @@ export const sidingLabel = (key) => SIDING_LABEL[key] || SIDING_LABEL.horizontal
 const TYPE_LABEL = { door: 'Door', slider: 'Sliding door', window: 'Window' };
 
 /**
+ * The accessories the massing model cannot carry. The plates are untextured
+ * boxes — they know where a window is, never that it wears shutters, and the
+ * written spec in sections 3 and 4 has no field for a porch light. So every one
+ * of these is decided by the home photographs alone, and naming them one by one
+ * is the only thing that stops a model treating them as styling it may add,
+ * drop or restyle at will.
+ */
+export const ACCESSORIES = [
+  'window shutters — present or absent, and if present their exact style, width, colour and which windows wear them',
+  'exterior light fixtures — porch lights, wall sconces, flood lights: their exact style, count and position',
+  'gutters, downspouts and fascia/soffit treatment',
+  'roof and gable vents, ridge vents, louvres',
+  'porch, deck, stoop and step railings, posts, columns and balusters',
+  'shrubs, flower beds, planters, address numbers, mailboxes, meters and any other mounted hardware',
+];
+
+const accessoryList = () => ACCESSORIES.map((a) => `- ${a}`).join('\n');
+
+/**
  * Every opening as a flat row, grouped by wall in the app's wall order. The
  * point of this table is the walls no photograph covers — it is the only place
  * the image model can learn that the rear wall has one door and no windows.
@@ -86,7 +106,6 @@ export function openingSchedule(home) {
 /** One-line summary of a wall's openings, for the per-wall prose. */
 export function wallSummary(home, wall) {
   const units = (home.openings || []).filter((o) => o.wall === wall);
-  if (!units.length) return 'blank — no doors, no windows';
   const doors = units.filter((o) => o.type === 'door').length;
   const sliders = units.filter((o) => o.type === 'slider').length;
   const windows = units.filter((o) => o.type === 'window').length;
@@ -94,7 +113,24 @@ export function wallSummary(home, wall) {
   if (doors) bits.push(`${doors} entry door${doors > 1 ? 's' : ''}`);
   if (sliders) bits.push(`${sliders} sliding door${sliders > 1 ? 's' : ''}`);
   if (windows) bits.push(`${windows} window${windows > 1 ? 's' : ''}`);
+  // The shape of the wall comes before what is in it: a wall with a porch cut
+  // into it is not the flat plane the rest of the sentence assumes.
+  for (const b of bumpsOnWall(home.bumps, wall)) {
+    const dir = isRecess(b) ? 'recessed' : 'projecting';
+    bits.unshift(b.kind === 'porch'
+      ? `a ${fmtFt(b.lengthFt)} × ${fmtFt(Math.abs(b.depthFt))} ${dir} covered porch`
+      : `a ${fmtFt(b.lengthFt)} wall section ${dir} ${fmtFt(Math.abs(b.depthFt))}`);
+  }
+  if (!bits.length) return 'blank — no doors, no windows';
   return bits.join(', ');
+}
+
+/** Every departure from the plain rectangle, as lines a brief can print. */
+export function bumpSummary(home) {
+  return (home.bumps || []).map((b) => ({
+    bump: b,
+    text: describeBump(b, home.dimensions, fmtFt),
+  }));
 }
 
 /** Lighting language derived from the sun/overcast controls, not typed by hand. */
@@ -145,6 +181,13 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   const stepsLine = scene?.steps
     ? 'Steps at each exterior door' + (scene.stepLanding ? ' with a top landing platform' : '') + '.'
     : 'No steps or landings at the doors.';
+
+  const bumps = home.bumps || [];
+  const roofLine = d.roofStyle === 'flat'
+    ? 'flat / low slope'
+    : (dv.split
+      ? `SPLIT PITCH — ${d.roofPitch}/12 on the front slope, ${d.roofPitchBack || d.roofPitch}/12 on the rear slope, ridge running along the length but NOT over the centreline`
+      : `${d.roofPitch}/12 gable, ridge running along the length`);
 
   const dormers = (parseInt(d.dormerCount, 10) || 0) > 0
     ? `${d.dormerCount} gable dormer${d.dormerCount > 1 ? 's' : ''} on the front roof slope`
@@ -259,10 +302,29 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   w(`| **20-massing-hero.png** | **EXACT 1-TO-1 POSITION, SCALE, CAMERA ANGLE, & GEOMETRY** — the home is ALREADY placed in its exact spot | Material textures (untextured 3D massing) |`);
   w(`| **10-lot-photo.jpg** | Clean site background reference (ground, trees, sky, lighting context) | Position of the home — **DO NOT RE-SITE OR MOVE THE HOUSE ON THIS EMPTY PHOTO** |`);
   w(`| **Massing elevation plates** | Measured orthographic geometry: size, proportion, roof pitch, door/window offsets | Site placement, perspective |`);
-  w(`| **Home photographs** | **HIGHEST AUTHORITY ON FINISH & APPEARANCE** — siding profile/color, trim, doors, windows, roof, and fixtures. **TAKES 100% PRECEDENCE OVER TEXT SPECS.** | Position, scale, or placement on the lot |`);
+  w(`| **Home photographs** | **HIGHEST AUTHORITY ON FINISH, APPEARANCE & ACCESSORIES** — siding profile/color, trim, doors, windows, roof, shutters, light fixtures and every other mounted accessory. **TAKES 100% PRECEDENCE OVER TEXT SPECS.** | Position, scale, or placement on the lot |`);
   w();
   w(`**CRITICAL PRECEDENCE MANDATE — HOME PHOTOS OVERRIDE ALL TEXT SPECS:**`);
   w(`If there is any difference between written text descriptions/color names and what is visible in the attached home photographs (\`40-home-*.jpg\`), **THE ATTACHED HOME PHOTOGRAPHS TAKE TOTAL PRECEDENCE.** Reproduce the exact siding profile, siding color, trim color, roof shingle texture, door design, and fixtures as shown in the photographs.`);
+  w();
+  w(`### Accessories are read off the photographs — copy them, do not invent them`);
+  w();
+  w(`The massing plates are untextured geometry, and the tables in sections 3 and 4`);
+  w(`describe surfaces only. Neither one can tell you about the small attached`);
+  w(`things that decide whether a buyer recognises their home. **The photographs are`);
+  w(`the sole and complete authority on all of these:**`);
+  w();
+  w(accessoryList());
+  w();
+  w(`Reproduce each of them **exactly as photographed** — same style, same colour,`);
+  w(`same count, same position on the same wall. If the photographs show shutters,`);
+  w(`the render has those shutters on those windows. **If the photographs show no`);
+  w(`shutters, the render has no shutters** — do not add them because the home would`);
+  w(`"look better" with them. The same rule runs both ways for lights, railings,`);
+  w(`vents and gutters: photographed means present, unphotographed means absent.`);
+  w();
+  w(`Adding a decorative accessory nobody asked for is a redesign, not a`);
+  w(`flourish — it makes the picture a home the buyer is not being sold.`);
   w();
   w(`The plates and the home photographs describe **the same home** and are meant to`);
   w(`be used together, one over the other — the plate is the measured drawing`);
@@ -284,7 +346,9 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
     }
     w();
     w(`For each pair: take the wall's **dimensions and opening positions** from the`);
-    w(`plate, and its **appearance** from the photograph. If the photograph seems to`);
+    w(`plate, and its **appearance and every accessory on it** — shutters, lights,`);
+    w(`railings, vents, gutters, mounted hardware — from the photograph. Count them`);
+    w(`in the photograph and put that many in the render, in those places. If the photograph seems to`);
     w(`show a window somewhere the plate does not, the plate is right — a photograph`);
     w(`is taken at an angle and foreshortens; the plate is measured.`);
   }
@@ -303,15 +367,24 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
     w(`For those walls, the plates and the schedule in section 5 are the complete`);
     w(`and only description, and they are complete on purpose. Extend the same`);
     w(`siding and trim plainly across them, place exactly the openings the schedule`);
-    w(`lists, and **invent nothing** — no extra windows, no doors, no features.`);
+    w(`lists, and **invent nothing** — no extra windows, no doors, no features, and`);
+    w(`**no accessories**: no shutters, no light fixtures, no railings, no vents`);
+    w(`beyond what a photographed wall shows carrying around the corner.`);
     w(`Hallucinating a window wall onto an unphotographed gable end is the classic`);
     w(`failure this package is built to prevent.`);
-  } else if (!shot.length) {
+  }
+
+  // Not an `else` of the block above: with no photographs at all every wall is
+  // blind, so this section used to be unreachable exactly when it mattered most.
+  if (!shot.length) {
     w();
     w(`### No photographs of the home are attached`);
     w();
     w(`Then the plates plus the written specification in sections 3 and 4 are the`);
     w(`complete description of this home. Follow them exactly and invent nothing.`);
+    w(`With no photograph to read accessories off, the home carries **none** — no`);
+    w(`shutters, no exterior light fixtures, no railings, no decorative hardware.`);
+    w(`Plain siding, trim and openings only.`);
   }
   w();
 
@@ -345,11 +418,45 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   w(`| Front-wall to gable-end ratio | **${ratio} : 1** — the front wall must read ${ratio}× as long as the end wall is wide |`);
   w(`| Wall height | ${fmtFt(d.wallHeightFt)} |`);
   w(`| Floor deck above grade | ${fmtFt(d.floorHeightFt)} |`);
-  w(`| Roof | ${d.roofStyle === 'flat' ? 'flat / low slope' : `${d.roofPitch}/12 gable, ridge running along the length`} |`);
-  w(`| Eave height above grade | ${fmtFt(dv.eaveY)} |`);
+  w(`| Roof | ${roofLine} |`);
+  if (dv.split) {
+    w(`| Ridge position | **off centre** — ${fmtFt(Math.abs(dv.ridgeZ))} toward the ${dv.ridgeZ > 0 ? 'rear' : 'front'} of the centreline, so the ${dv.ridgeZ > 0 ? 'front' : 'rear'} slope is the long shallow one |`);
+  }
+  if (Math.abs(dv.eaveYFront - dv.eaveYBack) > 0.01) {
+    w(`| Eave height above grade | front ${fmtFt(dv.eaveYFront)}, rear ${fmtFt(dv.eaveYBack)} — the two long walls are NOT the same height |`);
+  } else {
+    w(`| Eave height above grade | ${fmtFt(dv.eaveY)} |`);
+  }
   w(`| Ridge height above grade | ${fmtFt(dv.ridgeY)} |`);
   w(`| Dormers | ${dormers} |`);
+  w(`| Footprint shape | ${bumps.length ? `NOT a plain rectangle — ${bumps.length} departure${bumps.length > 1 ? 's' : ''}, listed below` : 'a plain rectangle'} |`);
   w();
+
+  if (bumps.length) {
+    w(`### 3a. Where the footprint stops being a rectangle`);
+    w();
+    w(`The overall ${fmtFt(d.widthFt)} × ${fmtFt(d.lengthFt)} above is the main body. These`);
+    w(`sections step in or out of it, and they are on the plates — reproduce them,`);
+    w(`and do not straighten the building back into a box.`);
+    w();
+    w(`| # | What | Wall | Along the wall | Depth |`);
+    w(`|---|---|---|---|---|`);
+    bumps.forEach((b, i) => {
+      const kind = b.kind === 'porch' ? 'covered porch / deck' : 'wall section';
+      const dir = isRecess(b) ? 'recessed IN' : 'projecting OUT';
+      w(`| ${i + 1} | ${b.label || kind} (${kind}, ${dir}) | ${WALL_LABEL[b.wall] || b.wall} | ${fmtFt(b.offsetFt)} from the left corner, ${fmtFt(b.lengthFt)} wide | ${fmtFt(Math.abs(b.depthFt))} |`);
+    });
+    w();
+    for (const line of bumpSummary(home)) w(`- ${line.text}.`);
+    w();
+    const porches = bumps.filter((b) => b.kind === 'porch');
+    if (porches.length) {
+      w(`The porch${porches.length > 1 ? 'es are' : ' is'} open-sided: posts and railing, no wall`);
+      w(`across the front of it, and the wall behind it keeps its doors and windows.`);
+      w(`It is a real recess in the roofline${porches.some(isProjecting) ? ' or a roofed structure standing off the wall' : ''} — not a shadow painted on a flat elevation.`);
+      w();
+    }
+  }
 
   w(`## 4. Materials and colours`);
   w();
@@ -407,7 +514,7 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   w(`>`);
   w(`> **Use the massing plates as the source of truth for geometry.** They are a`);
   w(`> clean untextured 3D model of this exact home: footprint proportion, roof`);
-  w(`> pitch (${d.roofPitch}/12), eave and ridge heights, and the position of every door and`);
+  w(`> pitch (${dv.split ? `${d.roofPitch}/12 front slope, ${d.roofPitchBack || d.roofPitch}/12 rear slope, ridge off centre` : `${d.roofPitch}/12`}), eave and ridge heights, ${bumps.length ? 'every bump-out, recess and porch, ' : ''}and the position of every door and`);
   w(`> window on all four walls. Reproduce that geometry exactly. Where a wall is`);
   w(`> not visible in any photograph, follow the plates — do not invent openings.`);
   w(`>`);
@@ -419,11 +526,22 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   w(`> **Output Location (CLI/Agent):** Save all final rendered output images into the \`renders/\` subfolder inside this package folder (${passName ? `\`views/${slug(passName)}/renders/\`` : '\`renders/\`'}).`);
   w(`>`);
   if (shot.length) {
-    w(`> **THE ATTACHED HOME PHOTOGRAPHS ARE THE HIGHEST AUTHORITY AND TAKE 100% PRECEDENCE OVER TEXT FOR ALL FINISHES, COLOURS, TEXTURES, AND FIXTURES.**`);
+    w(`> **THE ATTACHED HOME PHOTOGRAPHS ARE THE HIGHEST AUTHORITY AND TAKE 100% PRECEDENCE OVER TEXT FOR ALL FINISHES, COLOURS, TEXTURES, FIXTURES AND ACCESSORIES.**`);
     w(`> Each photo is named for the wall it shows; reproduce its exact siding profile`);
     w(`> and colour, window style, trim, roof texture/colour, doors, and light fixtures as`);
     w(`> photographed, on the wall it belongs to. Where written text specifications disagree with what is visible in the photographs,`);
     w(`> **THE PHOTOGRAPHS WIN 100%.** Follow the photo for all visual appearance/fixtures and the plate for geometry/position.`);
+    w(`>`);
+    w(`> **Copy the accessories from the photographs exactly, and add none of your own.**`);
+    w(`> Look at each photograph and match, item for item:`);
+    w(`>`);
+    for (const a of ACCESSORIES) w(`> - ${a}`);
+    w(`>`);
+    w(`> Same style, same colour, same count, same wall, same position. **Shutters`);
+    w(`> only where the photographs show shutters; if a window has none, render none.**`);
+    w(`> **Exterior lights only where the photographs show them**, in that style and`);
+    w(`> that number. Do not add, remove, restyle or relocate any accessory, and do`);
+    w(`> not decorate the home with anything the photographs do not contain.`);
   } else {
     w(`> **No photographs of the home are attached, so this specification is the`);
     w(`> complete description of its finish:** ${sidingLabel(d.sidingTexture)} in`);
@@ -489,8 +607,13 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   w(`| 5 | Where it sits | 1-to-1 Overlay: Matches the exact pixel location, scale, and bounding box (${x1}–${x2}, base at Y=${yBottom}) shown in \`20-massing-hero.png\` | Position |`);
   w(`| 6 | How big it reads | Spans about **${x1} to ${x2}** of the image width | Scale |`);
   w(`| 7 | The site | ${keep} unchanged from the lot photo — nothing re-drawn, re-framed or invented | re-paste Turn 1 |`);
+  if (shot.length) {
+    w(`| 8 | Shutters, lights and hardware | Every accessory matches the home photographs item for item — right style, right count, right wall — and **nothing is present that the photographs do not show** | Accessories |`);
+  } else {
+    w(`| 8 | Shutters, lights and hardware | **None present** — no photographs were attached, so the home carries no shutters, exterior lights, railings or decorative hardware | Accessories |`);
+  }
   w();
-  w(`**All seven pass → go to section 9, the polish pass.** Any one fails → fix`);
+  w(`**All eight pass → go to section 9, the polish pass.** Any one fails → fix`);
   w(`that one thing in section 8, then run this list again. Do not polish first:`);
   w(`the polish makes a wrong image look believable, which is the failure you`);
   w(`cannot recover from because nobody notices it.`);
@@ -553,6 +676,25 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
     w(`> in the image.`);
   }
   w();
+  w(`**Accessories** — when shutters, lights or hardware drift`);
+  w();
+  if (shot.length) {
+    w(`> The accessories are wrong. Read them off the attached home photographs`);
+    w(`> (\`40-home-*.jpg\`) again and match them item for item — shutters (style,`);
+    w(`> width, colour, and only on the windows that have them in the photographs),`);
+    w(`> exterior light fixtures (style, count, position), gutters and downspouts,`);
+    w(`> roof and gable vents, railings and posts, and any mounted hardware.`);
+    w(`> **Remove every accessory the photographs do not show** — added shutters,`);
+    w(`> added lights, added railings — and restore every one they do show, in its`);
+    w(`> photographed style and place. Change nothing else in the image: no geometry,`);
+    w(`> no colours beyond the accessories themselves, no placement, no site.`);
+  } else {
+    w(`> The home has accessories it should not have. No photographs were attached,`);
+    w(`> so this home carries **no shutters, no exterior light fixtures, no railings`);
+    w(`> and no decorative hardware** — only ${sidingLabel(d.sidingTexture)}, trim,`);
+    w(`> doors and windows. Remove them and change nothing else in the image.`);
+  }
+  w();
 
   // ---- the polish pass ---------------------------------------------------
   // Its own section, not a bullet among corrections. It is a different KIND of
@@ -575,7 +717,7 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   w();
   w(`### When to run it`);
   w();
-  w(`When all seven checks in section 7 pass. Not before.`);
+  w(`When all eight checks in section 7 pass. Not before.`);
   w();
   w(`Polishing early is the one mistake that cannot be undone by another turn: a`);
   w(`badly proportioned home rendered with convincing light and shadow stops looking`);
@@ -616,6 +758,8 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   w(`> - Match the photograph's own grain, sharpness and depth of field.`);
   w(`>`);
   w(`> Change nothing about the home's geometry, proportions, openings, colours,`);
+  w(`> accessories (shutters, lights, railings, vents, hardware — do not add or`);
+  w(`> remove any),`);
   w(`> placement, angle, size or camera perspective, and change nothing about the`);
   w(`> site. This is a lighting and integration pass only — position and`);
   w(`> perspective are locked, repeated above, not up for reinterpretation.`);

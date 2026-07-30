@@ -151,6 +151,68 @@ export function collectAssets(home) {
   return out;
 }
 
+/**
+ * Remove one loaded image from the project by its registry id.
+ *
+ * The mutation lives here rather than in the panel that uploaded the file, so
+ * every route to a delete — the asset rail, a panel button — takes exactly the
+ * same one, and so it can be tested without a DOM. The caller owns the visible
+ * consequences (redraw the scene, re-render the lists); this owns the state.
+ *
+ * Returns what happened: `{ removed, kind, label, alsoPlate }`. `alsoPlate` says
+ * the floor plan tracing plate went with the site plan because it was the same
+ * drawing — a plate whose source page is gone cannot be re-rendered, and leaving
+ * it behind means the package ships a page nothing in the app can account for.
+ */
+export function removeAsset(home, id) {
+  const target = collectAssets(home).find((a) => a.id === id);
+  const miss = { removed: false, kind: null, label: '', alsoPlate: false };
+  if (!home || !target) return miss;
+  const { kind, key, label } = target;
+  const done = (alsoPlate = false) => ({ removed: true, kind, label, alsoPlate });
+
+  switch (kind) {
+    case 'homePhoto': {
+      const photos = { ...(home.homePhotos || {}) };
+      delete photos[key];
+      home.homePhotos = photos;
+      return done();
+    }
+    case 'lotPhoto': {
+      // The photo lives inside its saved view, together with the alignment and
+      // the camera that make it usable, so the view is the unit that goes.
+      const views = Array.isArray(home.siteViews) ? home.siteViews : [];
+      const at = views.findIndex((v) => v.id === key);
+      if (at < 0) return miss;
+      views.splice(at, 1);
+      if (home.activeSiteViewId === key) home.activeSiteViewId = null;
+      return done();
+    }
+    case 'sitePlan': {
+      const alsoPlate = planPlateLinked(home);
+      home.sitePlan = {
+        ...home.sitePlan,
+        src: null, pdf: null, name: '', page: 1, pageCount: 1, width: 0, height: 0,
+      };
+      if (alsoPlate) home.plan = { ...home.plan, src: null };
+      return done(alsoPlate);
+    }
+    case 'planPlate': {
+      home.plan = { ...home.plan, src: null };
+      return done();
+    }
+    case 'panorama': {
+      home.panorama = {
+        ...home.panorama,
+        src: null, srcKey: null, name: '', width: 0, height: 0, show: false,
+      };
+      return done();
+    }
+    default:
+      return miss;
+  }
+}
+
 /** Counts the package panel quotes so a checkbox can say what it will include. */
 export function assetInventory(home) {
   const homePhotos = homePhotoAssets(home);

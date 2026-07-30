@@ -218,7 +218,8 @@ Drop a file in `homes/`, add a line to `homes/index.json`, and it shows up in th
   "dimensions": {
     "widthFt": 27, "lengthFt": 56,
     "wallHeightFt": 8, "floorHeightFt": 2.5,
-    "roofPitch": 4, "eaveOverhangFt": 1, "rakeOverhangFt": 0.75,
+    "roofPitch": 4, "roofPitchBack": null,
+    "eaveOverhangFt": 1, "rakeOverhangFt": 0.75,
     "roofStyle": "gable"
   },
   "colors": { "siding": "#8d9299", "trim": "#f2f2f0", "roof": "#3a3d42",
@@ -227,6 +228,11 @@ Drop a file in `homes/`, add a line to `homes/index.json`, and it shows up in th
     { "id": "d1", "type": "door", "wall": "front",
       "offsetFt": 14, "widthFt": 3, "heightFt": 6.67, "sillFt": 0,
       "label": "Main entry" }
+  ],
+  "bumps": [
+    { "id": "b1", "kind": "porch", "wall": "front", "label": "6' Porch",
+      "offsetFt": 44, "lengthFt": 12, "depthFt": -6, "roof": "none",
+      "posts": 3, "railing": true }
   ]
 }
 ```
@@ -236,6 +242,11 @@ Drop a file in `homes/`, add a line to `homes/index.json`, and it shows up in th
 - `offsetFt` — from the wall's left corner, viewed from outside.
 - `sillFt` — above the floor deck, not above grade. Doors are pinned to 0.
 - All lengths are feet; `6.67` is a 6'-8" door.
+- `roofPitchBack` — the rear slope's pitch when the sheet says **split pitch**.
+  `null` means both slopes match and the ridge sits over the centreline.
+- `bumps` — every place the footprint is not the rectangle. `depthFt` is signed:
+  positive projects **out** past the wall, negative cuts a recess **in**.
+  `kind` is `porch` (open, posts and railing) or `wall` (enclosed space).
 
 Because the format is plain JSON keyed to the spec sheet's own vocabulary, you
 can hand a spec sheet PNG to Claude and ask it to write the file — model name,
@@ -250,10 +261,43 @@ result against the sheet before you trust a render made from it.
   real void, not a decal — it stays correct at any camera angle.
 - The gizmo overlay is excluded from every export.
 
+## Where the footprint is not a rectangle
+
+A spec sheet is rarely a clean box. The Redman 25610 measures 58'-8" across the
+back and 56'-0" across the front, because the last bay is a recessed 6' porch,
+and two walls carry `+16"` box-outs. **Porches & Wall Bump-Outs** (`BMP`) is
+where those go — one row each, typed off the sheet rather than dragged:
+
+| Field | What it means |
+|---|---|
+| Kind | `Covered porch` — open, with posts and a railing. `Wall bump` — enclosed space. |
+| Wall | Which wall it hangs on. Offsets run left→right from outside, same as an opening. |
+| Depth | **Signed.** Positive projects out past the wall; negative cuts a recess in. |
+| Roof | `None` when the main roof already covers it — the right answer for a recessed porch — otherwise a flat, shed or gable cap of its own. |
+
+A bump does not punch a hole in the wall: it *moves* that stretch of wall, and
+the moved face is built as a wall, so a door in the back of a recessed porch is
+still a real void with real casing. A porch that projects **out** is the one
+that leaves the wall alone — it is a deck standing in front of a wall that still
+has its doors and windows.
+
+## Split-pitch roofs
+
+"4/12 Split Pitch" means the two roof planes have different pitches, so the
+ridge is **not** over the centreline and one side of the peak is higher and
+shorter than the other — visible on any gable-end photo of the model. Type the
+front slope in **Roof pitch** and the rear slope in **Rear pitch**; leave the
+rear blank for a symmetrical gable.
+
+The ridge is solved, not assumed: it is where the two planes actually meet,
+given both pitches and both wall heights. So a taller front wall tilts the roof
+the same way a split pitch does, and the gable-end walls follow — their two top
+corners are the eaves of the walls they meet.
+
 ## Known limits
 
-- Single rectangular footprint. No L-shapes, dormers, porch roofs, or bay windows.
-- One roof pitch, ridge always along the length.
+- One rectangular body plus bumps. No L-shapes or bay windows.
+- One ridge, always running along the length.
 - Massing-level materials: flat colors, no siding or shingle texture. That is
   deliberate — a textured render fights the lot photo's lighting, while a clean
   massing plate reads as a geometry reference.

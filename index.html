@@ -78,7 +78,10 @@
           <label><span>Roof style</span>
             <select id="f_roofStyle"><option value="gable">Gable (ridge along length)</option><option value="flat">Flat / low slope</option></select>
           </label>
+          <label><span>Rear pitch (/12)</span><input id="f_pitchBack" type="number" autocomplete="off" step="0.5" min="0" max="12" placeholder="Same as front"></label>
         </div>
+        <p style="font-size:11px;color:#9aa;margin:4px 0 2px;line-height:1.3;">A <b>split-pitch</b> roof runs a different pitch on the rear slope, so the ridge sits off the centreline and one side of the peak is higher and shorter than the other. Leave the rear pitch blank for a symmetrical gable.</p>
+        <p class="hint" id="ridgeHint"></p>
 
         <h3 class="subhead">Per-Wall Custom Heights (Optional)</h3>
         <div class="grid2">
@@ -132,6 +135,22 @@
         <label class="row check"><input id="f_dormerWindow" type="checkbox" autocomplete="off"><span>Accent dormer window</span></label>
         <p style="font-size:11px;color:#9aa;margin:6px 0 2px;line-height:1.3;">💡 Click &amp; drag dormers in the 3D view to reposition along the ridge.</p>
         <button id="btnResetDormerPos" type="button" style="font-size:11px;padding:3px 8px;">Reset positions</button>
+      </div>
+    </section>
+
+    <section class="panel collapsible" id="panel_bumps">
+      <div class="panel-header">
+        <h2><span class="code">BMP</span> Porches &amp; Wall Bump-Outs <span class="count" id="bumpCount"></span></h2>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="panel-body">
+        <p class="hint">Where the plan stops being a rectangle. Two dimension lines that disagree — <b>58'-8"</b> one side, <b>56'-0"</b> the other — is a recess; a <b>+16"</b> note is a bump-out; a <b>6' PORCH</b> drawn inside the outline is a covered deck tucked under the main roof.</p>
+        <div class="btnrow">
+          <button id="btnAddPorch">+ Covered porch</button>
+          <button id="btnAddBump">+ Wall bump</button>
+        </div>
+        <p class="hint"><b>Depth</b> is signed: positive projects <b>out</b> past the wall, negative cuts a recess <b>in</b>. Offset runs left&rarr;right as seen from outside, same as an opening.</p>
+        <div id="bumpList"></div>
       </div>
     </section>
 
@@ -361,6 +380,7 @@
         <label class="btn block" for="filePanorama">Load 360° panorama (equirectangular JPG/PNG)</label>
         <input type="file" id="filePanorama" accept="image/*" hidden>
         <p class="hint" id="panoStatus">No panorama loaded.</p>
+        <button id="btnDeletePano" class="block danger" style="display:none;">Delete this panorama</button>
         <label class="row check"><input id="pn_show" type="checkbox" autocomplete="off" checked><span>Wrap panorama around the site</span></label>
         <div class="grid2">
           <label><span>Heading / yaw (°)</span><input id="pn_yaw" type="number" autocomplete="off" step="1" min="-180" max="180"></label>
@@ -383,6 +403,7 @@
       <div class="panel-body">
         <label class="btn block" for="filePlan">Load plan image (PNG/JPG)</label>
         <input type="file" id="filePlan" accept="image/*" hidden>
+        <button id="btnDeletePlate" class="block danger" style="display:none;">Delete this tracing plate</button>
         <div class="grid2">
           <label><span>Plate width (ft)</span><input id="p_width" type="number" autocomplete="off" step="0.5"></label>
           <label><span>Rotation (deg)</span><input id="p_rot" type="number" autocomplete="off" step="1"></label>
@@ -460,6 +481,7 @@
         <label class="btn block" for="fileSitePlan">Load site plan (PDF, PNG or JPG)</label>
         <input type="file" id="fileSitePlan" accept="application/pdf,image/*" hidden>
         <p class="hint" id="sitePlanStatus">No site plan loaded. A PDF is converted to PNG automatically — image models ignore PDF attachments.</p>
+        <button id="btnDeleteSitePlan" class="block danger" style="display:none;">Delete this site plan</button>
         <div class="grid2" id="row_sitePlanPage" style="display:none;">
           <label><span>Page</span><input id="sp_planPage" type="number" autocomplete="off" step="1" min="1" value="1"></label>
           <button id="btnSitePlanPage" style="margin-top:auto;">Re-render page</button>
@@ -522,6 +544,7 @@
           <label><span>Background</span><input id="s_bg" type="color" autocomplete="off"></label>
         </div>
         <label class="row check"><input id="s_grid" type="checkbox" autocomplete="off"><span>Ground grid</span></label>
+        <label><span>Ground extent (ft)</span><input id="s_groundExtent" type="number" autocomplete="off" step="10" min="20" max="2000" title="How far the ground plane/grid reaches before it stops — a bright ring marks the cutoff"></label>
         <label class="row check"><input id="s_shadow" type="checkbox" autocomplete="off"><span>Cast shadow</span></label>
         <label class="row check"><input id="s_wireframe" type="checkbox" autocomplete="off"><span style="color:#6fb2ff;font-weight:600;">📐 Wireframe view mode</span></label>
         <label class="row check"><input id="s_trueColor" type="checkbox" autocomplete="off"><span style="color:#7fd18a;font-weight:600;">🎨 True colour (flat, unlit)</span></label>

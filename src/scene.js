@@ -3,18 +3,22 @@
 import * as THREE from 'three';
 import { OrbitControls } from '../vendor/OrbitControls.js';
 import { derived } from './build.js';
+import { footprintExtents } from './bumps.js';
 
 // 35mm-equivalent focal length -> vertical FOV, assuming a 36x24mm frame.
 export const focalToFov = (mm) => 2 * Math.atan(24 / (2 * mm)) * 180 / Math.PI;
 
-/** The eight corners of the home's overall bounding box, overhangs included. */
-function boxCorners(dim, d) {
-  const hx = dim.lengthFt / 2 + dim.rakeOverhangFt;
-  const hz = dim.widthFt / 2 + dim.eaveOverhangFt;
+/**
+ * The eight corners of the home's overall bounding box, overhangs included —
+ * and any porch or bump-out that projects past the rectangle, or a 6' front
+ * porch frames straight out of the picture.
+ */
+function boxCorners(dim, d, bumps = []) {
+  const e = footprintExtents(dim, bumps);
   const out = [];
-  for (const x of [-hx, hx]) {
+  for (const x of [e.minX, e.maxX]) {
     for (const y of [0, d.ridgeY]) {
-      for (const z of [-hz, hz]) out.push(new THREE.Vector3(x, y, z));
+      for (const z of [e.minZ, e.maxZ]) out.push(new THREE.Vector3(x, y, z));
     }
   }
   return out;
@@ -85,14 +89,13 @@ export class Stage {
     this.scene.add(this.trueColorLight);
 
     const groundMat = new THREE.ShadowMaterial({ opacity: 0.26 });
-    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), groundMat);
+    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), groundMat);
     this.ground.rotation.x = -Math.PI / 2;
     this.ground.receiveShadow = true;
     this.scene.add(this.ground);
 
-    this.grid = new THREE.GridHelper(400, 80, 0x4a525d, 0x30363e);
-    this.grid.position.y = -0.005;
-    this.scene.add(this.grid);
+    this._groundBaselineY = 0;
+    this.rebuildGround(150);
 
     this.planGroup = new THREE.Group();
     this.scene.add(this.planGroup);
@@ -105,8 +108,45 @@ export class Stage {
     this.panoGroup = new THREE.Group();
     this.scene.add(this.panoGroup);
 
+    // Set by rebuild(): what projects past the rectangle, for framing.
+    this.bumps = [];
     this.homeGroup = new THREE.Group();
     this.scene.add(this.homeGroup);
+  }
+
+  /**
+   * Ground plane, grid and boundary ring, all sized to how far the lot should
+   * read before stopping — an unbounded grid reads as scenery, not a measured
+   * site. The grid's geometry is baked in at construction, so a size change
+   * rebuilds it rather than resizing it; the boundary ring is a bright outline
+   * at the edge so the cutoff itself is visible, not just present.
+   */
+  rebuildGround(extentFt) {
+    this.groundExtentFt = extentFt;
+    this.ground.geometry.dispose();
+    this.ground.geometry = new THREE.PlaneGeometry(extentFt, extentFt);
+
+    this.grid?.geometry.dispose();
+    if (this.grid) this.scene.remove(this.grid);
+    const divisions = Math.max(4, Math.round(extentFt / 5));
+    this.grid = new THREE.GridHelper(extentFt, divisions, 0x4a525d, 0x30363e);
+    this.grid.position.y = -0.005 + (this._groundBaselineY || 0);
+    this.scene.add(this.grid);
+
+    this._groundEdge?.geometry.dispose();
+    this._groundEdge?.material.dispose();
+    if (this._groundEdge) this.scene.remove(this._groundEdge);
+    const half = extentFt / 2;
+    const pts = [
+      new THREE.Vector3(-half, 0, -half), new THREE.Vector3(half, 0, -half),
+      new THREE.Vector3(half, 0, half), new THREE.Vector3(-half, 0, half),
+    ];
+    this._groundEdge = new THREE.LineLoop(
+      new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineBasicMaterial({ color: 0xffb400 }),
+    );
+    this._groundEdge.position.y = (this._groundBaselineY || 0) + 0.002;
+    this.scene.add(this._groundEdge);
   }
 
   applySceneOpts(o, dim) {
@@ -135,9 +175,13 @@ export class Stage {
     s.near = 1; s.far = r * 3;
     s.updateProjectionMatrix();
 
+    const extentFt = Math.max(20, +o.groundExtentFt || 150);
+    if (extentFt !== this.groundExtentFt) this.rebuildGround(extentFt);
+
     const blockLandscape = !!o.blockLandscape;
     this.ground.visible = o.grid && !blockLandscape;
     this.grid.visible = o.grid && !blockLandscape;
+    this._groundEdge.visible = o.grid && !blockLandscape;
     // `plateBackdrop` is set while the lot photo is showing behind the canvas.
     // Painting a background then hides the photo, and this runs on EVERY scene
     // change — wireframe, grid, sun, background colour — so without the guard a
@@ -185,12 +229,17 @@ export class Stage {
     if (this._wfEdge) this._wfEdge.color.setHex(this.wireframeStroke());
   }
 
-  /** Stroke colour for hidden-line mode: dark on light backdrops, light on dark.
-   *  No background means a photo is behind the canvas, and photos read light. */
+  /** Stroke colour for hidden-line mode. Picked for maximum separation from
+   *  any photographic or rendered backdrop — a saturated hue nowhere near the
+   *  grays/browns/blues a house or lot photo actually contains — so the edges
+   *  read as unambiguous line data rather than blending into the picture,
+   *  whether a human or a vision model is reading the silhouette. Dark on
+   *  light backdrops, light on dark; no background means a photo is behind
+   *  the canvas, and photos read light. */
   wireframeStroke() {
     const bg = this.scene.background instanceof THREE.Color ? this.scene.background : null;
     const lum = bg ? 0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b : 1;
-    return lum > 0.5 ? 0x1b1e22 : 0xdfe6ee;
+    return lum > 0.5 ? 0xff0090 : 0x00e5ff; // vivid magenta on light, vivid cyan on dark
   }
 
   /**
@@ -560,7 +609,7 @@ export class Stage {
       this.orthoControls.update();
     };
 
-    const corners = boxCorners(dim, d);
+    const corners = boxCorners(dim, d, this.bumps);
 
     /**
      * Pull the camera back along `dir` until every corner of the home's bounding
@@ -658,8 +707,10 @@ export class Stage {
 
   setGroundBaseline(offsetY) {
     const y = offsetY || 0;
+    this._groundBaselineY = y;
     this.ground.position.y = y;
     this.grid.position.y = -0.005 + y;
+    this._groundEdge.position.y = y + 0.002;
     this.planGroup.position.y = y;
   }
 

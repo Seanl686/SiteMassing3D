@@ -469,6 +469,7 @@ main.sidebar-collapsed #sidebar {
 
 #panel_building { --cat: #5aa9ff; }  /* azure    — the model itself */
 #panel_dormers  { --cat: #a78bfa; }  /* violet   — roof volumes */
+#panel_bumps    { --cat: #f2b134; }  /* amber    — where the box stops being a box */
 #panel_colors   { --cat: #ef6f5e; }  /* coral    — materials & finish */
 #panel_openings { --cat: #35d0ba; }  /* teal     — doors & windows */
 #panel_stairs   { --cat: #7fc94a; }  /* green    — site-built additions */
@@ -823,6 +824,16 @@ input[type=checkbox] { accent-color: var(--cat, var(--accent)); width: 15px; hei
   font-size: 10px; color: var(--dim); margin-top: 2px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+
+/* Delete, on every asset card. Dim until the row is hovered so the rail reads
+   as an inventory rather than a row of buttons, but never hidden — an upload you
+   cannot remove makes one wrong file a reason to rebuild the project. */
+.asset-del {
+  flex: none; font-size: 11px; line-height: 1;
+  padding: 4px 7px; opacity: 0.45;
+}
+.asset-card:hover .asset-del { opacity: 1; }
+.asset-del:focus-visible { opacity: 1; }
 
 /* A count on each package checkbox, so it cannot promise what is not loaded. */
 .pk-count {

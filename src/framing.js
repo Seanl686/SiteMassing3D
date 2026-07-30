@@ -8,6 +8,7 @@
 
 import * as THREE from 'three';
 import { derived } from './build.js';
+import { footprintExtents } from './bumps.js';
 
 const CORNER_LABEL = (x, z) =>
   `${z < 0 ? 'front' : 'rear'}-${x < 0 ? 'left' : 'right'} corner`;
@@ -34,8 +35,9 @@ export function measureFraming(stage, home, viewLabel) {
   const dim = home.dimensions;
   const d = derived(dim);
 
-  const hx = dim.lengthFt / 2 + (dim.rakeOverhangFt || 0);
-  const hz = dim.widthFt / 2 + (dim.eaveOverhangFt || 0);
+  // Measured off the real footprint, porches and bump-outs included — the
+  // brief's percentages have to describe the thing actually in the frame.
+  const e = footprintExtents(dim, home.bumps || []);
 
   const group = stage.homeGroup;
   group.updateMatrixWorld(true);
@@ -45,9 +47,9 @@ export function measureFraming(stage, home, viewLabel) {
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   let anyBehind = false;
 
-  for (const x of [-hx, hx]) {
+  for (const x of [e.minX, e.maxX]) {
     for (const y of [0, d.ridgeY]) {
-      for (const z of [-hz, hz]) {
+      for (const z of [e.minZ, e.maxZ]) {
         v.set(x, y, z).applyMatrix4(group.matrixWorld).project(stage.camera);
         if (!Number.isFinite(v.x) || !Number.isFinite(v.y)) return null;
         if (v.z > 1) anyBehind = true;
@@ -62,8 +64,8 @@ export function measureFraming(stage, home, viewLabel) {
   // but on a flat roof it is the parapet, and either way it is the height
   // reference the prompt anchors on.
   let ridgeNdcY = -Infinity;
-  for (const x of [-hx, hx]) {
-    v.set(x, d.ridgeY, 0).applyMatrix4(group.matrixWorld).project(stage.camera);
+  for (const x of [e.minX, e.maxX]) {
+    v.set(x, d.ridgeY, d.ridgeZ || 0).applyMatrix4(group.matrixWorld).project(stage.camera);
     ridgeNdcY = Math.max(ridgeNdcY, v.y);
   }
 
@@ -72,10 +74,10 @@ export function measureFraming(stage, home, viewLabel) {
   const camLocal = stage.camera.getWorldPosition(new THREE.Vector3());
   group.worldToLocal(camLocal);
 
-  let nearCorner = CORNER_LABEL(hx, -hz), nearD = Infinity;
+  let nearCorner = CORNER_LABEL(e.maxX, e.minZ), nearD = Infinity;
   let nearCornerX = 0.5, nearCornerY = 0.5;
-  for (const x of [-hx, hx]) {
-    for (const z of [-hz, hz]) {
+  for (const x of [e.minX, e.maxX]) {
+    for (const z of [e.minZ, e.maxZ]) {
       const dist = (camLocal.x - x) ** 2 + (camLocal.z - z) ** 2;
       if (dist < nearD) {
         nearD = dist;

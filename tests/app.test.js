@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { defaultHome, defaultScene, defaultExport, defaultBrief, migrate, WALLS } from '../src/defaults.js';
 import { zipStore, crc32, dataUrlToBytes, dataUrlExt } from '../src/zip.js';
 import {
-  buildBrief, colorName, sidingLabel, describeLighting, wallSummary, openingSchedule,
+  buildBrief, colorName, sidingLabel, describeLighting, wallSummary, openingSchedule, ACCESSORIES,
 } from '../src/brief.js';
 import {
   captureSiteView, applySiteView, cycleSiteView, indexOfView, uniqueViewName,
@@ -14,6 +14,9 @@ import {
   HOME_PHOTO_SLOTS, homeSlotByKey, readHomePhotos, filledHomePhotos, unphotographedWalls,
 } from '../src/homephotos.js';
 import { derived, wallFrames, fmtAllUnits, buildHome, getWallHeight, dormerSize, applyHeadAlign } from '../src/build.js';
+import {
+  readBumps, clampBump, footprintExtents, bumpFootprint, wallBands, isRecess, defaultBump,
+} from '../src/bumps.js';
 import { createSidingMaterial } from '../src/textures.js';
 import { History, describeChange } from '../src/history.js';
 import { buildProject, readProject, PROJECT_VERSION } from '../src/project.js';
@@ -21,6 +24,7 @@ import { validateHomeSpec, applySpecToHome, parseHexColor } from '../src/homespe
 import { AI_PROVIDERS, loadApiKeys, saveApiKeys, readPlanWithAutoCycle } from '../src/readplan.js';
 import {
   collectAssets, assetInventory, finishSampleAssets, planPlateLinked, missingHomePhotoNames,
+  removeAsset,
 } from '../src/assets.js';
 import {
   rgbToHex, hexToRgb, luma, saturation, sampleAverage, samplePixels, quantize, suggestFinishRoles,
@@ -1549,4 +1553,297 @@ test('58. A White Point Divides Out The Light The Photo Was Shot In', () => {
   assert.equal(whiteBalanceGains(null), null);
   // No gains means no change, so the raw reading is always still available.
   assert.deepEqual(applyWhiteBalance(siding, null), siding);
+});
+
+test('59. The Brief Takes Shutters And Lights From The Photographs, Not From Taste', () => {
+  const home = defaultHome();
+  const scene = defaultScene();
+
+  // With photographs attached, every accessory class is named and pinned to
+  // them — an unnamed accessory is one the model feels free to style.
+  home.homePhotos = {
+    front: { src: 'data:image/jpeg;base64,FRONT', name: 'front.jpg' },
+    hero: { src: 'data:image/jpeg;base64,HERO', name: 'hero.jpg' },
+  };
+  const shot = buildBrief({ home, scene, site: {} });
+  for (const word of ['shutters', 'light fixtures', 'railings', 'gutters', 'vents']) {
+    assert.ok(shot.toLowerCase().includes(word), `names ${word} explicitly`);
+  }
+  assert.ok(ACCESSORIES.every((a) => shot.includes(a)), 'the accessory list reaches the brief verbatim');
+  // The absence rule matters as much as the presence rule.
+  assert.ok(/no shutters/i.test(shot), 'no shutters in the photo means none in the render');
+  assert.ok(shot.includes('| 8 |'), 'accessories are their own acceptance check');
+  assert.ok(shot.includes('All eight pass'), 'and the gate counts them');
+  assert.ok(shot.includes('**Accessories**'), 'with a correction of their own');
+
+  // With no photographs there is nothing to read accessories off, so the home
+  // carries none rather than whatever the model would have invented.
+  home.homePhotos = {};
+  const blind = buildBrief({ home, scene, site: {} });
+  assert.ok(/carries \*\*none\*\*/.test(blind), 'no photos means no accessories at all');
+  assert.ok(blind.includes('**None present**'), 'the check says so too');
+});
+
+test('60. Every Loaded Image Can Be Deleted Again, By The Same Route', () => {
+  const home = defaultHome();
+  home.homePhotos = { front: { src: 'data:image/jpeg;base64,FRONT', name: 'front.jpg' } };
+  home.siteViews = [captureSiteView({ name: 'lot', sitePhoto: { src: 'data:image/jpeg;base64,LOT' } })];
+  home.activeSiteViewId = home.siteViews[0].id;
+  home.sitePlan = { src: 'data:image/png;base64,PLAN', pdf: 'data:application/pdf;base64,PDF', name: 'plan.pdf', page: 2, pageCount: 4, width: 1700, height: 2200 };
+  home.plan = { ...home.plan, src: 'data:image/png;base64,PLAN' }; // linked to the page above
+  home.panorama = { ...home.panorama, src: 'data:image/jpeg;base64,PANO', name: 'pano.jpg', width: 8000, height: 4000, show: true };
+
+  const ids = collectAssets(home).map((a) => a.id);
+  assert.deepEqual(ids, ['homePhoto:front', `lotPhoto:${home.siteViews[0].id}`, 'sitePlan:page', 'planPlate:plate', 'panorama:pano']);
+
+  // A home photo goes without touching its neighbours.
+  assert.equal(removeAsset(home, 'homePhoto:front').removed, true);
+  assert.equal(home.homePhotos.front, undefined);
+
+  // A lot photo takes its saved view with it, because the alignment and camera
+  // stored beside it are meaningless without the photo.
+  const viewId = home.siteViews[0].id;
+  assert.equal(removeAsset(home, `lotPhoto:${viewId}`).removed, true);
+  assert.equal(home.siteViews.length, 0);
+  assert.equal(home.activeSiteViewId, null, 'the deleted view stops being the active one');
+
+  // The site plan takes the tracing plate when they are the same drawing.
+  const plan = removeAsset(home, 'sitePlan:page');
+  assert.equal(plan.removed, true);
+  assert.equal(plan.alsoPlate, true);
+  assert.equal(home.sitePlan.src, null);
+  assert.equal(home.sitePlan.pdf, null, 'the kept PDF goes too, or the package still ships it');
+  assert.equal(home.plan.src, null);
+
+  assert.equal(removeAsset(home, 'panorama:pano').removed, true);
+  assert.equal(home.panorama.src, null);
+  assert.equal(home.panorama.show, false, 'a hidden-source panorama must not stay switched on');
+
+  assert.deepEqual(collectAssets(home), [], 'everything that could be loaded can be removed');
+  assert.equal(removeAsset(home, 'panorama:pano').removed, false, 'deleting twice is a no-op, not a throw');
+  assert.equal(removeAsset(home, 'nonsense:key').removed, false);
+  assert.equal(removeAsset(null, 'homePhoto:front').removed, false);
+});
+
+test('61. An Unlinked Tracing Plate Survives Deleting The Site Plan', () => {
+  // The plate the user chose separately is a deliberate choice of a different
+  // drawing; deleting the page must not quietly take it.
+  const home = defaultHome();
+  home.sitePlan = { src: 'data:image/png;base64,PAGE', name: 'plan.pdf', page: 1, pageCount: 1, width: 100, height: 100 };
+  home.plan = { ...home.plan, src: 'data:image/png;base64,OTHER' };
+
+  const res = removeAsset(home, 'sitePlan:page');
+  assert.equal(res.alsoPlate, false);
+  assert.equal(home.plan.src, 'data:image/png;base64,OTHER');
+  assert.deepEqual(collectAssets(home).map((a) => a.id), ['planPlate:plate']);
+
+  assert.equal(removeAsset(home, 'planPlate:plate').removed, true);
+  assert.equal(home.plan.src, null);
+});
+
+test('62. A Split-Pitch Roof Puts The Ridge Off The Centreline', () => {
+  const home = defaultHome();
+  const flat = derived(home.dimensions);
+  assert.equal(flat.ridgeZ, 0, 'equal pitches keep the ridge over the middle');
+  assert.equal(flat.split, false);
+  assert.equal(flat.slopeFront, flat.slopeBack);
+  assert.equal(flat.eaveY, flat.eaveYFront, 'the legacy eave key still reads as before');
+
+  // 4/12 front, 6/12 rear: the steeper slope is the short one, so the ridge
+  // slides toward the rear wall and the peak comes out higher than a plain
+  // 4/12 gable would give.
+  home.dimensions.roofPitchBack = 6;
+  const d = derived(home.dimensions);
+  assert.equal(d.split, true);
+  assert.ok(d.ridgeZ > 1, `ridge should sit behind the centreline, got ${d.ridgeZ}`);
+  assert.ok(d.ridgeY > flat.ridgeY, 'the split peak is higher than the symmetrical one');
+
+  // Both planes must actually land on their own eave — that is what makes the
+  // model measurable rather than merely plausible.
+  const W = home.dimensions.widthFt;
+  assert.ok(Math.abs(d.eaveYFront + d.slopeFront * (d.ridgeZ + W / 2) - d.ridgeY) < 1e-6);
+  assert.ok(Math.abs(d.eaveYBack + d.slopeBack * (W / 2 - d.ridgeZ) - d.ridgeY) < 1e-6);
+
+  // A taller front wall does the same thing from the other direction.
+  home.dimensions.roofPitchBack = null;
+  home.dimensions.frontWallHeightFt = 10;
+  const tall = derived(home.dimensions);
+  assert.equal(tall.eaveYFront - tall.eaveYBack, 2);
+  assert.ok(tall.ridgeZ < 0, 'the ridge slides toward the taller wall, which is the front here');
+
+  // A flat roof still answers with a flat roof.
+  home.dimensions.roofStyle = 'flat';
+  const f = derived(home.dimensions);
+  assert.equal(f.ridgeY, f.eaveY);
+  assert.equal(f.slope, 0);
+});
+
+test('63. Bumps Are Read, Clamped And Measured Off The Rectangle', () => {
+  const dim = defaultHome().dimensions;   // 27 wide x 56 long
+
+  // Junk in, usable bump out — this is what a vision model's answer looks like.
+  const [b] = readBumps([{ wall: 'porch', kind: 'porch', offsetFt: '4', lengthFt: 12, depthFt: -6 }]);
+  assert.equal(b.wall, 'front', 'an unknown wall name falls back to the front');
+  assert.equal(b.kind, 'porch');
+  assert.equal(b.offsetFt, 4);
+  assert.ok(b.id, 'every bump gets an id so a row can be edited and deleted');
+  assert.equal(isRecess(b), true);
+  assert.equal(readBumps(null).length, 0);
+
+  // Nothing may hang off the end of the wall it is attached to.
+  const over = readBumps([{ wall: 'left', offsetFt: 40, lengthFt: 30, depthFt: 2 }])[0];
+  clampBump(over, dim);
+  assert.equal(over.lengthFt, 27, 'a bump cannot be longer than the gable end it sits on');
+  assert.equal(over.offsetFt, 0);
+
+  // A recess cannot eat the whole house.
+  const deep = readBumps([{ wall: 'front', depthFt: -50 }])[0];
+  clampBump(deep, dim);
+  assert.ok(deep.depthFt >= -dim.widthFt * 0.75);
+
+  // Footprint: a projecting porch grows the picture, a recess does not.
+  const base = footprintExtents(dim, []);
+  const out = footprintExtents(dim, [readBumps([{ wall: 'front', kind: 'porch', offsetFt: 0, lengthFt: 12, depthFt: 8 }])[0]]);
+  assert.equal(out.minZ, base.minZ - 8 + (dim.eaveOverhangFt || 0), 'the porch reaches past the eave line');
+  assert.deepEqual(footprintExtents(dim, [b]), base, 'a recess stays inside the rectangle');
+
+  // Which wall it lands on, in world coordinates.
+  const fp = bumpFootprint(readBumps([{ wall: 'front', offsetFt: 0, lengthFt: 10, depthFt: 2 }])[0], dim);
+  assert.equal(fp.maxX, dim.lengthFt / 2, 'offset 0 on the front wall is its LEFT corner seen from outside: +X');
+  assert.equal(fp.minZ, -dim.widthFt / 2 - 2);
+});
+
+test('64. A Porch In Front Of A Wall Leaves The Wall Alone', () => {
+  const dim = defaultHome().dimensions;
+  const cut = (raw) => wallBands(readBumps(raw), 'front', dim, 8);
+
+  // A recess opens the wall; an enclosed bump moves it; a porch standing out
+  // in front of it does neither — the doors and windows behind it stay.
+  assert.equal(cut([{ wall: 'front', kind: 'porch', depthFt: -6, offsetFt: 2, lengthFt: 12 }]).length, 1);
+  assert.equal(cut([{ wall: 'front', kind: 'wall', depthFt: 1.33, offsetFt: 2, lengthFt: 12 }]).length, 1);
+  assert.equal(cut([{ wall: 'front', kind: 'porch', depthFt: 6, offsetFt: 2, lengthFt: 12 }]).length, 0);
+
+  assert.equal(cut([{ wall: 'back', kind: 'wall', depthFt: -2 }]).length, 0, 'a bump on another wall does not cut this one');
+
+  // Overlapping bumps must not double-cut the same stretch of siding.
+  const overlap = cut([
+    { wall: 'front', kind: 'wall', depthFt: -2, offsetFt: 0, lengthFt: 10 },
+    { wall: 'front', kind: 'wall', depthFt: -2, offsetFt: 5, lengthFt: 10 },
+  ]);
+  assert.equal(overlap.length, 2);
+  assert.ok(overlap[1].x0 >= overlap[0].x1, 'the second band starts where the first one ends');
+});
+
+test('65. The Model Builds With A Porch, A Bump-Out And A Split Pitch', () => {
+  const home = defaultHome();
+  home.dimensions.roofPitchBack = 6;
+  home.bumps = readBumps([
+    { wall: 'front', kind: 'porch', offsetFt: 0, lengthFt: 12, depthFt: -6, roof: 'none', label: "6' Porch" },
+    { wall: 'back', kind: 'wall', offsetFt: 20, lengthFt: 10, depthFt: 1.33, label: '+16" dining' },
+    { wall: 'front', kind: 'porch', offsetFt: 30, lengthFt: 10, depthFt: 6, roof: 'gable', label: 'Covered deck' },
+  ]);
+
+  const root = buildHome(home, defaultScene());
+  const names = [];
+  root.traverse((o) => { if (o.name) names.push(o.name); });
+  for (const b of home.bumps) {
+    assert.ok(names.includes(`bump:${b.id}`), `${b.label} is in the model`);
+  }
+
+  // The recess cut the wall into bands rather than punching a hole in it: the
+  // porch at the front corner leaves one run of siding beside it, and the
+  // mid-wall bump-out on the back splits that wall in two.
+  const bands = (w) => root.children.find((c) => c.name === `wall:${w}`)
+    .children.filter((c) => c.isMesh && c.userData.wall === w).length;
+  assert.equal(bands('front'), 2, 'the porch leaves one run of siding beside it and one wall at the back of it');
+  assert.equal(bands('back'), 3, 'the bump-out splits the rear wall and re-builds its face further out');
+
+  // The moved faces are walls, not boxes: a door in the recess would be a real
+  // void in the wall at the back of the porch.
+  const zs = root.children.find((c) => c.name === 'wall:front')
+    .children.filter((c) => c.isMesh && c.userData.wall === 'front').map((c) => c.position.z);
+  assert.ok(zs.some((z) => Math.abs(z - 6) < 1e-6), 'the porch back wall stands 6 ft inside the wall line');
+
+  // Every piece of geometry is finite — a NaN here is a blank plate later.
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    o.geometry.computeBoundingBox();
+    const bb = o.geometry.boundingBox;
+    assert.ok(Number.isFinite(bb.min.x) && Number.isFinite(bb.max.y), `${o.name || 'mesh'} has a finite bounding box`);
+  });
+
+  // A home with no bumps at all still builds, and builds the same as before.
+  const plain = buildHome(defaultHome(), defaultScene());
+  assert.ok(plain.children.some((c) => c.name === 'roof'));
+});
+
+test('66. The Brief States The Porch And The Split Pitch', () => {
+  const home = defaultHome();
+  home.dimensions.roofPitchBack = 6;
+  home.bumps = readBumps([
+    { wall: 'front', kind: 'porch', offsetFt: 44, lengthFt: 12, depthFt: -6, label: "6' Porch" },
+  ]);
+  const md = buildBrief({ home, scene: defaultScene() });
+
+  assert.match(md, /SPLIT PITCH/, 'the roof line says the pitches differ');
+  assert.match(md, /off centre/, 'and where that puts the ridge');
+  assert.match(md, /Where the footprint stops being a rectangle/);
+  assert.match(md, /6' Porch/);
+  assert.match(md, /recessed IN/i);
+  assert.match(md, /open-sided/, 'a porch is stated as a real void, not a painted shadow');
+
+  // The wall summary leads with the shape of the wall.
+  assert.match(wallSummary(home, 'front'), /covered porch/);
+
+  // A plain rectangle says so, and says nothing else.
+  const plain = buildBrief({ home: defaultHome(), scene: defaultScene() });
+  assert.match(plain, /a plain rectangle/);
+  assert.doesNotMatch(plain, /SPLIT PITCH/);
+});
+
+test('67. A Plan Read Off A Sheet Carries Its Porch And Its Split Pitch', () => {
+  const res = validateHomeSpec({
+    modelName: 'Redman 25610',
+    dimensions: {
+      widthFt: 26.67, lengthFt: 58.67, wallHeightFt: 8, floorHeightFt: 2.5,
+      roofPitch: 4, roofPitchBack: 7, eaveOverhangFt: 1, rakeOverhangFt: 0.75, roofStyle: 'gable',
+    },
+    bumps: [
+      { kind: 'porch', wall: 'front', offsetFt: 0, lengthFt: 12, depthFt: -6, label: "6' Porch" },
+      { kind: 'wall', wall: 'back', offsetFt: 20, lengthFt: 10, depthFt: 1.33, label: '+16"' },
+      { kind: 'wall', wall: 'nowhere', offsetFt: 900, lengthFt: 500, depthFt: 0, label: 'junk' },
+    ],
+    openings: [{ type: 'door', wall: 'front', offsetFt: 14, widthFt: 3, heightFt: 6.67, sillFt: 0, label: 'Main entry' }],
+    confidence: 'high',
+  });
+
+  assert.equal(res.ok, true);
+  assert.equal(res.spec.dimensions.roofPitchBack, 7);
+  assert.equal(res.spec.bumps.length, 3);
+  assert.equal(res.spec.bumps[0].depthFt, -6, 'a recess stays a recess');
+  assert.equal(res.spec.bumps[2].wall, 'front', 'a wall that does not exist is reported and moved');
+  assert.ok(res.spec.bumps[2].lengthFt <= 58.67);
+  assert.match(res.summary, /split-pitch/);
+  assert.ok(res.issues.some((i) => /depth/i.test(i.text)));
+
+  // A rear pitch equal to the front is not a split pitch, it is a plain gable.
+  const same = validateHomeSpec({
+    dimensions: { widthFt: 27, lengthFt: 56, wallHeightFt: 8, floorHeightFt: 2.5, roofPitch: 4, roofPitchBack: 4, eaveOverhangFt: 1, rakeOverhangFt: 0.75, roofStyle: 'gable' },
+    openings: [],
+  });
+  assert.equal(same.spec.dimensions.roofPitchBack, null);
+
+  // Applying it keeps the bumps, and a spec that read none keeps the ones the
+  // user placed by hand.
+  const home = defaultHome();
+  const applied = applySpecToHome(home, res.spec, (p, i) => `${p}${i}`);
+  assert.equal(applied.bumps.length, 3);
+  assert.ok(applied.bumps[0].id);
+  const kept = applySpecToHome(applied, same.spec, (p, i) => `${p}${i}`);
+  assert.equal(kept.bumps.length, 3, 'a sheet with no bumps does not wipe the porch already placed');
+
+  // And a save round-trips them.
+  const migrated = migrate({ ...home, bumps: applied.bumps });
+  assert.equal(migrated.bumps.length, 3);
+  assert.equal(migrate({ name: 'legacy', dimensions: {}, openings: [] }).bumps.length, 0);
 });
