@@ -178,12 +178,29 @@
       <div class="panel-body">
         <div class="grid2 colors">
           <label><span>Siding</span><input id="c_siding" type="color" autocomplete="off"></label>
-          <label><span>Trim</span><input id="c_trim" type="color" autocomplete="off"></label>
+          <label><span>Trim (casing)</span><input id="c_trim" type="color" autocomplete="off"></label>
+          <label><span>Fascia &amp; rake</span><input id="c_fascia" type="color" autocomplete="off"></label>
+          <label><span>Corner boards</span><input id="c_corner" type="color" autocomplete="off"></label>
           <label><span>Roof</span><input id="c_roof" type="color" autocomplete="off"></label>
           <label><span>Skirting</span><input id="c_skirting" type="color" autocomplete="off"></label>
           <label><span>Door</span><input id="c_door" type="color" autocomplete="off"></label>
           <label><span>Glass</span><input id="c_glass" type="color" autocomplete="off"></label>
         </div>
+
+        <h3 style="margin:12px 0 4px;font-size:10px;color:#6fb2ff;font-weight:600;text-transform:uppercase;">Trim Board Sizes</h3>
+        <div class="grid2">
+          <label><span>Fascia width (ft)</span><input id="f_fasciaWidth" type="number" autocomplete="off" step="0.05" min="0.1" list="boardWidths"></label>
+          <label><span>Corner board (ft)</span><input id="f_cornerBoardWidth" type="number" autocomplete="off" step="0.05" min="0.1" list="boardWidths"></label>
+        </div>
+        <datalist id="boardWidths">
+          <option value="0.29" label="3&frac12;&quot; (1x4)"></option>
+          <option value="0.46" label="5&frac12;&quot; (1x6)"></option>
+          <option value="0.55" label="6&frac58;&quot; (1x8 fascia)"></option>
+          <option value="0.6" label="7&frac14;&quot; (1x8)"></option>
+          <option value="0.79" label="9&frac12;&quot; (1x10)"></option>
+        </datalist>
+        <label class="row check"><input id="f_cornerBoards" type="checkbox" autocomplete="off"><span>Corner boards at the four corners</span></label>
+        <p class="hint">Widths are the face dimension you would read off the board. Corner boards run from the skirting to the eave, one lying flat on each wall, with the long walls lapping over the gable ends.</p>
       </div>
     </section>
 

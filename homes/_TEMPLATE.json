@@ -19,6 +19,9 @@
     "ridgeOverhangFt": null,
     "stepOverhang": "raised",
     "stepOverhangFt": null,
+    "fasciaWidthFt": 0.55,
+    "cornerBoards": true,
+    "cornerBoardWidthFt": 0.29,
     "stepRakeFascia": true,
     "endRakeFascia": false,
     "roofSections": []
@@ -26,6 +29,8 @@
   "colors": {
     "siding": "#8d9299",
     "trim": "#f2f2f0",
+    "fascia": "#f2f2f0",
+    "corner": "#f2f2f0",
     "roof": "#3a3d42",
     "skirting": "#e6e6e1",
     "door": "#f2f2f0",

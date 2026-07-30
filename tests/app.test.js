@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import * as THREE from 'three';
+
 import { defaultHome, defaultScene, defaultExport, migrate, WALLS, newRoofSection } from '../src/defaults.js';
 import {
   derived, wallFrames, fmtAllUnits, buildHome, getWallHeight,
@@ -671,4 +673,106 @@ test('26. Taller Plane Sails Past the Ridge and Hangs Over the Clerestory', () =
   home.dimensions.ridgeOverhangFt = 500;
   const clamped = resolveRoofSections(home.dimensions)[0];
   assert.ok(near(Math.abs(clamped.ridgeSail), clamped.frontRun), 'Sail clamped to the far plane run');
+});
+
+test('27. Corner Boards Lie Flat on Their Own Wall', () => {
+  const home = defaultHome(); // 27 x 56, 8 ft walls on a 2.5 ft floor
+  const root = buildHome(home, defaultScene());
+  root.updateMatrixWorld(true);
+
+  const boardsOn = (wall) => {
+    const out = [];
+    root.children.find((c) => c.name === `wall:${wall}`)
+      .traverse((c) => { if (c.name === 'cornerBoard') out.push(c); });
+    return out;
+  };
+  const facing = (b) => new THREE.Vector3(0, 0, -1)
+    .applyQuaternion(b.getWorldQuaternion(new THREE.Quaternion()));
+  const box = (b) => new THREE.Box3().setFromObject(b);
+
+  const OUTWARD = { front: [0, 0, -1], back: [0, 0, 1], left: [-1, 0, 0], right: [1, 0, 0] };
+  for (const w of WALLS) {
+    const boards = boardsOn(w);
+    assert.equal(boards.length, 2, `${w} wall carries a board at each end`);
+    for (const b of boards) {
+      // Two boards meet at every corner, one per wall — which only reads right
+      // if each faces out along its own wall's normal instead of edge-on.
+      const n = facing(b);
+      const axis = (v) => Math.round(v) || 0; // rounding can hand back -0
+      assert.deepEqual([axis(n.x), axis(n.y), axis(n.z)], OUTWARD[w],
+        `${w} board faces out of the ${w} wall`);
+      const bb = box(b);
+      assert.ok(bb.max.y <= 10.5 + 1e-3, `${w} board dies into the eave, not into the gable`);
+      assert.ok(bb.min.y <= 2.5 + 1e-3, `${w} board runs down to the floor deck`);
+    }
+  }
+
+  // Each board stands at an end of its own wall, hard against the corner.
+  const at = (w, pick) => box(boardsOn(w).sort((a, b) => pick(box(a)) - pick(box(b)))[0]);
+  const frontXs = boardsOn('front').map((b) => box(b).getCenter(new THREE.Vector3()).x);
+  assert.ok(Math.max(...frontXs) > 27, 'One front board at the +X corner');
+  assert.ok(Math.min(...frontXs) < -27, 'The other at the -X corner');
+  const leftZs = boardsOn('left').map((b) => box(b).getCenter(new THREE.Vector3()).z);
+  assert.ok(Math.max(...leftZs) > 13, 'Left end board at the rear corner');
+  assert.ok(Math.min(...leftZs) < -13, 'And at the front corner');
+  assert.ok(at('front', (bb) => bb.min.x).min.z < -13.5, 'Front boards stand proud of the front wall');
+
+  // The pair at one corner covers both faces of it.
+  const cornerFront = boardsOn('front').map(box).find((bb) => bb.max.x > 27);
+  const cornerRight = boardsOn('right').map(box).find((bb) => bb.min.z < -13);
+  assert.ok(cornerFront && cornerRight, 'Both walls contribute a board to the +X/-Z corner');
+  assert.ok(cornerFront.max.x >= 28 - 1e-6 && cornerRight.min.z <= -13.5 + 1e-6,
+    'And they lap rather than leaving the corner itself open');
+
+  // Width and the switch both do what they say.
+  home.dimensions.cornerBoardWidthFt = 0.6;
+  const wide = buildHome(home, defaultScene());
+  wide.updateMatrixWorld(true);
+  const wideBoard = [];
+  wide.children.find((c) => c.name === 'wall:front')
+    .traverse((c) => { if (c.name === 'cornerBoard') wideBoard.push(c); });
+  const wbb = new THREE.Box3().setFromObject(wideBoard[0]);
+  assert.ok(near(wbb.max.x - wbb.min.x, 0.6 + 0.08, 1e-6),
+    'Board is as wide as asked, plus the lap the long walls take over the ends');
+
+  home.dimensions.cornerBoards = false;
+  let any = 0;
+  buildHome(home, defaultScene()).traverse((c) => { if (c.name === 'cornerBoard') any++; });
+  assert.equal(any, 0, 'Switched off, no corner boards anywhere');
+});
+
+test('28. Fascia and Corner Boards Take Their Own Color and Width', () => {
+  const home = defaultHome();
+  home.colors.trim = '#ffffff';
+  home.colors.fascia = '#101010';
+  home.colors.corner = '#804020';
+  home.dimensions.fasciaWidthFt = 1.2;
+
+  const root = buildHome(home, defaultScene());
+  const hex = (m) => `#${m.color.getHexString()}`;
+  assert.equal(hex(root.userData.materials.fascia), '#101010', 'Fascia material carries its own color');
+  assert.equal(hex(root.userData.materials.corner), '#804020', 'So does the corner board material');
+  assert.equal(hex(root.userData.materials.trim), '#ffffff', 'Casing trim is untouched');
+
+  const roof = root.children.find((c) => c.name === 'roof');
+  const section = roof.children.find((c) => c.name === 'roofSection:0');
+  const fascia = section.children.filter((c) => c.name === 'eaveFascia');
+  assert.ok(fascia.length >= 2, 'Both eaves are boarded');
+  for (const f of fascia) {
+    assert.equal(hex(f.material), '#101010', 'Eave fascia is painted with the fascia color');
+    assert.ok(near(f.geometry.parameters.height, 1.2), 'And is as wide as asked');
+  }
+  const corner = [];
+  root.children.find((c) => c.name === 'wall:front').traverse((c) => {
+    if (c.name === 'cornerBoard') corner.push(c);
+  });
+  assert.equal(hex(corner[0].material), '#804020', 'Corner boards are painted with the corner color');
+
+  // A file written before these colors existed reads them off its own trim,
+  // rather than snapping back to the app default.
+  const legacy = migrate({ colors: { trim: '#123456', siding: '#abcdef' } });
+  assert.equal(legacy.colors.fascia, '#123456', 'Fascia inherits the loaded trim color');
+  assert.equal(legacy.colors.corner, '#123456', 'Corner boards inherit it too');
+  const kept = migrate({ colors: { trim: '#123456', fascia: '#000000' } });
+  assert.equal(kept.colors.fascia, '#000000', 'An explicit fascia color survives the load');
 });

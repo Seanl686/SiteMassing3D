@@ -11,8 +11,12 @@ const TRIM_W = 0.28;      // ft, casing width around openings
 const TRIM_PROUD = 0.06;  // ft, how far casing stands off the siding
 const GLASS_INSET = 0.16; // ft, how far glass/door slab sits back from the face
 const ROOF_THICK = 0.45;  // ft
-const FASCIA_H = 0.55;    // ft
+const FASCIA_H = 0.55;    // ft, default face width of a fascia / rake board
 const RAKE_W = 0.18;      // ft, thickness of a raked (sloping) barge board
+const CORNER_PROUD = 0.08; // ft, how far a corner board stands off the siding
+
+/** Face width of the fascia, rake and ridge boards. */
+const fasciaWidth = (dim) => Math.max(0.1, num(dim?.fasciaWidthFt, FASCIA_H));
 
 /**
  * Wall frames, each expressed as an origin at the wall's bottom-left corner as
@@ -433,6 +437,42 @@ export function clampOpening(o, dim) {
 // Walls
 // ---------------------------------------------------------------------------
 
+/**
+ * The vertical boards that finish a building corner.
+ *
+ * Two boards meet at every corner, one lying flat on each wall — which is the
+ * whole point of building them here, in the wall's own frame: they inherit that
+ * wall's rotation and face outward with it, instead of standing edge-on. The
+ * long walls' boards lap `CORNER_PROUD` past the corner to close the joint over
+ * the gable end's, the way they are actually nailed up.
+ */
+function buildCornerBoards(name, dim, top, span, materials) {
+  if (dim.cornerBoards === false) return [];
+  const w = Math.max(0.05, num(dim.cornerBoardWidthFt, 0.29));
+  if (w * 2 >= span) return [];
+  const lap = (name === 'front' || name === 'back') ? CORNER_PROUD : 0;
+
+  const out = [];
+  for (const [u0, u1] of [[-lap, w], [span - w, span + lap]]) {
+    // Stop at the lower of the two ends so a board never pokes through the roof
+    // line where the wall runs up into a gable.
+    const h = Math.min(
+      profileHeightAt(top, Math.max(0, Math.min(span, u0))),
+      profileHeightAt(top, Math.max(0, Math.min(span, u1))),
+    );
+    if (h <= 0.1) continue;
+    const board = new THREE.Mesh(
+      extrude(rectShape(u1 - u0, h, u0, 0), CORNER_PROUD),
+      materials.corner,
+    );
+    board.position.z = -CORNER_PROUD; // proud of the exterior face
+    board.castShadow = true;
+    board.name = 'cornerBoard';
+    out.push(board);
+  }
+  return out;
+}
+
 function buildWall(name, frame, home, materials) {
   const dim = home.dimensions;
   const span = frame.span;
@@ -466,6 +506,8 @@ function buildWall(name, frame, home, materials) {
     og.traverse((c) => { c.userData.opening = o.id; c.userData.wall = c.userData.wall || name; });
     group.add(og);
   }
+
+  for (const board of buildCornerBoards(name, dim, top, span, materials)) group.add(board);
 
   group.applyMatrix4(frameMatrix(frame));
   return group;
@@ -542,9 +584,9 @@ function slopePlane(cx, len, z0, y0, z1, y1, material) {
   return mesh;
 }
 
-function fasciaBoard(cx, len, z, dripY, material) {
-  const fascia = new THREE.Mesh(new THREE.BoxGeometry(len, FASCIA_H, 0.16), material);
-  fascia.position.set(cx, dripY - FASCIA_H / 2 + 0.05, z);
+function fasciaBoard(cx, len, z, dripY, material, fw = FASCIA_H) {
+  const fascia = new THREE.Mesh(new THREE.BoxGeometry(len, fw, 0.16), material);
+  fascia.position.set(cx, dripY - fw / 2 + 0.05, z);
   fascia.castShadow = true;
   fascia.name = 'eaveFascia';
   return fascia;
@@ -554,16 +596,16 @@ function fasciaBoard(cx, len, z, dripY, material) {
  * The raked (sloping) board closing the open end of a roof plane, hung just
  * under the deck so it reads as a finished edge rather than a cut slab.
  */
-function rakeBoard(xEdge, z0, y0, z1, y1, material) {
+function rakeBoard(xEdge, z0, y0, z1, y1, material, fw = FASCIA_H) {
   const angle = Math.atan2(y1 - y0, z1 - z0);
   const runLen = Math.hypot(z1 - z0, y1 - y0);
-  const board = new THREE.Mesh(new THREE.BoxGeometry(RAKE_W, FASCIA_H, runLen), material);
+  const board = new THREE.Mesh(new THREE.BoxGeometry(RAKE_W, fw, runLen), material);
   const n = new THREE.Vector3(0, Math.cos(angle), -Math.sin(angle));
   board.rotation.x = -angle;
   board.position.set(
     xEdge,
-    (y0 + y1) / 2 - n.y * (FASCIA_H / 2 - 0.05),
-    (z0 + z1) / 2 - n.z * (FASCIA_H / 2 - 0.05),
+    (y0 + y1) / 2 - n.y * (fw / 2 - 0.05),
+    (z0 + z1) / 2 - n.z * (fw / 2 - 0.05),
   );
   board.castShadow = true;
   board.name = 'rakeBoard';
@@ -596,6 +638,7 @@ function stepOverhang(sec, neighbour, which, dim) {
 function buildRoofSection(sec, span, dim, materials) {
   const ov = num(dim.eaveOverhangFt, 1);
   const W = num(dim.widthFt, 27);
+  const fw = fasciaWidth(dim);
   const g = new THREE.Group();
   g.name = `roofSection:${sec.index}`;
   g.userData.roofSection = sec.index;
@@ -618,8 +661,8 @@ function buildRoofSection(sec, span, dim, materials) {
     g.add(slab);
     for (const [i, x] of [[0, span.front[0] + RAKE_W / 2], [1, span.front[1] - RAKE_W / 2]]) {
       if (!span.rake.front[i]) continue;
-      const board = new THREE.Mesh(new THREE.BoxGeometry(RAKE_W, FASCIA_H, W + 2 * ov), materials.trim);
-      board.position.set(x, sec.peakY - FASCIA_H / 2 + 0.05, 0);
+      const board = new THREE.Mesh(new THREE.BoxGeometry(RAKE_W, fw, W + 2 * ov), materials.fascia);
+      board.position.set(x, sec.peakY - fw / 2 + 0.05, 0);
       board.castShadow = true;
       board.name = 'rakeBoard';
       g.add(board);
@@ -645,14 +688,14 @@ function buildRoofSection(sec, span, dim, materials) {
     const [dripZ, dripY, ridgeEndZ, ridgeEndY] = which === 'front'
       ? [z0, y0, z1, y1]
       : [z1, y1, z0, y0];
-    g.add(fasciaBoard(cx, len, dripZ, dripY, materials.trim));
+    g.add(fasciaBoard(cx, len, dripZ, dripY, materials.fascia, fw));
     if (sail) {
-      const board = fasciaBoard(cx, len, ridgeEndZ, ridgeEndY, materials.trim);
+      const board = fasciaBoard(cx, len, ridgeEndZ, ridgeEndY, materials.fascia, fw);
       board.name = 'ridgeFascia';
       g.add(board);
     }
     for (const [i, x] of [[0, xa + RAKE_W / 2], [1, xb - RAKE_W / 2]]) {
-      if (span.rake[which][i]) g.add(rakeBoard(x, z0, y0, z1, y1, materials.trim));
+      if (span.rake[which][i]) g.add(rakeBoard(x, z0, y0, z1, y1, materials.fascia, fw));
     }
   };
 
@@ -690,7 +733,7 @@ function buildRoofSection(sec, span, dim, materials) {
     wall.name = 'ridgeStep';
     g.add(wall);
 
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(bodyLen, 0.42, 0.6), materials.trim);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(bodyLen, 0.42, 0.6), materials.fascia);
     cap.position.set(bodyCx, highY - 0.16, sec.ridgeZ);
     cap.castShadow = true;
     g.add(cap);
@@ -1438,6 +1481,8 @@ export function buildHome(home, sceneOpts) {
   const materials = {
     siding: mat(home.colors.siding),
     trim: mat(home.colors.trim, { roughness: 0.75 }),
+    fascia: mat(home.colors.fascia ?? home.colors.trim, { roughness: 0.75 }),
+    corner: mat(home.colors.corner ?? home.colors.trim, { roughness: 0.78 }),
     roof: mat(home.colors.roof, { roughness: 0.85 }),
     skirting: mat(home.colors.skirting, { roughness: 0.95 }),
     concrete: mat('#b4bcc6', { roughness: 0.95 }),

@@ -203,6 +203,7 @@ const dimFields = [
   ['f_floorHeight', 'floorHeightFt'], ['f_pitch', 'roofPitch'],
   ['f_eaveOverhang', 'eaveOverhangFt'], ['f_rakeOverhang', 'rakeOverhangFt'],
   ['f_dormerWidth', 'dormerWidthFt'], ['f_dormerHeight', 'dormerHeightFt'],
+  ['f_fasciaWidth', 'fasciaWidthFt'], ['f_cornerBoardWidth', 'cornerBoardWidthFt'],
   ['f_frontWallHeight', 'frontWallHeightFt'], ['f_backWallHeight', 'backWallHeightFt'],
   ['f_leftWallHeight', 'leftWallHeightFt'], ['f_rightWallHeight', 'rightWallHeightFt'],
 ];
@@ -213,7 +214,8 @@ const asymFields = [
 const overhangModes = [['f_stepOverhang', 'stepOverhang'], ['f_ridgeOverhang', 'ridgeOverhang']];
 const overhangAmounts = [['f_stepOverhangFt', 'stepOverhangFt'], ['f_ridgeOverhangFt', 'ridgeOverhangFt']];
 const colorFields = [
-  ['c_siding', 'siding'], ['c_trim', 'trim'], ['c_roof', 'roof'],
+  ['c_siding', 'siding'], ['c_trim', 'trim'], ['c_fascia', 'fascia'],
+  ['c_corner', 'corner'], ['c_roof', 'roof'],
   ['c_skirting', 'skirting'], ['c_door', 'door'], ['c_glass', 'glass'],
 ];
 const planFields = [['p_width', 'widthFt'], ['p_rot', 'rotation'], ['p_x', 'offsetX'], ['p_z', 'offsetZ']];
@@ -255,6 +257,7 @@ function syncForm() {
   if ($('f_stepRakeFascia')) $('f_stepRakeFascia').checked = state.home.dimensions.stepRakeFascia !== false;
   if ($('f_endRakeFascia')) $('f_endRakeFascia').checked = !!state.home.dimensions.endRakeFascia;
   syncAsymFields();
+  if ($('f_cornerBoards')) $('f_cornerBoards').checked = state.home.dimensions.cornerBoards !== false;
   if ($('f_dormerCount')) $('f_dormerCount').value = state.home.dimensions.dormerCount ?? 0;
   if ($('f_dormerStyle')) $('f_dormerStyle').value = state.home.dimensions.dormerStyle || 'gable';
   if ($('f_dormerFalseEave')) $('f_dormerFalseEave').checked = state.home.dimensions.dormerFalseEave !== false;
@@ -424,6 +427,12 @@ function bind() {
     $('btnResetRoofSections').addEventListener('click', () => {
       state.home.dimensions.roofSections = [];
       rebuild(); save(); refreshRoofSections();
+    });
+  }
+  if ($('f_cornerBoards')) {
+    $('f_cornerBoards').addEventListener('change', (e) => {
+      state.home.dimensions.cornerBoards = e.target.checked;
+      rebuild(); save();
     });
   }
   if ($('f_dormerCount')) {

@@ -95,6 +95,15 @@ and *None*, and the distance defaults to the rake overhang unless you type your
 own. *Rake board on the gable ends too* extends the same trim to the outer ends;
 it is off by default so existing plates render exactly as they did.
 
+**Trim boards** — the *Exterior Materials & Colors* panel paints three families
+separately: casing around the openings, the fascia / rake / ridge boards, and the
+corner boards. Leaving fascia and corner unset makes them follow the casing trim,
+so nothing changes until you want it to. *Trim Board Sizes* sets the face width
+of the fascia and of the corner boards; the corner boards themselves can be
+switched off. Two boards meet at every corner, one lying flat on each wall, with
+the long walls lapping over the gable ends — they run from the skirting up to the
+eave, and stop there rather than climbing into the gable.
+
 **Floor plan plate** — load the spec-sheet PNG, set *Plate width (ft)* so the
 printed footprint matches the blue outline (turn on *Dimension outline on ground*
 to see it), then nudge Offset X/Z and Rotation until it lines up. With *Plan-pick
@@ -123,6 +132,7 @@ Drop it in `homes/`, add a line to `homes/index.json`, and it shows up in the
     "roofStyle": "gable"
   },
   "colors": { "siding": "#8d9299", "trim": "#f2f2f0", "roof": "#3a3d42",
+              "fascia": "#f2f2f0", "corner": "#f2f2f0",
               "skirting": "#e6e6e1", "door": "#f2f2f0", "glass": "#4d6070" },
   "openings": [
     { "id": "d1", "type": "door", "wall": "front",
@@ -169,6 +179,12 @@ optional; a file without them is a plain symmetric gable.
 - `roofStyle` — `gable`, `shed` (high edge at the rear wall), `shedFront` (high
   edge at the front wall), or `flat`. A shed grows the wall on its high side to
   meet the plane, and a flat deck levels both walls onto one height.
+- `trim` paints the casing around openings; `fascia` the fascia, rake and ridge
+  boards; `corner` the corner boards. Leave `fascia` or `corner` out and they
+  follow `trim`, which is what a file written before they existed meant.
+- `fasciaWidthFt` / `cornerBoardWidthFt` are the face dimension you would read
+  off the board — 0.55 ft is a nominal 1x8 fascia, 0.29 ft a 1x4 corner board.
+  `cornerBoards: false` leaves the corners bare.
 - `wall` — `front` and `back` are the long walls, `left` and `right` the gable ends.
 - `type` — `door`, `slider`, or `window`.
 - `offsetFt` — from the wall's left corner, viewed from outside.

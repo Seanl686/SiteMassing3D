@@ -51,6 +51,11 @@ export function defaultHome() {
       // the taller plane can sail past and hang over the clerestory below.
       ridgeOverhang: 'raised',  // 'raised' (taller plane sails) or 'none'
       ridgeOverhangFt: null,    // ft past the ridge; null = eaveOverhangFt
+      // Trim board sizes. Widths are the face dimension you would read off a
+      // board: 0.55 ft is a nominal 1x8 fascia, 0.29 ft a 1x4 corner board.
+      fasciaWidthFt: 0.55,
+      cornerBoards: true,
+      cornerBoardWidthFt: 0.29,
       // Roof sections along the length. Empty = one roof over the whole home.
       // Each entry: { id, label, startFt, pitch, frontPitch, backPitch,
       //   ridgeOffsetFt, ridgeStepFt, frontWallHeightFt, backWallHeightFt,
@@ -69,6 +74,8 @@ export function defaultHome() {
     colors: {
       siding: '#8d9299',
       trim: '#f2f2f0',
+      fascia: '#f2f2f0',   // fascia, rake and ridge boards
+      corner: '#f2f2f0',   // corner boards
       roof: '#3a3d42',
       skirting: '#e6e6e1',
       door: '#f2f2f0',
@@ -160,10 +167,19 @@ export function migrate(home) {
   const base = defaultHome();
   const dims = { ...base.dimensions, ...(home.dimensions || {}) };
   dims.roofSections = normalizeRoofSections(dims.roofSections);
+
+  const rawColors = home.colors || {};
+  const colors = { ...base.colors, ...rawColors };
+  // A file written before the fascia and corner boards had their own colors
+  // meant "same as the trim" — inheriting the base default instead would
+  // repaint someone's home the moment they opened it.
+  if (!rawColors.fascia) colors.fascia = colors.trim;
+  if (!rawColors.corner) colors.corner = colors.trim;
+
   const out = {
     name: home.name || base.name,
     dimensions: dims,
-    colors: { ...base.colors, ...(home.colors || {}) },
+    colors,
     openings: (home.openings || []).map((o) => ({
       id: o.id || nextId('o'),
       type: o.type || 'window',
