@@ -84,3 +84,15 @@ the package says which. Now the geometry carries it and the brief states it.
   centre with the long shallow front slope and short steep rear one; the
   recessed porch shows posts on the wall line with the house wall and its window
   behind them; the projecting deck shows its own gable cap.
+
+## Follow-up: launching it from the application menu
+
+`bin/sitemassing3d` serves the folder on 5173 and opens it, reusing a server
+that is already listening rather than failing on the port. `~/.local/bin/
+sitemassing3d` symlinks to it and `~/.local/share/applications/
+sitemassing3d.desktop` points at that symlink — the same shape as the
+`perspectives` and `journeys` entries.
+
+Gotcha: `dirname "$0"` resolves to `~/.local/bin` when the script is invoked
+through the symlink, so the server came up rooted in the wrong folder and every
+path 404'd while `/` still answered 200. `readlink -f -- "$0"` first.
