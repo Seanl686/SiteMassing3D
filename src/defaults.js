@@ -47,6 +47,10 @@ export function defaultHome() {
       stepOverhangFt: null,     // ft past the boundary; null = rakeOverhangFt
       stepRakeFascia: true,     // board along a step overhang's raked edge
       endRakeFascia: false,     // the same board on the outer gable-end rakes
+      // Where one plane peaks above the other there is no ridge to meet at, so
+      // the taller plane can sail past and hang over the clerestory below.
+      ridgeOverhang: 'raised',  // 'raised' (taller plane sails) or 'none'
+      ridgeOverhangFt: null,    // ft past the ridge; null = eaveOverhangFt
       // Roof sections along the length. Empty = one roof over the whole home.
       // Each entry: { id, label, startFt, pitch, frontPitch, backPitch,
       //   ridgeOffsetFt, ridgeStepFt, frontWallHeightFt, backWallHeightFt,

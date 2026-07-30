@@ -78,14 +78,22 @@ two neighbouring sections disagree, the wall closing the gap between their roofs
 is built for you, the long walls step at the boundary, and each gable end traces
 whatever cross-section its end section resolves to.
 
+*Overhangs at the peak.* Once one plane peaks above the other there is no ridge
+for them to meet at — the tall plane would otherwise stop dead against the
+clerestory wall. By default it keeps climbing past the ridge at its own pitch and
+hangs over the low roof, with a fascia on that free edge, so the peak reads as an
+eave rather than a cut. **Ridge overhang** turns that off, and the distance
+defaults to the eave overhang. Note the tallest point of the roof is then the
+sailing edge, not the peak; the section readout prints both.
+
 *Overhangs at the step.* A section whose roof stands above its neighbour has
-nothing to butt against, so by default it carries the overhang past the step on
-every side that hangs free — the same eave it gets at a gable end — with a rake
-board along the exposed sloping edge. **Step overhang** switches that between
-*Raised roof only*, *Both sides of the step* (the lower roof gets one too) and
-*None*, and the distance defaults to the rake overhang unless you type your own.
-*Rake board on the gable ends too* extends the same trim to the outer ends; it is
-off by default so existing plates render exactly as they did.
+nothing to butt against either, so by default it carries the overhang past the
+step on every side that hangs free — the same eave it gets at a gable end — with
+a rake board along the exposed sloping edge. **Step overhang** switches that
+between *Raised roof only*, *Both sides of the step* (the lower roof gets one too)
+and *None*, and the distance defaults to the rake overhang unless you type your
+own. *Rake board on the gable ends too* extends the same trim to the outer ends;
+it is off by default so existing plates render exactly as they did.
 
 **Floor plan plate** — load the spec-sheet PNG, set *Plate width (ft)* so the
 printed footprint matches the blue outline (turn on *Dimension outline on ground*
@@ -132,6 +140,7 @@ optional; a file without them is a plain symmetric gable.
   "asymmetricRoof": true,
   "frontPitch": 9, "backPitch": 3,
   "ridgeOffsetFt": 2.5, "ridgeStepFt": 0,
+  "ridgeOverhang": "raised", "ridgeOverhangFt": null,
   "stepOverhang": "raised", "stepOverhangFt": null,
   "stepRakeFascia": true, "endRakeFascia": false,
   "roofSections": [
@@ -150,6 +159,9 @@ optional; a file without them is a plain symmetric gable.
   `startFt` means "inherit from the whole-home settings above".
 - `pitch` sets both slopes of a section at once; `frontPitch` / `backPitch`
   override it per plane.
+- `ridgeOverhang` — `raised` (default) or `none`. Whether the taller plane
+  carries on past the ridge; `ridgeOverhangFt` sets how far, `null` inherits
+  `eaveOverhangFt`.
 - `stepOverhang` — `raised` (default), `both` or `none`. How far a roof reaches
   past a section boundary; `stepOverhangFt` sets the distance, `null` inherits
   `rakeOverhangFt`. `stepRakeFascia` / `endRakeFascia` put a barge board along the

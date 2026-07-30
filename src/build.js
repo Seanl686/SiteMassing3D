@@ -140,6 +140,23 @@ function solveSection(spec, index, startFt, endFt, dim, inherit) {
 
   const frontRun = ridgeZ - frontEdgeZ;
   const backRun = backEdgeZ - ridgeZ;
+  const frontSlope = frontRun > 0.01 ? (frontPeakY - frontEaveY) / frontRun : 0;
+  const backSlope = backRun > 0.01 ? (backPeakY - backEaveY) / backRun : 0;
+
+  // Ridge overhang. When one plane peaks above the other there is no ridge for
+  // them to meet at — the tall plane just stops against the clerestory wall. It
+  // can instead carry on past it, climbing at its own pitch, and hang over the
+  // low roof the way an eave hangs over a wall.
+  let ridgeSail = 0;
+  const sailAmt = Math.max(0, num(dim.ridgeOverhangFt, num(dim.eaveOverhangFt, 1)));
+  if ((dim.ridgeOverhang ?? 'raised') !== 'none' && sailAmt > 0 && roofStyle === 'gable') {
+    const diff = frontPeakY - backPeakY;
+    // Only worth doing once the taller plane clears the shorter by more than the
+    // deck is thick; below that the overhang would sit inside the roof it covers.
+    if (diff > ROOF_THICK + 0.05) ridgeSail = Math.min(sailAmt, backRun);
+    else if (-diff > ROOF_THICK + 0.05) ridgeSail = -Math.min(sailAmt, frontRun);
+  }
+  const sailRise = Math.abs(ridgeSail) * (ridgeSail > 0 ? frontSlope : backSlope);
 
   return {
     id: spec.id || `sec${index}`,
@@ -164,11 +181,16 @@ function solveSection(spec, index, startFt, endFt, dim, inherit) {
     frontPeakY,
     backPeakY,
     peakY: Math.max(frontPeakY, backPeakY),
+    // + the front plane sails past the ridge, - the back plane does, 0 neither.
+    ridgeSail,
+    // Where the planes actually hand over, and the top of the sailing edge.
+    ridgeCutZ: ridgeZ + ridgeSail,
+    topY: Math.max(frontPeakY, backPeakY) + sailRise,
     // Effective slopes — what the plane actually does once the ridge step and
     // the eave heights have had their say. These, not the typed pitch, drive
     // every piece of geometry below.
-    frontSlope: frontRun > 0.01 ? (frontPeakY - frontEaveY) / frontRun : 0,
-    backSlope: backRun > 0.01 ? (backPeakY - backEaveY) / backRun : 0,
+    frontSlope,
+    backSlope,
     frontRun,
     backRun,
   };
@@ -204,7 +226,9 @@ export function resolveRoofSections(dim) {
 /** Top-of-deck height of a section's roof at world Z, overhangs included. */
 export function roofTopAt(sec, z) {
   if (sec.roofStyle === 'flat') return sec.peakY;
-  if (z <= sec.ridgeZ) return sec.frontEaveY + (z - sec.frontEdgeZ) * sec.frontSlope;
+  // Both formulas are the plane's own line, so extending one past the ridge is
+  // just a matter of moving where the two hand over.
+  if (z <= sec.ridgeCutZ) return sec.frontEaveY + (z - sec.frontEdgeZ) * sec.frontSlope;
   return sec.backPeakY - (z - sec.ridgeZ) * sec.backSlope;
 }
 
@@ -219,7 +243,7 @@ export function derived(dim) {
   // symmetric roof, which is what the dormer and camera code grew up on.
   const slope = dim.roofStyle === 'flat' ? 0 : num(dim.roofPitch, 4) / 12;
   const eaveY = num(dim.floorHeightFt, 0) + num(dim.wallHeightFt, 8);
-  const ridgeY = sections.reduce((m, s) => Math.max(m, s.peakY), -Infinity);
+  const ridgeY = sections.reduce((m, s) => Math.max(m, s.topY), -Infinity);
   const lowY = sections.reduce((m, s) => Math.min(m, s.frontEaveY, s.backEaveY), Infinity);
   return {
     slope,
@@ -606,26 +630,48 @@ function buildRoofSection(sec, span, dim, materials) {
   const frontDripZ = sec.frontEdgeZ - ov;
   const backDripZ = sec.backEdgeZ + ov;
 
-  /** Build one plane over its own X extent, with its eave fascia and rake boards. */
-  const plane = (which, z0, y0, z1, y1) => {
+  /**
+   * Build one plane over its own X extent, with its eave fascia and rake boards.
+   * `sail` boards the ridge end too, which is a free drip edge once that plane
+   * has carried on past the ridge instead of dying into the clerestory.
+   */
+  const plane = (which, z0, y0, z1, y1, sail) => {
     const [xa, xb] = span[which];
     const len = Math.max(0.05, xb - xa);
     const cx = (xa + xb) / 2;
-    const dripEnd = which === 'front' ? [z0, y0] : [z1, y1];
     const mesh = slopePlane(cx, len, z0, y0, z1, y1, materials.roof);
     mesh.name = `roofPlane:${which}`;
     g.add(mesh);
-    g.add(fasciaBoard(cx, len, dripEnd[0], dripEnd[1], materials.trim));
+    const [dripZ, dripY, ridgeEndZ, ridgeEndY] = which === 'front'
+      ? [z0, y0, z1, y1]
+      : [z1, y1, z0, y0];
+    g.add(fasciaBoard(cx, len, dripZ, dripY, materials.trim));
+    if (sail) {
+      const board = fasciaBoard(cx, len, ridgeEndZ, ridgeEndY, materials.trim);
+      board.name = 'ridgeFascia';
+      g.add(board);
+    }
     for (const [i, x] of [[0, xa + RAKE_W / 2], [1, xb - RAKE_W / 2]]) {
       if (span.rake[which][i]) g.add(rakeBoard(x, z0, y0, z1, y1, materials.trim));
     }
   };
 
-  if (sec.ridgeZ - frontDripZ > 0.02) {
-    plane('front', frontDripZ, sec.frontEaveY - ov * sec.frontSlope, sec.ridgeZ, sec.frontPeakY);
+  // Whichever plane sails past the ridge ends beyond it, still climbing at its
+  // own pitch; the other stops at the ridge and passes underneath.
+  const frontEndZ = sec.ridgeZ + Math.max(0, sec.ridgeSail);
+  const backStartZ = sec.ridgeZ + Math.min(0, sec.ridgeSail);
+
+  if (frontEndZ - frontDripZ > 0.02) {
+    plane('front',
+      frontDripZ, sec.frontEaveY - ov * sec.frontSlope,
+      frontEndZ, sec.frontEaveY + (frontEndZ - sec.frontEdgeZ) * sec.frontSlope,
+      sec.ridgeSail > 0);
   }
-  if (backDripZ - sec.ridgeZ > 0.02) {
-    plane('back', sec.ridgeZ, sec.backPeakY, backDripZ, sec.backEaveY - ov * sec.backSlope);
+  if (backDripZ - backStartZ > 0.02) {
+    plane('back',
+      backStartZ, sec.backPeakY - (backStartZ - sec.ridgeZ) * sec.backSlope,
+      backDripZ, sec.backEaveY - ov * sec.backSlope,
+      sec.ridgeSail < 0);
   }
 
   // When the two planes peak at different heights they cannot meet: the gap

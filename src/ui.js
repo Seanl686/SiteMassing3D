@@ -51,11 +51,16 @@ function sectionReadout(sec) {
   const stepNote = Math.abs(step) > 0.02
     ? ` · <b>${step > 0 ? 'rear' : 'front'} peak ${fmtFt(Math.abs(step))} higher</b>`
     : ' · peaks level';
+  // A sailing plane tops out past the ridge, so the peak is no longer the
+  // highest point on the roof.
+  const sailNote = sec.ridgeSail
+    ? ` · ${sec.ridgeSail > 0 ? 'front' : 'rear'} plane sails ${fmtFt(Math.abs(sec.ridgeSail))} past the ridge to ${fmtFt(sec.topY)}`
+    : '';
   el.innerHTML =
     `front peak <b>${fmtFt(sec.frontPeakY)}</b> at ${pitch(sec.frontSlope)} · ` +
     `rear peak <b>${fmtFt(sec.backPeakY)}</b> at ${pitch(sec.backSlope)}${stepNote}<br>` +
     `eaves ${fmtFt(sec.frontEaveY)} front / ${fmtFt(sec.backEaveY)} rear · ` +
-    `ridge ${sec.ridgeZ === 0 ? 'on center' : `${fmtFt(Math.abs(sec.ridgeZ))} ${sec.ridgeZ > 0 ? 'rear' : 'front'} of center`}`;
+    `ridge ${sec.ridgeZ === 0 ? 'on center' : `${fmtFt(Math.abs(sec.ridgeZ))} ${sec.ridgeZ > 0 ? 'rear' : 'front'} of center`}${sailNote}`;
   return el;
 }
 

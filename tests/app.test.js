@@ -338,7 +338,10 @@ test('17. Independent Front/Back Pitch Raises One Peak Above the Other', () => {
   assert.ok(near(s.backPeakY, 10.5 + 13.5 * (3 / 12)), 'Back plane climbs at 3/12');
   assert.ok(s.frontPeakY - s.backPeakY > 5, 'Front peak stands well above the back peak');
   assert.ok(near(s.peakY, s.frontPeakY), 'Section peak is the higher of the two planes');
-  assert.ok(near(derived(home.dimensions).ridgeY, s.frontPeakY), 'Ridge height follows the tall plane');
+  // The tall plane sails past the ridge by default, so the roof's highest point
+  // is that free edge rather than the peak itself.
+  assert.ok(near(s.topY, s.frontPeakY + s.ridgeSail * s.frontSlope), 'Top of roof is the sailing edge');
+  assert.ok(near(derived(home.dimensions).ridgeY, s.topY), 'Ridge height follows the tall plane');
 
   // The gap between the two planes has to be closed by a clerestory wall.
   const roof = buildHome(home, defaultScene()).children.find((c) => c.name === 'roof');
@@ -388,7 +391,7 @@ test('19. Per-Section Roofs: Different Pitch and Peak on Each Half', () => {
   assert.ok(near(secs[1].frontSlope, 9 / 12), 'Right half runs at 9/12');
   assert.ok(near(secs[1].frontEaveY, 12.5), 'Right half carries its own 10 ft front wall');
   assert.ok(secs[1].peakY > secs[0].peakY + 5, 'Right half peaks well above the left');
-  assert.ok(near(derived(home.dimensions).ridgeY, secs[1].peakY), 'Overall ridge is the tallest section');
+  assert.ok(near(derived(home.dimensions).ridgeY, secs[1].topY), 'Overall ridge is the tallest section');
 
   const roof = buildHome(home, defaultScene()).children.find((c) => c.name === 'roof');
   assert.ok(roof.children.find((c) => c.name === 'roofSection:0'), 'First section built');
@@ -603,4 +606,69 @@ test('25. Raised Roof Sections Carry an Overhang Past the Step', () => {
     .children.find((c) => c.name === 'roofSection:0');
   assert.equal(trimmed.children.filter((c) => c.name === 'rakeBoard').length, 4,
     'Opting in trims all four raked edges — both planes at both ends');
+});
+
+test('26. Taller Plane Sails Past the Ridge and Hangs Over the Clerestory', () => {
+  const home = defaultHome(); // 27 ft wide, 8 ft walls, 2.5 ft floor, 1 ft eave overhang
+  Object.assign(home.dimensions, { asymmetricRoof: true, frontPitch: 9, backPitch: 2 });
+
+  const s = resolveRoofSections(home.dimensions)[0];
+  assert.ok(s.frontPeakY > s.backPeakY + 0.5, 'Front plane peaks well above the back one');
+  assert.ok(near(s.ridgeSail, 1), 'Front plane sails past the ridge by the eave overhang');
+  assert.ok(near(s.ridgeCutZ, s.ridgeZ + 1), 'The planes now hand over a foot past the ridge');
+  assert.ok(near(s.topY, s.frontPeakY + s.frontSlope), 'The sailing edge is the top of the roof');
+  assert.ok(near(roofTopAt(s, s.ridgeZ + 0.5), s.frontEaveY + (s.ridgeZ + 0.5 - s.frontEdgeZ) * s.frontSlope),
+    'Just past the ridge the roof is still the front plane, still climbing');
+  assert.ok(roofTopAt(s, s.ridgeZ + 0.5) > s.frontPeakY, 'Which puts it above the peak');
+
+  const planeOf = (h, which) => {
+    const roof = buildHome(h, defaultScene()).children.find((c) => c.name === 'roof');
+    const sec = roof.children.find((c) => c.name === 'roofSection:0');
+    return {
+      mesh: sec.children.find((c) => c.name === `roofPlane:${which}`),
+      ridgeFascia: sec.children.filter((c) => c.name === 'ridgeFascia').length,
+      clerestory: sec.children.some((c) => c.name === 'ridgeStep'),
+    };
+  };
+
+  // The front plane is a foot longer along the slope than its run to the ridge,
+  // and its new free edge is boarded.
+  const sailed = planeOf(home, 'front');
+  const runToRidge = Math.hypot(s.ridgeZ - (s.frontEdgeZ - 1), s.frontPeakY - (s.frontEaveY - s.frontSlope));
+  assert.ok(sailed.mesh.geometry.parameters.depth > runToRidge + 0.9, 'Front plane reaches past the ridge');
+  assert.equal(sailed.ridgeFascia, 1, 'Its sailing edge gets a fascia');
+  assert.ok(sailed.clerestory, 'The clerestory wall it hangs over is still there');
+
+  // Turning it off puts the plane back against the clerestory.
+  home.dimensions.ridgeOverhang = 'none';
+  const stopped = resolveRoofSections(home.dimensions)[0];
+  assert.equal(stopped.ridgeSail, 0, 'No sail when switched off');
+  assert.ok(near(stopped.ridgeCutZ, stopped.ridgeZ), 'Planes hand over at the ridge again');
+  assert.ok(near(stopped.topY, stopped.peakY), 'Top of roof is the peak again');
+  assert.equal(planeOf(home, 'front').ridgeFascia, 0, 'And there is no free edge to board');
+
+  // The distance is settable, and the back plane sails when it is the tall one.
+  home.dimensions.ridgeOverhang = 'raised';
+  home.dimensions.ridgeOverhangFt = 2.5;
+  assert.ok(near(resolveRoofSections(home.dimensions)[0].ridgeSail, 2.5), 'Custom ridge overhang honoured');
+
+  home.dimensions.frontPitch = 2;
+  home.dimensions.backPitch = 9;
+  const flipped = resolveRoofSections(home.dimensions)[0];
+  assert.ok(near(flipped.ridgeSail, -2.5), 'Back plane sails the other way when it is taller');
+  assert.ok(near(flipped.ridgeCutZ, flipped.ridgeZ - 2.5), 'Hand-over moves to the front side of the ridge');
+  assert.equal(planeOf(home, 'back').ridgeFascia, 1, 'And the back plane carries the fascia');
+
+  // Level peaks meet at a real ridge, so nothing sails and nothing is boarded.
+  home.dimensions.backPitch = 2;
+  const level = resolveRoofSections(home.dimensions)[0];
+  assert.equal(level.ridgeSail, 0, 'A symmetric roof has a ridge to meet at');
+  assert.equal(planeOf(home, 'front').ridgeFascia, 0, 'So no ridge fascia');
+  assert.ok(!planeOf(home, 'front').clerestory, 'And no clerestory');
+
+  // A sail can never overshoot the plane it hangs over.
+  home.dimensions.backPitch = 9;
+  home.dimensions.ridgeOverhangFt = 500;
+  const clamped = resolveRoofSections(home.dimensions)[0];
+  assert.ok(near(Math.abs(clamped.ridgeSail), clamped.frontRun), 'Sail clamped to the far plane run');
 });

@@ -210,6 +210,8 @@ const asymFields = [
   ['f_frontPitch', 'frontPitch'], ['f_backPitch', 'backPitch'],
   ['f_ridgeOffset', 'ridgeOffsetFt'], ['f_ridgeStep', 'ridgeStepFt'],
 ];
+const overhangModes = [['f_stepOverhang', 'stepOverhang'], ['f_ridgeOverhang', 'ridgeOverhang']];
+const overhangAmounts = [['f_stepOverhangFt', 'stepOverhangFt'], ['f_ridgeOverhangFt', 'ridgeOverhangFt']];
 const colorFields = [
   ['c_siding', 'siding'], ['c_trim', 'trim'], ['c_roof', 'roof'],
   ['c_skirting', 'skirting'], ['c_door', 'door'], ['c_glass', 'glass'],
@@ -244,8 +246,12 @@ function syncForm() {
   for (const [id, key] of asymFields) {
     if ($(id)) $(id).value = state.home.dimensions[key] ?? '';
   }
-  if ($('f_stepOverhang')) $('f_stepOverhang').value = state.home.dimensions.stepOverhang || 'raised';
-  if ($('f_stepOverhangFt')) $('f_stepOverhangFt').value = state.home.dimensions.stepOverhangFt ?? '';
+  for (const [id, key] of overhangModes) {
+    if ($(id)) $(id).value = state.home.dimensions[key] || 'raised';
+  }
+  for (const [id, key] of overhangAmounts) {
+    if ($(id)) $(id).value = state.home.dimensions[key] ?? '';
+  }
   if ($('f_stepRakeFascia')) $('f_stepRakeFascia').checked = state.home.dimensions.stepRakeFascia !== false;
   if ($('f_endRakeFascia')) $('f_endRakeFascia').checked = !!state.home.dimensions.endRakeFascia;
   syncAsymFields();
@@ -363,21 +369,25 @@ function bind() {
       syncList();
     });
   }
-  if ($('f_stepOverhang')) {
-    $('f_stepOverhang').addEventListener('change', (e) => {
-      state.home.dimensions.stepOverhang = e.target.value;
+  for (const [id, key] of overhangModes) {
+    if (!$(id)) continue;
+    $(id).addEventListener('change', (e) => {
+      state.home.dimensions[key] = e.target.value;
       rebuild(); save();
     });
   }
-  if ($('f_stepOverhangFt')) {
-    $('f_stepOverhangFt').addEventListener('input', (e) => {
+  for (const [id, key] of overhangAmounts) {
+    if (!$(id)) continue;
+    $(id).addEventListener('input', (e) => {
       const raw = e.target.value.trim();
+      // Blank falls back to the matching whole-home overhang, which is not the
+      // same as typing 0 (no overhang at all).
       if (raw === '') {
-        state.home.dimensions.stepOverhangFt = null; // fall back to the rake overhang
+        state.home.dimensions[key] = null;
       } else {
         const v = parseFloat(raw);
         if (Number.isNaN(v)) return;
-        state.home.dimensions.stepOverhangFt = v;
+        state.home.dimensions[key] = v;
       }
       rebuild(); save();
     });
