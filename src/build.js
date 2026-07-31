@@ -223,11 +223,26 @@ export function roofTopAt(sec, z) {
  */
 export function resolveRoofSections(dim) {
   const L = num(dim.lengthFt, 56);
+  const lenF = num(dim.frontLengthFt, L);
+  const lenB = num(dim.backLengthFt, L);
   const F = num(dim.floorHeightFt, 0);
+
   const raw = (Array.isArray(dim.roofSections) ? dim.roofSections : [])
     .filter((s) => s && typeof s === 'object')
     .map((s) => ({ ...s, startFt: Math.max(0, Math.min(L, num(s.startFt, 0))) }))
     .sort((a, b) => a.startFt - b.startFt);
+
+  if (!raw.length && (Math.abs(lenF - L) > 1e-4 || Math.abs(lenB - L) > 1e-4)) {
+    const minLen = Math.min(lenF, lenB);
+    raw.push({ id: 'sec1', label: 'Main body', startFt: 0 });
+    raw.push({
+      id: 'sec2',
+      label: 'End step',
+      startFt: minLen,
+      frontInsetFt: lenF < lenB ? num(dim.widthFt, 27) / 2 : 0,
+      backInsetFt: lenB < lenF ? num(dim.widthFt, 27) / 2 : 0,
+    });
+  }
 
   const kept = [];
   for (const s of raw) {

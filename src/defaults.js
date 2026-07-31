@@ -30,6 +30,8 @@ export function defaultHome() {
     dimensions: {
       widthFt: 27,
       lengthFt: 56,
+      frontLengthFt: null,   // Independent Front Half Sectional Length (null = same as lengthFt)
+      backLengthFt: null,    // Independent Back Half Sectional Length (null = same as lengthFt)
       wallHeightFt: 8,
       floorHeightFt: 2.5,
       roofPitch: 4,          // rise per 12 of run — the FRONT slope

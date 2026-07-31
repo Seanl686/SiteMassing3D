@@ -62,7 +62,9 @@
         <label class="row"><span>Model name</span><input id="f_name" type="text" autocomplete="off"></label>
         <div class="grid2">
           <label><span>Width (ft)</span><input id="f_width" type="number" autocomplete="off" step="0.1" min="8"></label>
-          <label><span>Length (ft)</span><input id="f_length" type="number" autocomplete="off" step="0.1" min="8"></label>
+          <label><span>Overall Length (ft)</span><input id="f_length" type="number" autocomplete="off" step="0.1" min="8"></label>
+          <label><span>Front half length (ft)</span><input id="f_frontLength" type="number" autocomplete="off" step="0.25" placeholder="Auto (Length)"></label>
+          <label><span>Back half length (ft)</span><input id="f_backLength" type="number" autocomplete="off" step="0.25" placeholder="Auto (Length)"></label>
           <label><span>Wall height (ft)</span><input id="f_wallHeight" type="number" autocomplete="off" step="0.1" min="6" list="wallHeightPresets"></label>
           <datalist id="wallHeightPresets">
             <option value="8.0" label="8'-0&quot; (Standard 8ft Wall)"></option>

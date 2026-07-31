@@ -2060,7 +2060,9 @@ function bindPackage() {
 // ---------------------------------------------------------------------------
 
 const dimFields = [
-  ['f_width', 'widthFt'], ['f_length', 'lengthFt'], ['f_wallHeight', 'wallHeightFt'],
+  ['f_width', 'widthFt'], ['f_length', 'lengthFt'],
+  ['f_frontLength', 'frontLengthFt'], ['f_backLength', 'backLengthFt'],
+  ['f_wallHeight', 'wallHeightFt'],
   ['f_floorHeight', 'floorHeightFt'], ['f_pitch', 'roofPitch'],
   ['f_eaveOverhang', 'eaveOverhangFt'], ['f_rakeOverhang', 'rakeOverhangFt'],
   ['f_dormerWidth', 'dormerWidthFt'], ['f_dormerHeight', 'dormerHeightFt'],
@@ -2557,23 +2559,17 @@ function bind() {
   if ($('btnStepHalf267')) {
     $('btnStepHalf267').addEventListener('click', () => {
       const dim = state.home.dimensions;
-      const mid = Math.round((dim.lengthFt / 2) * 4) / 4;
-      dim.roofSections = [
-        newRoofSection(0, 'Left half'),
-        { ...newRoofSection(mid, 'Right half'), frontInsetFt: 2.67 },
-      ];
-      rebuild(); save(); refreshRoofSections();
+      dim.frontLengthFt = 56.0;
+      if ($('f_frontLength')) $('f_frontLength').value = 56.0;
+      rebuild(); save();
     });
   }
   if ($('btnStepHalf6')) {
     $('btnStepHalf6').addEventListener('click', () => {
       const dim = state.home.dimensions;
-      const mid = Math.round((dim.lengthFt / 2) * 4) / 4;
-      dim.roofSections = [
-        newRoofSection(0, 'Left half'),
-        { ...newRoofSection(mid, 'Right half'), frontInsetFt: 6.0 },
-      ];
-      rebuild(); save(); refreshRoofSections();
+      dim.frontLengthFt = 50.0;
+      if ($('f_frontLength')) $('f_frontLength').value = 50.0;
+      rebuild(); save();
     });
   }
   if ($('btnAddRoofSection')) {
