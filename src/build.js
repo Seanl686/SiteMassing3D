@@ -17,6 +17,7 @@ const GLASS_INSET = 0.16; // ft, how far glass/door slab sits back from the face
 const ROOF_THICK = 0.45;  // ft
 const FASCIA_H = 0.55;    // ft, default face width of a fascia / rake board
 const CORNER_PROUD = 0.08; // ft, how far a corner board stands off the siding
+const RAKE_W = 0.18;      // ft, thickness of a raked (sloping) barge board
 
 /** Face width of the fascia, rake and ridge boards. */
 const fasciaWidth = (dim) => Math.max(0.1, num(dim?.fasciaWidthFt, FASCIA_H));
@@ -919,7 +920,10 @@ function buildRoofSection(sec, span, dim, materials, sections) {
     // A board goes on a raked end only where the roof hangs past something —
     // a butted interior joint has no exposed edge to trim.
     if (dim.stepRakeFascia !== false) {
-      for (const [i, x] of [[0, xa + 0.09], [1, xb - 0.09]]) {
+      // The board goes just OUTSIDE the roof edge. Measuring inward buries it
+      // in the deck, leaving only the sliver that pokes above the plane to
+      // z-fight with the slab's own end face.
+      for (const [i, x] of [[0, xa - RAKE_W / 2], [1, xb + RAKE_W / 2]]) {
         if (!span.rake[s.which][i]) continue;
         const z0 = s.peakZ;
         const y0 = topY;
@@ -927,7 +931,7 @@ function buildRoofSection(sec, span, dim, materials, sections) {
         const y1 = dripY;
         const ang = Math.atan2(y1 - y0, z1 - z0);
         const board = new THREE.Mesh(
-          new THREE.BoxGeometry(0.18, FW, Math.hypot(z1 - z0, y1 - y0)),
+          new THREE.BoxGeometry(RAKE_W, FW, Math.hypot(z1 - z0, y1 - y0)),
           materials.fascia,
         );
         const nb = new THREE.Vector3(0, Math.cos(ang), -Math.sin(ang));
@@ -1150,14 +1154,18 @@ function buildDormers(dim, materials) {
     }
 
     // 4. Eave returns — false eave trim on each outer side (omitted when isContinuous is true for a 100% seamless wall).
+    // These are eave boards, so they take the fascia colour and scale with the
+    // fascia width: at the default 0.55 ft the numbers below are unchanged.
+    const fw = fasciaWidth(dim);
+    const fs = fw / FASCIA_H;
     if (dim.dormerFalseEave !== false && !isContinuous) {
       for (const side of [-1, 1]) {
         const returnX = side === -1 ? capLeft - 0.6 : capRight + 0.6;
         const eaveReturn = new THREE.Mesh(
-          new THREE.BoxGeometry(1.6, 0.55, 0.45),
-          materials.trim
+          new THREE.BoxGeometry(1.6, fw, 0.45),
+          materials.fascia
         );
-        eaveReturn.position.set(returnX, eaveY - 0.28, dormerFrontZ + 0.1);
+        eaveReturn.position.set(returnX, eaveY - fw / 2 - 0.005, dormerFrontZ + 0.1);
         eaveReturn.castShadow = true;
         eaveReturn.userData.dormerIndex = 0;
         capGroup.add(eaveReturn);
@@ -1165,10 +1173,10 @@ function buildDormers(dim, materials) {
         // Inner eave return (double-wide stepped profile)
         if (dim.dormerInnerFalseEave !== false) {
           const innerReturn = new THREE.Mesh(
-            new THREE.BoxGeometry(1.2, 0.45, 0.35),
-            materials.trim
+            new THREE.BoxGeometry(1.2, 0.45 * fs, 0.35),
+            materials.fascia
           );
-          innerReturn.position.set(returnX, eaveY + 0.18, dormerFrontZ + 0.25);
+          innerReturn.position.set(returnX, eaveY + 0.18 * fs, dormerFrontZ + 0.25);
           innerReturn.castShadow = true;
           innerReturn.userData.dormerIndex = 0;
           innerReturn.name = 'innerFalseEave';
@@ -1178,10 +1186,10 @@ function buildDormers(dim, materials) {
 
       // Continuous fascia trim across the top of the front wall.
       const fascia = new THREE.Mesh(
-        new THREE.BoxGeometry(capWidth + 2.4, 0.5, 0.2),
-        materials.trim
+        new THREE.BoxGeometry(capWidth + 2.4, 0.5 * fs, 0.2),
+        materials.fascia
       );
-      fascia.position.set(capCenterX, eaveY + dH + 0.1, dormerFrontZ - 0.05);
+      fascia.position.set(capCenterX, eaveY + dH + 0.1 * fs, dormerFrontZ - 0.05);
       fascia.castShadow = true;
       fascia.userData.dormerIndex = 0;
       capGroup.add(fascia);
@@ -1189,10 +1197,10 @@ function buildDormers(dim, materials) {
       // Bottom trim across the eave line (drip edge).
       if (isDripEdgeOn) {
         const bottomTrim = new THREE.Mesh(
-          new THREE.BoxGeometry(capWidth + 2.4, 0.35, 0.18),
-          materials.trim
+          new THREE.BoxGeometry(capWidth + 2.4, 0.35 * fs, 0.18),
+          materials.fascia
         );
-        bottomTrim.position.set(capCenterX, eaveY - 0.18, dormerFrontZ + 0.05);
+        bottomTrim.position.set(capCenterX, eaveY - 0.18 * fs, dormerFrontZ + 0.05);
         bottomTrim.castShadow = true;
         bottomTrim.userData.dormerIndex = 0;
         capGroup.add(bottomTrim);
@@ -1297,13 +1305,17 @@ function gableDormer(dim, materials, opts) {
   dormerGroup.add(frontGable);
 
   // 2. False Eave Return Band — outer (if enabled and drip edge on)
+  // Eave boards, so they take the fascia colour and scale with the fascia
+  // width: at the default 0.55 ft the numbers below are unchanged.
+  const fw = fasciaWidth(dim);
+  const fs = fw / FASCIA_H;
   if (dim.dormerFalseEave !== false && isDripEdgeOn) {
     const falseEaveW = dW + 1.2;
     const falseEave = new THREE.Mesh(
-      new THREE.BoxGeometry(falseEaveW, 0.55, 0.45),
-      materials.trim
+      new THREE.BoxGeometry(falseEaveW, fw, 0.45),
+      materials.fascia
     );
-    falseEave.position.set(posX, eaveY - 0.28, dormerFrontZ + 0.1);
+    falseEave.position.set(posX, eaveY - fw / 2 - 0.005, dormerFrontZ + 0.1);
     falseEave.castShadow = true;
     falseEave.userData.dormerIndex = i;
     dormerGroup.add(falseEave);
@@ -1312,10 +1324,10 @@ function gableDormer(dim, materials, opts) {
     if (dim.dormerInnerFalseEave !== false) {
       const innerW = falseEaveW - 1.6;
       const innerEave = new THREE.Mesh(
-        new THREE.BoxGeometry(innerW, 0.45, 0.35),
-        materials.trim
+        new THREE.BoxGeometry(innerW, 0.45 * fs, 0.35),
+        materials.fascia
       );
-      innerEave.position.set(posX, eaveY + 0.18, dormerFrontZ + 0.25);
+      innerEave.position.set(posX, eaveY + 0.18 * fs, dormerFrontZ + 0.25);
       innerEave.castShadow = true;
       innerEave.userData.dormerIndex = i;
       innerEave.name = 'innerFalseEave';

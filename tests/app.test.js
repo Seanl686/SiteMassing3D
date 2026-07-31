@@ -2269,3 +2269,60 @@ test('79. A porch on a set-in stretch stands against the moved wall', () => {
   assert.ok(near(plainBox.min.z, -18.5, 0.6),
     `Same porch on the base rectangle reaches 5 ft further out (got ${plainBox.min.z.toFixed(2)})`);
 });
+
+test('80. Rake boards sit outside the deck, and dormer eave trim is fascia', () => {
+  const home = defaultHome();
+  home.colors.trim = '#ff0000';   // casing
+  home.colors.fascia = '#ffffff';
+  home.dimensions.endRakeFascia = true;
+  home.dimensions.dormerCount = 1;
+
+  const root = buildHome(home, defaultScene());
+  root.updateMatrixWorld(true);
+  const roof = root.children.find((c) => c.name === 'roof');
+  const box = (o) => new THREE.Box3().setFromObject(o);
+
+  const planes = roof.children.filter((c) => c.name?.startsWith('roofPlane:')).map(box);
+  const boards = roof.children.filter((c) => c.name === 'rakeBoard').map(box);
+  assert.equal(boards.length, 4, 'Both planes boarded at both gable ends');
+
+  // The regression: a board measured INWARD from the roof edge is buried in the
+  // deck, and the sliver that pokes above the plane z-fights the slab's end
+  // face. Every board has to lie clear of the deck it trims.
+  const planeMinX = Math.min(...planes.map((p) => p.min.x));
+  const planeMaxX = Math.max(...planes.map((p) => p.max.x));
+  for (const b of boards) {
+    const outside = b.max.x <= planeMinX + 1e-6 || b.min.x >= planeMaxX - 1e-6;
+    assert.ok(outside,
+      `rake board ${b.min.x.toFixed(2)}..${b.max.x.toFixed(2)} is clear of the deck `
+      + `${planeMinX.toFixed(2)}..${planeMaxX.toFixed(2)}`);
+  }
+
+  // Every eave board on the dormer takes the fascia colour; only the window it
+  // frames stays on the casing trim.
+  const hex = (m) => `#${m.material.color.getHexString()}`;
+  const dormerTrim = [];
+  roof.children.find((c) => c.name === 'dormers').traverse((c) => {
+    if (c.isMesh && c.material?.color) dormerTrim.push(c);
+  });
+  const onCasing = dormerTrim.filter((c) => hex(c) === '#ff0000');
+  assert.equal(onCasing.length, 1, 'Only the dormer window frame is casing trim');
+  assert.ok(dormerTrim.some((c) => hex(c) === '#ffffff'), 'Its eave bands are fascia');
+
+  // And those bands follow the fascia width, so they stay lined up with the
+  // main eave when it is made deeper.
+  const bandDepth = (h) => {
+    const r = buildHome(h, defaultScene()).children.find((c) => c.name === 'roof');
+    let found = 0;
+    r.children.find((c) => c.name === 'dormers').traverse((c) => {
+      if (c.isMesh && c.geometry?.parameters?.width > 10 && c.material?.color
+        && `#${c.material.color.getHexString()}` === '#ffffff') {
+        found = Math.max(found, c.geometry.parameters.height);
+      }
+    });
+    return found;
+  };
+  assert.ok(near(bandDepth(home), 0.55), 'Default band matches the default fascia width');
+  const fat = { ...home, dimensions: { ...home.dimensions, fasciaWidthFt: 1.1 } };
+  assert.ok(near(bandDepth(fat), 1.1), 'A deeper fascia deepens the dormer band with it');
+});

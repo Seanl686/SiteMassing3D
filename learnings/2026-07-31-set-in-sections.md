@@ -76,3 +76,31 @@ skirting all ignored it and stayed on the base rectangle. There was no way to sa
   covered porch sitting against the set-in wall; setting both insets to 4 ft
   narrows it all round with the ridge back on the centreline; a −6 ft inset runs
   that half 6 ft deeper than the rest with its roof and porch following.
+
+---
+
+## Follow-up: rake board buried in the deck, dormer eave trim on the wrong colour
+
+Reported from a render: the white fascia colour was not reaching the rake trim,
+and something was misaligned at the gable.
+
+- **Rake board inside the deck.** The board was positioned at `xa + RAKE_W / 2`,
+  measuring *inward* from the roof edge — but the roof plane spans `xa..xb`, so
+  the board sat entirely inside the slab. Only the 0.05 ft that pokes above the
+  plane was visible, z-fighting with the slab's own end face, which reads as a
+  dark bar cutting across the white board. Fixed by measuring outward
+  (`xa - RAKE_W / 2`, `xb + RAKE_W / 2`) so the board trims the edge instead of
+  hiding in it. Same class of error as the corner boards, in the opposite
+  direction — there the boards were measured outward when they should have been
+  inward.
+- **Dormer eave trim was casing.** The false eave return bands, the inner return,
+  the cap fascia and the drip edge were all on `materials.trim`. They are eave
+  boards, so they now take `materials.fascia`. The dormer *window* frame stays on
+  the casing trim, which is what it is.
+- **Dormer bands did not follow `fasciaWidthFt`.** Their heights were hardcoded,
+  so a deeper fascia left the dormer band stranded above the main eave line. They
+  now scale by `fasciaWidth(dim) / FASCIA_H`, which is exactly 1 at the default
+  0.55 ft — so the geometry is unchanged until the width is actually edited.
+
+Test 80 covers all three and was checked against the old code, where it fails on
+the buried board.
