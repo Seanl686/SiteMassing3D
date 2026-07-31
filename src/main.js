@@ -2553,6 +2553,28 @@ function bind() {
       rebuild(); save();
     });
   }
+  if ($('btnStepHalf267')) {
+    $('btnStepHalf267').addEventListener('click', () => {
+      const dim = state.home.dimensions;
+      const mid = Math.round((dim.lengthFt / 2) * 4) / 4;
+      dim.roofSections = [
+        newRoofSection(0, 'Left half'),
+        { ...newRoofSection(mid, 'Right half'), frontInsetFt: 2.67 },
+      ];
+      rebuild(); save(); refreshRoofSections();
+    });
+  }
+  if ($('btnStepHalf6')) {
+    $('btnStepHalf6').addEventListener('click', () => {
+      const dim = state.home.dimensions;
+      const mid = Math.round((dim.lengthFt / 2) * 4) / 4;
+      dim.roofSections = [
+        newRoofSection(0, 'Left half'),
+        { ...newRoofSection(mid, 'Right half'), frontInsetFt: 6.0 },
+      ];
+      rebuild(); save(); refreshRoofSections();
+    });
+  }
   if ($('btnAddRoofSection')) {
     $('btnAddRoofSection').addEventListener('click', () => {
       const dim = state.home.dimensions;
@@ -3237,47 +3259,53 @@ function onPick(ev) {
   }
 
   // Check wall or bump pick for interactive wall/footprint dragging
-  const wallHitObj = hits.find((h) => findWallName(h.object) || findBumpId(h.object));
-  if (wallHitObj && !pendingAdd && !planPick) {
-    const wallName = findWallName(wallHitObj.object);
-    const bumpId = findBumpId(wallHitObj.object);
-    if (wallName || bumpId) {
-      const hitPoint = wallHitObj.point.clone();
-      const dim = state.home.dimensions;
+  let wallHitObj = hits.find((h) => findWallName(h.object) || findBumpId(h.object));
+  let wallName = wallHitObj ? findWallName(wallHitObj.object) : null;
+  let bumpId = wallHitObj ? findBumpId(wallHitObj.object) : null;
+  let hitPoint = wallHitObj ? wallHitObj.point.clone() : (hits[0] ? hits[0].point.clone() : null);
 
-      // Automatically initialize roofSections into two halves if empty so
-      // dragging a wall steps that half of the house out-of-the-box.
-      if ((wallName === 'front' || wallName === 'back') && (!Array.isArray(dim.roofSections) || !dim.roofSections.length)) {
-        const mid = Math.round((dim.lengthFt / 2) * 4) / 4;
-        dim.roofSections = [
-          newRoofSection(0, 'Left half'),
-          newRoofSection(mid, 'Right half'),
-        ];
-        refreshRoofSections();
-      }
-
-      const resolvedSecs = resolveRoofSections(dim);
-      const hitSec = sectionAtX(resolvedSecs, hitPoint.x);
-      const secList = dim.roofSections || [];
-      const targetSec = secList.find((s) => s.id === hitSec.id) || secList[hitSec.index] || secList[0];
-
-      wallDrag = {
-        wall: wallName,
-        bumpId: bumpId,
-        sectionId: targetSec ? targetSec.id : null,
-        sectionIndex: hitSec ? hitSec.index : 0,
-        startFrontInsetFt: targetSec ? (targetSec.frontInsetFt || 0) : 0,
-        startBackInsetFt: targetSec ? (targetSec.backInsetFt || 0) : 0,
-        startPoint: hitPoint,
-        startDim: { ...dim },
-        startBumps: JSON.parse(JSON.stringify(state.home.bumps || [])),
-      };
-      stage.controls.enabled = false;
-      stage.orthoControls.enabled = false;
-      canvas.style.cursor = bumpId ? 'move' : (wallName === 'front' || wallName === 'back' ? 'ns-resize' : 'ew-resize');
-      ev.preventDefault();
-      return;
+  if (!wallName && !bumpId && hitPoint && !pendingAdd && !planPick) {
+    const near = nearestWallHit(hitPoint, state.home.dimensions);
+    if (near && near.score < 30) {
+      wallName = near.wall;
     }
+  }
+
+  if ((wallName || bumpId) && hitPoint && !pendingAdd && !planPick) {
+    const dim = state.home.dimensions;
+
+    // Automatically initialize roofSections into two halves if empty so
+    // dragging a wall steps that half of the house out-of-the-box.
+    if ((wallName === 'front' || wallName === 'back') && (!Array.isArray(dim.roofSections) || !dim.roofSections.length)) {
+      const mid = Math.round((dim.lengthFt / 2) * 4) / 4;
+      dim.roofSections = [
+        newRoofSection(0, 'Left half'),
+        newRoofSection(mid, 'Right half'),
+      ];
+      refreshRoofSections();
+    }
+
+    const resolvedSecs = resolveRoofSections(dim);
+    const hitSec = sectionAtX(resolvedSecs, hitPoint.x);
+    const secList = dim.roofSections || [];
+    const targetSec = secList.find((s) => s.id === hitSec.id) || secList[hitSec.index] || secList[0];
+
+    wallDrag = {
+      wall: wallName,
+      bumpId: bumpId,
+      sectionId: targetSec ? targetSec.id : null,
+      sectionIndex: hitSec ? hitSec.index : 0,
+      startFrontInsetFt: targetSec ? (targetSec.frontInsetFt || 0) : 0,
+      startBackInsetFt: targetSec ? (targetSec.backInsetFt || 0) : 0,
+      startPoint: hitPoint,
+      startDim: { ...dim },
+      startBumps: JSON.parse(JSON.stringify(state.home.bumps || [])),
+    };
+    stage.controls.enabled = false;
+    stage.orthoControls.enabled = false;
+    canvas.style.cursor = bumpId ? 'move' : (wallName === 'front' || wallName === 'back' ? 'ns-resize' : 'ew-resize');
+    ev.preventDefault();
+    return;
   }
 
   if (selectedIds.size) clearSelection();

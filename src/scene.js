@@ -591,6 +591,8 @@ export class Stage {
     this._lastDim = dim;
     this._lastOpts = opts;
     this.userMoved = false;
+    this.ortho.up.set(0, 1, 0);
+    this.persp.up.set(0, 1, 0);
     const d = derived(dim);
     const { widthFt: W, lengthFt: L } = dim;
     const target = new THREE.Vector3(0, d.ridgeY * 0.45, 0);

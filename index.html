@@ -117,7 +117,10 @@
           <label><span>Step ovh (ft)</span><input id="f_stepOverhangFt" type="number" autocomplete="off" step="0.25" min="0" placeholder="Auto (rake)"></label>
         </div>
         <label class="row check"><input id="f_stepRakeFascia" type="checkbox" autocomplete="off"><span>Rake board on step overhangs</span></label>
-        <label class="row check"><input id="f_endRakeFascia" type="checkbox" autocomplete="off"><span>Rake board on the gable ends too</span></label>
+        <div class="row" style="gap:6px;margin:6px 0;">
+          <button id="btnStepHalf267" class="secondary" style="flex:1;font-size:11px;padding:4px 6px;" title="Step the right half back by 2'-8&quot; (Redman 25610 spec)">✂️ Step Right Half 2'-8" Shorter</button>
+          <button id="btnStepHalf6" class="secondary" style="flex:1;font-size:11px;padding:4px 6px;" title="Step the right half back by 6' (Covered porch deck)">✂️ Step Right Half 6' Shorter</button>
+        </div>
         <p style="font-size:11px;color:#9aa;margin:4px 0 2px;line-height:1.3;">Split the home into sections measured from the <b>left end</b>. Each carries its own pitches, ridge, eave heights and style, so one part of the house sits at a different pitch and peak than the next. <b>Set-in</b> pulls that part's front or rear wall inward — set both equally and that half is narrower all round; a negative value pushes it out so that part runs deeper than the rest. The roof, the gable end, the skirting and any porch on that stretch all follow the moved wall, the long walls turn a return at the step, and where two roofs disagree the gap between them is walled in.</p>
 
         <h3 class="subhead">Per-Wall Custom Heights (Optional)</h3>
