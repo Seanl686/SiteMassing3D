@@ -105,6 +105,7 @@ function rebuild() {
   }
   stage.homeGroup.add(buildHome(state.home, state.scene));
   stage.homeGroup.add(gizmo.group);
+  stage.applyViewMode(currentViewName);
 
   const sp = state.home.sitePhoto || {};
   const baseY = sp.baselineY || 0;

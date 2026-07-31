@@ -587,12 +587,30 @@ export class Stage {
     }
   }
 
+  applyViewMode(name) {
+    if (!this.homeGroup) return;
+    const isFoundation = (name || '').toLowerCase() === 'foundation';
+    this.homeGroup.traverse((c) => {
+      const n = c.name || '';
+      if (isFoundation) {
+        if (n === 'skirting' || n === 'footprint' || n === 'bumps' || n === 'callouts' || n === 'steps' || n === 'home' || n === 'gizmo') {
+          c.visible = true;
+        } else if (n.startsWith('wall:') || n === 'roof' || n.startsWith('dormer') || n === 'cornerTrim' || n.startsWith('opening:')) {
+          c.visible = false;
+        }
+      } else {
+        c.visible = true;
+      }
+    });
+  }
+
   setView(name, dim, opts) {
     this._lastDim = dim;
     this._lastOpts = opts;
     this.userMoved = false;
     this.ortho.up.set(0, 1, 0);
     this.persp.up.set(0, 1, 0);
+    this.applyViewMode(name);
     const d = derived(dim);
     const { widthFt: W, lengthFt: L } = dim;
     const target = new THREE.Vector3(0, d.ridgeY * 0.45, 0);
