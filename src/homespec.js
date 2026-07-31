@@ -82,7 +82,7 @@ export const HOME_SPEC_SCHEMA = {
         },
         eaveOverhangFt: { type: 'number', description: 'Overhang past the long walls. Use 1 if not stated.' },
         rakeOverhangFt: { type: 'number', description: 'Overhang past the gable ends. Use 0.75 if not stated.' },
-        roofStyle: { type: 'string', enum: ['gable', 'flat'] },
+        roofStyle: { type: 'string', enum: ['gable', 'shed', 'flat', 'none'] },
       },
     },
     bumps: {

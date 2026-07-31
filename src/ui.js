@@ -170,7 +170,13 @@ export function renderRoofSectionList(container, dim, resolved, cb) {
     const foot = document.createElement('div');
     foot.className = 'foot';
     const styleSel = document.createElement('select');
-    for (const [v, text] of [['', 'Roof style: inherit'], ['gable', 'Gable'], ['flat', 'Flat / low slope']]) {
+    for (const [v, text] of [
+      ['', 'Roof style: inherit'],
+      ['gable', 'Gable'],
+      ['shed', 'Shed (single slope)'],
+      ['flat', 'Flat / low slope'],
+      ['none', 'None (Open / no roof)'],
+    ]) {
       const opt = document.createElement('option');
       opt.value = v;
       opt.textContent = text;

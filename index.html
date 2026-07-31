@@ -94,7 +94,12 @@
           <label><span>Eave overhang (ft)</span><input id="f_eaveOverhang" type="number" autocomplete="off" step="0.1" min="0"></label>
           <label><span>Rake overhang (ft)</span><input id="f_rakeOverhang" type="number" autocomplete="off" step="0.1" min="0"></label>
           <label><span>Roof style</span>
-            <select id="f_roofStyle"><option value="gable">Gable (ridge along length)</option><option value="flat">Flat / low slope</option></select>
+            <select id="f_roofStyle">
+              <option value="gable">Gable (dual slope)</option>
+              <option value="shed">Shed (single slope)</option>
+              <option value="flat">Flat / low slope</option>
+              <option value="none">None (Open / no roof)</option>
+            </select>
           </label>
           <label><span>Rear pitch (/12)</span><input id="f_pitchBack" type="number" autocomplete="off" step="0.5" min="0" max="12" placeholder="Same as front"></label>
           <label><span>Ridge position</span>

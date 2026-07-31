@@ -85,6 +85,37 @@ function solveRoof(v, dim) {
   let slopeF = pitchF / 12;
   let slopeB = pitchB / 12;
 
+  if (v.roofStyle === 'none') {
+    const eaveY = Math.max(eaveYFront, eaveYBack);
+    const mid = (zFront + zBack) / 2;
+    return {
+      slope: 0, slopeFront: 0, slopeBack: 0,
+      eaveY, eaveYFront, eaveYBack,
+      ridgeY: eaveY, topY: eaveY, ridgeZ: mid,
+      ridgePeakY: eaveY, frontPeakY: eaveY, backPeakY: eaveY,
+      ridgeStepFt: 0, ridgeSail: 0, ridgeCutZ: mid,
+      angle: 0, angleFront: 0, angleBack: 0, split: false, flat: false, none: true,
+      zFront, zBack, widthFt: W,
+      ridgeLocked: false, liftedFront: 0, liftedBack: 0,
+    };
+  }
+
+  if (v.roofStyle === 'shed') {
+    const slopeF = pitchF / 12;
+    const topY = eaveYFront + slopeF * W;
+    const angleF = Math.atan(slopeF);
+    return {
+      slope: slopeF, slopeFront: slopeF, slopeBack: 0,
+      eaveY: eaveYFront, eaveYFront, eaveYBack,
+      ridgeY: topY, topY, ridgeZ: zBack,
+      ridgePeakY: topY, frontPeakY: topY, backPeakY: eaveYBack,
+      ridgeStepFt: 0, ridgeSail: 0, ridgeCutZ: zBack,
+      angle: angleF, angleFront: angleF, angleBack: 0, split: false, flat: false, shed: true,
+      zFront, zBack, widthFt: W,
+      ridgeLocked: false, liftedFront: 0, liftedBack: 0,
+    };
+  }
+
   if (v.flat || slopeF + slopeB < 1e-6) {
     const eaveY = Math.max(eaveYFront, eaveYBack);
     const mid = (zFront + zBack) / 2;
@@ -907,6 +938,10 @@ function buildRoofSection(sec, span, dim, materials, sections) {
 
   const bodyLen = Math.max(0.05, span.body[1] - span.body[0]);
   const bodyCx = (span.body[0] + span.body[1]) / 2;
+
+  if (sec.none) {
+    return g; // Open section — no roof mesh
+  }
 
   if (sec.flat) {
     const len = Math.max(0.05, span.front[1] - span.front[0]);
