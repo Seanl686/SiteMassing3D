@@ -2172,3 +2172,100 @@ test('77. Roof sections survive a save and a hand-written file', () => {
   assert.equal(again.dimensions.roofSections[1].frontWallHeightFt, 11);
   assert.ok(near(resolveRoofSections(again.dimensions)[1].topY, resolveRoofSections(home.dimensions)[1].topY));
 });
+
+test('78. A section can be set in, and the whole build follows its footprint', () => {
+  const home = defaultHome(); // 27 wide, 56 long, 4/12, 8 ft walls on a 2.5 ft floor
+  home.dimensions.roofSections = [
+    newRoofSection(0, 'Main'),
+    { ...newRoofSection(28, 'Set-in wing'), frontInsetFt: 5 },
+  ];
+  const secs = resolveRoofSections(home.dimensions);
+
+  // The set-in section is genuinely narrower, and its wall line moved.
+  assert.ok(near(secs[0].zFront, -13.5) && near(secs[0].widthFt, 27), 'Main section is the full width');
+  assert.ok(near(secs[1].zFront, -8.5), 'Wing front wall pulled 5 ft inward');
+  assert.ok(near(secs[1].zBack, 13.5), 'Its rear wall is untouched');
+  assert.ok(near(secs[1].widthFt, 22), 'So that part of the home is 22 ft deep');
+
+  // Its roof solves over its own width — narrower at the same pitch means a
+  // lower peak, and a ridge that is no longer over the home's centreline.
+  assert.ok(near(secs[1].ridgeZ, 2.5), 'Ridge sits at the middle of the wing, not the home');
+  assert.ok(near(secs[1].ridgePeakY, 10.5 + (1 / 3) * 11), 'And peaks lower than the main roof');
+  assert.ok(secs[1].ridgePeakY < secs[0].ridgePeakY, 'Which is what a narrower span at one pitch does');
+  assert.ok(near(roofTopAt(secs[1], secs[1].zFront), 10.5), 'Roof meets its own front eave');
+
+  const root = buildHome(home, defaultScene());
+  root.updateMatrixWorld(true);
+
+  // The gable end at that end of the home narrows with it.
+  const right = new THREE.Box3().setFromObject(root.children.find((c) => c.name === 'wall:right'));
+  assert.ok(near(right.min.z, -8.5, 0.1), 'Right end wall starts at the wing front wall');
+  const left = new THREE.Box3().setFromObject(root.children.find((c) => c.name === 'wall:left'));
+  assert.ok(near(left.min.z, -13.5, 0.1), 'Left end wall still spans the full width');
+
+  // The long wall turns a return at the step rather than floating.
+  const returns = [];
+  root.children.find((c) => c.name === 'wall:front').traverse((c) => {
+    if (c.name === 'sectionReturn') returns.push(c);
+  });
+  assert.equal(returns.length, 1, 'One return closes the step in the front wall');
+  assert.ok(near(new THREE.Box3().setFromObject(returns[0]).getSize(new THREE.Vector3()).z, 5, 0.1),
+    'As deep as the set-in');
+
+  // Skirting is built per section, so it does not stick out under the wing.
+  const skirt = root.children.find((c) => c.name === 'skirting');
+  assert.equal(skirt.children.length, 2, 'One skirting block per section');
+  assert.ok(near(new THREE.Box3().setFromObject(skirt.children[1]).min.z, -8.5, 0.1),
+    'The wing is skirted where its walls are');
+
+  // A negative inset pushes that part OUT instead — one half deeper than the rest.
+  const out = resolveRoofSections({
+    ...home.dimensions,
+    roofSections: [newRoofSection(0), { ...newRoofSection(28), frontInsetFt: -6 }],
+  });
+  assert.ok(near(out[1].zFront, -19.5), 'Negative inset pushes the wall out past the rectangle');
+  assert.ok(near(out[1].widthFt, 33), 'Making that part deeper than the rest');
+  assert.ok(out[1].ridgePeakY > out[0].ridgePeakY, 'And its roof peaks higher over the wider span');
+
+  // Set in equally front and back and the part is narrower all round, still centred.
+  const both = resolveRoofSections({
+    ...home.dimensions,
+    roofSections: [newRoofSection(0), { ...newRoofSection(28), frontInsetFt: 4, backInsetFt: 4 }],
+  });
+  assert.ok(near(both[1].widthFt, 19), 'Four feet off each side');
+  assert.ok(near(both[1].ridgeZ, 0), 'Still centred, so the ridge stays on the home centreline');
+});
+
+test('79. A porch on a set-in stretch stands against the moved wall', () => {
+  const home = defaultHome();
+  home.dimensions.roofSections = [
+    newRoofSection(0, 'Main'),
+    { ...newRoofSection(28, 'Wing'), frontInsetFt: 5 },
+  ];
+  // The wing runs from x = 0 to 28, which on the front wall is u = 0 to 28.
+  home.bumps = [{
+    ...defaultBump('front', 'porch'), id: 'p1', offsetFt: 6, lengthFt: 14, depthFt: 5,
+  }];
+
+  const root = buildHome(home, defaultScene());
+  root.updateMatrixWorld(true);
+  const porch = root.children.find((c) => c.name === 'wall:front')
+    ?? root.children.find((c) => c.name?.startsWith('bump:'));
+  const box = new THREE.Box3();
+  root.traverse((c) => { if (c.userData?.bump === 'p1') box.expandByObject(c); });
+  assert.ok(box.min.z < 0, 'Porch geometry was built');
+
+  // A 5 ft porch off a wall that has itself been set in 5 ft lands back at the
+  // base rectangle, not 5 ft out in front of it.
+  assert.ok(near(box.min.z, -13.5, 0.6),
+    `Porch reaches the base wall line, not past it (got ${box.min.z.toFixed(2)})`);
+
+  // Without the set-in, the same porch projects a full 5 ft past the wall.
+  const plain = { ...home, dimensions: { ...home.dimensions, roofSections: [] } };
+  const plainBox = new THREE.Box3();
+  const plainRoot = buildHome(plain, defaultScene());
+  plainRoot.updateMatrixWorld(true);
+  plainRoot.traverse((c) => { if (c.userData?.bump === 'p1') plainBox.expandByObject(c); });
+  assert.ok(near(plainBox.min.z, -18.5, 0.6),
+    `Same porch on the base rectangle reaches 5 ft further out (got ${plainBox.min.z.toFixed(2)})`);
+});

@@ -39,6 +39,8 @@ const SECTION_NUMS = [
   ['Ridge step ft', 'ridgeStepFt', '0.25'],
   ['Front eave ft', 'frontWallHeightFt', '0.25'],
   ['Rear eave ft', 'backWallHeightFt', '0.25'],
+  ['Front set-in ft', 'frontInsetFt', '0.5'],
+  ['Rear set-in ft', 'backInsetFt', '0.5'],
 ];
 
 /** The numbers a section actually resolves to, printed under its fields. */
@@ -61,7 +63,10 @@ function sectionReadout(sec) {
   if (sec.ridgeSail) {
     bits.push(`${sec.ridgeSail > 0 ? 'front' : 'rear'} plane sails ${fmtFt(Math.abs(sec.ridgeSail))} to ${fmtFt(sec.topY)}`);
   }
-  el.innerHTML = `${bits.join(' &middot; ')}<br>eaves ${fmtFt(sec.eaveYFront)} front / ${fmtFt(sec.eaveYBack)} rear`;
+  const plan = sec.inset
+    ? ` &middot; <b>${fmtFt(sec.widthFt)} deep</b>${sec.frontInsetFt ? `, front ${sec.frontInsetFt > 0 ? 'set in' : 'out'} ${fmtFt(Math.abs(sec.frontInsetFt))}` : ''}${sec.backInsetFt ? `, rear ${sec.backInsetFt > 0 ? 'set in' : 'out'} ${fmtFt(Math.abs(sec.backInsetFt))}` : ''}`
+    : '';
+  el.innerHTML = `${bits.join(' &middot; ')}<br>eaves ${fmtFt(sec.eaveYFront)} front / ${fmtFt(sec.eaveYBack)} rear${plan}`;
   return el;
 }
 

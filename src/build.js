@@ -70,7 +70,12 @@ function frameMatrix(frame) {
  * heights through exactly the same maths as the whole-home roof.
  */
 function solveRoof(v, dim) {
-  const W = dim.widthFt;
+  // The section's own wall lines. A section set in from the base rectangle is
+  // narrower than the home, so its roof spans less and its ridge solves
+  // somewhere else entirely.
+  const zFront = v.zFront;
+  const zBack = v.zBack;
+  const W = zBack - zFront;
   const { eaveYFront, eaveYBack } = v;
   const pitchF = v.flat ? 0 : Math.max(0, v.pitchF || 0);
   const pitchB = v.flat ? 0 : Math.max(0, v.pitchB || 0);
@@ -79,29 +84,36 @@ function solveRoof(v, dim) {
 
   if (v.flat || slopeF + slopeB < 1e-6) {
     const eaveY = Math.max(eaveYFront, eaveYBack);
+    const mid = (zFront + zBack) / 2;
     return {
       slope: 0, slopeFront: 0, slopeBack: 0,
       eaveY, eaveYFront, eaveYBack,
-      ridgeY: eaveY, topY: eaveY, ridgeZ: 0,
+      ridgeY: eaveY, topY: eaveY, ridgeZ: mid,
       ridgePeakY: eaveY, frontPeakY: eaveY, backPeakY: eaveY,
-      ridgeStepFt: 0, ridgeSail: 0, ridgeCutZ: 0,
+      ridgeStepFt: 0, ridgeSail: 0, ridgeCutZ: mid,
       angle: 0, angleFront: 0, angleBack: 0, split: false, flat: true,
+      zFront, zBack, widthFt: W,
     };
   }
 
-  const limit = Math.max(0.25, W / 2 - 0.25);
-  let ridgeZ = (eaveYBack - eaveYFront + (slopeB - slopeF) * (W / 2)) / (slopeF + slopeB);
+  // Where the two planes meet:
+  //   front:  y = eaveYFront + slopeF * (z - zFront)
+  //   back:   y = eaveYBack  + slopeB * (zBack - z)
+  // Solve for z. With the walls at -W/2 and +W/2 this is the old centreline
+  // form; written against the actual wall lines it also holds for a section
+  // that has been set in.
+  let ridgeZ = (eaveYBack - eaveYFront + slopeB * zBack + slopeF * zFront) / (slopeF + slopeB);
   // A typed ridge offset nudges the solved ridge rather than replacing it, so
   // the split-pitch solve above still sets where it starts from.
   ridgeZ += v.ridgeOffsetFt || 0;
-  ridgeZ = Math.min(limit, Math.max(-limit, ridgeZ));
+  ridgeZ = Math.min(zBack - 0.25, Math.max(zFront + 0.25, ridgeZ));
   let ridgeY = Math.max(
-    eaveYFront + slopeF * (ridgeZ + W / 2),
-    eaveYBack + slopeB * (W / 2 - ridgeZ),
+    eaveYFront + slopeF * (ridgeZ - zFront),
+    eaveYBack + slopeB * (zBack - ridgeZ),
   );
   // Re-read the slopes off the solved ridge so both planes land on their eave.
-  slopeF = (ridgeY - eaveYFront) / (ridgeZ + W / 2);
-  slopeB = (ridgeY - eaveYBack) / (W / 2 - ridgeZ);
+  slopeF = (ridgeY - eaveYFront) / (ridgeZ - zFront);
+  slopeB = (ridgeY - eaveYBack) / (zBack - ridgeZ);
 
   // Ridge step: the two planes no longer have to meet. Lifting the rear peak
   // opens a clerestory wall between them, and the rear plane steepens to reach
@@ -115,8 +127,8 @@ function solveRoof(v, dim) {
     else frontPeakY = ridgeY - stepFt;
     frontPeakY = Math.max(eaveYFront, frontPeakY);
     backPeakY = Math.max(eaveYBack, backPeakY);
-    slopeF = (frontPeakY - eaveYFront) / (ridgeZ + W / 2);
-    slopeB = (backPeakY - eaveYBack) / (W / 2 - ridgeZ);
+    slopeF = (frontPeakY - eaveYFront) / (ridgeZ - zFront);
+    slopeB = (backPeakY - eaveYBack) / (zBack - ridgeZ);
     ridgeY = Math.max(frontPeakY, backPeakY);
   }
 
@@ -129,8 +141,8 @@ function solveRoof(v, dim) {
     const diff = frontPeakY - backPeakY;
     // Only once the taller plane clears the shorter by more than the deck is
     // thick; below that the overhang would sit inside the roof it covers.
-    if (diff > ROOF_THICK + 0.05) ridgeSail = Math.min(sailAmt, W / 2 - ridgeZ);
-    else if (-diff > ROOF_THICK + 0.05) ridgeSail = -Math.min(sailAmt, ridgeZ + W / 2);
+    if (diff > ROOF_THICK + 0.05) ridgeSail = Math.min(sailAmt, zBack - ridgeZ);
+    else if (-diff > ROOF_THICK + 0.05) ridgeSail = -Math.min(sailAmt, ridgeZ - zFront);
   }
   const topY = Math.max(frontPeakY, backPeakY)
     + Math.abs(ridgeSail) * (ridgeSail > 0 ? slopeF : slopeB);
@@ -157,8 +169,9 @@ function solveRoof(v, dim) {
     angle: Math.atan(slopeF),
     angleFront: Math.atan(slopeF),
     angleBack: Math.atan(slopeB),
-    split: Math.abs(ridgeZ) > 0.01 || Math.abs(slopeF - slopeB) > 1e-4,
+    split: Math.abs(ridgeZ - (zFront + zBack) / 2) > 0.01 || Math.abs(slopeF - slopeB) > 1e-4,
     flat: false,
+    zFront, zBack, widthFt: W,
   };
 }
 
@@ -167,7 +180,7 @@ export function roofTopAt(sec, z) {
   if (sec.flat) return sec.topY;
   // Both formulas are the plane's own line, so extending one past the ridge is
   // only a matter of moving where the two hand over.
-  if (z <= sec.ridgeCutZ) return sec.eaveYFront + (z + sec.halfW) * sec.slopeFront;
+  if (z <= sec.ridgeCutZ) return sec.eaveYFront + (z - sec.zFront) * sec.slopeFront;
   return sec.backPeakY - (z - sec.ridgeZ) * sec.slopeBack;
 }
 
@@ -202,8 +215,18 @@ export function resolveRoofSections(dim) {
     const endFt = i + 1 < kept.length ? kept[i + 1].startFt : L;
     const pitchF = num(spec.pitch, num(dim.roofPitch, 4));
     const rawBack = num(spec.pitchBack, dim.roofPitchBack);
+    // A section can be set IN from the base rectangle — a positive inset pulls
+    // that wall line inward, so that part of the home is narrower and its roof
+    // spans less. Negative pushes it out, making that part deeper than the rest.
+    const halfW = num(dim.widthFt, 27) / 2;
+    const frontInsetFt = num(spec.frontInsetFt, 0);
+    const backInsetFt = num(spec.backInsetFt, 0);
+    const zFront = Math.min(halfW - 1, -halfW + frontInsetFt);
+    const zBack = Math.max(zFront + 1, halfW - backInsetFt);
     const solved = solveRoof({
       flat: (spec.roofStyle || dim.roofStyle) === 'flat',
+      zFront,
+      zBack,
       eaveYFront: F + num(spec.frontWallHeightFt, getWallHeight('front', dim)),
       eaveYBack: F + num(spec.backWallHeightFt, getWallHeight('back', dim)),
       pitchF,
@@ -220,11 +243,27 @@ export function resolveRoofSections(dim) {
       endFt,
       x0: -L / 2 + startFt,
       x1: -L / 2 + endFt,
-      halfW: num(dim.widthFt, 27) / 2,
+      halfW,
+      frontInsetFt,
+      backInsetFt,
+      inset: Math.abs(frontInsetFt) > 1e-6 || Math.abs(backInsetFt) > 1e-6,
       pitchFront: pitchF,
       pitchBack: Number.isFinite(rawBack) && rawBack > 0 ? rawBack : pitchF,
     };
   });
+}
+
+/**
+ * How far a long wall is set in at a point along it, in that wall's own inward
+ * direction. Gable ends do not step along their length, so they are never set
+ * in this way.
+ */
+export function wallInsetAt(name, u, dim) {
+  if (name !== 'front' && name !== 'back') return 0;
+  const L = num(dim.lengthFt, 56);
+  const x = name === 'front' ? L / 2 - u : u - L / 2;
+  const sec = sectionAtX(resolveRoofSections(dim), x);
+  return name === 'front' ? sec.frontInsetFt : sec.backInsetFt;
 }
 
 export function sectionAtX(sections, x) {
@@ -412,6 +451,17 @@ function buildWall(name, frame, home, materials) {
   // the wall leaves it alone — see bumps.js.
   const bands = wallBands(home.bumps, name, dim, bodyTop);
 
+  // A gable end belongs to the section at that end of the home. If that section
+  // is set in, the end wall is narrower and sits inboard of the base rectangle,
+  // so the whole wall — body and gable — is built over that stretch of u.
+  let gu0 = 0;
+  let gu1 = span;
+  if (frame.gable && dv.sections) {
+    const endSec = name === 'left' ? dv.sections[0] : dv.sections[dv.sections.length - 1];
+    gu0 = name === 'left' ? endSec.zFront + span / 2 : span / 2 - endSec.zBack;
+    gu1 = name === 'left' ? endSec.zBack + span / 2 : span / 2 - endSec.zFront;
+  }
+
   /**
    * Roof sections cut the long walls a second time, horizontally: where two
    * sections meet at different eave heights the wall steps. So every stretch
@@ -419,25 +469,42 @@ function buildWall(name, frame, home, materials) {
    * its own top, on top of whatever the bumps already did to it.
    */
   const eaveCuts = [];
-  if (!frame.gable && dv.sections && dv.sections.length > 1) {
+  if (!frame.gable && dv.sections && (dv.sections.length > 1 || dv.sections[0].inset)) {
     const key = name === 'front' ? 'eaveYFront' : 'eaveYBack';
+    const insetKey = name === 'front' ? 'frontInsetFt' : 'backInsetFt';
     for (const sec of dv.sections) {
       // The front wall is walked right-to-left in world X, so its u axis runs
       // opposite the section order.
       const a = name === 'front' ? span / 2 - sec.x1 : sec.x0 + span / 2;
       const b = name === 'front' ? span / 2 - sec.x0 : sec.x1 + span / 2;
-      eaveCuts.push({ u0: Math.min(a, b), u1: Math.max(a, b), top: sec[key] - dim.floorHeightFt });
+      eaveCuts.push({
+        u0: Math.min(a, b),
+        u1: Math.max(a, b),
+        top: sec[key] - dim.floorHeightFt,
+        // Local +z runs INTO the home, so a set-in section is a positive depth.
+        depth: sec[insetKey],
+        sec,
+      });
     }
     eaveCuts.sort((p, q) => p.u0 - q.u0);
   }
-  /** Split `x0`..`x1` at the section boundaries, handing each piece its top. */
+  /**
+   * Split `x0`..`x1` at the section boundaries, handing each piece its own top
+   * and its own depth — a set-in section moves that run of wall inward exactly
+   * the way a bump-out moves its own stretch.
+   */
   const eachTop = (x0, x1, fn) => {
-    if (!eaveCuts.length) return fn(x0, x1, bodyTop);
+    if (!eaveCuts.length) return fn(x0, x1, bodyTop, 0);
     for (const c of eaveCuts) {
       const a = Math.max(x0, c.u0);
       const b = Math.min(x1, c.u1);
-      if (b - a > 0.01) fn(a, b, c.top);
+      if (b - a > 0.01) fn(a, b, c.top, c.depth);
     }
+  };
+  /** How far this wall is set in at a point along it. */
+  const insetAt = (u) => {
+    const c = eaveCuts.find((k) => u >= k.u0 - 1e-6 && u <= k.u1 + 1e-6);
+    return c ? c.depth : 0;
   };
 
   /**
@@ -470,34 +537,64 @@ function buildWall(name, frame, home, materials) {
   const bandDepth = (band) => -band.bump.depthFt;
   /** Which plane an opening lives on: the wall itself, or a moved face. */
   const bandOf = (o) => {
+    const u = o.offsetFt + o.widthFt / 2;
     const band = bands.find((s) => o.offsetFt >= s.x0 - 1e-6 && o.offsetFt + o.widthFt <= s.x1 + 1e-6);
-    return band ? bandDepth(band) : 0;
+    // A bump's depth is measured from the wall it sits on, which may itself
+    // have been set in — so the two stack.
+    return insetAt(u) + (band ? bandDepth(band) : 0);
   };
 
   // Solid siding between the bands, the moved face of each bump, and the
   // header of siding left above it.
-  let cursor = 0;
+  let cursor = gu0;
   for (const band of bands) {
-    eachTop(cursor, band.x0, (a, b, top) => addBand(a, b, 0, top, materials.siding));
-    addBand(band.x0, band.x1, 0, band.top, materials.siding, bandDepth(band));
-    eachTop(band.x0, band.x1, (a, b, top) => addBand(a, b, band.top, top, materials.siding));
+    eachTop(cursor, band.x0, (a, b, top, d) => addBand(a, b, 0, top, materials.siding, d));
+    // A bump's own depth is measured from the wall where it sits, so it stacks
+    // on top of however far that stretch has been set in.
+    const bumpBase = insetAt((band.x0 + band.x1) / 2);
+    addBand(band.x0, band.x1, 0, band.top, materials.siding, bumpBase + bandDepth(band));
+    eachTop(band.x0, band.x1, (a, b, top, d) => addBand(a, b, band.top, top, materials.siding, d));
     cursor = band.x1;
   }
-  eachTop(cursor, span, (a, b, top) => addBand(a, b, 0, top, materials.siding));
+  eachTop(cursor, gu1, (a, b, top, d) => addBand(a, b, 0, top, materials.siding, d));
+
+  // Where two neighbouring sections sit at different depths the wall turns a
+  // corner: a return running from the outer plane back to the inner one, which
+  // is what makes a set-in half read as set in rather than as a floating wall.
+  for (let i = 0; i + 1 < eaveCuts.length; i++) {
+    const outer = Math.min(eaveCuts[i].depth, eaveCuts[i + 1].depth);
+    const inner = Math.max(eaveCuts[i].depth, eaveCuts[i + 1].depth);
+    if (inner - outer < 0.01) continue;
+    const u = eaveCuts[i].u1;
+    const top = Math.min(eaveCuts[i].top, eaveCuts[i + 1].top);
+    const ret = new THREE.Mesh(
+      extrude(rectShape(inner - outer, top, 0, 0), WALL_THICK),
+      materials.siding,
+    );
+    // Stand the return across the wall: its local x runs along the wall's
+    // inward axis instead of along the wall.
+    ret.rotation.y = -Math.PI / 2;
+    ret.position.set(u, 0, outer);
+    ret.castShadow = true;
+    ret.receiveShadow = true;
+    ret.userData.wall = name;
+    ret.name = 'sectionReturn';
+    group.add(ret);
+  }
 
   if (frame.gable && dim.roofStyle !== 'flat') {
     const hasGableAccent = (dim.gableSidingTexture && dim.gableSidingTexture !== dim.sidingTexture)
       || (home.colors.gableSiding && home.colors.gableSiding !== home.colors.siding);
     const peakShape = new THREE.Shape();
-    peakShape.moveTo(0, bodyTop);
-    peakShape.lineTo(span, bodyTop);
-    peakShape.lineTo(span, h1);
+    peakShape.moveTo(gu0, bodyTop);
+    peakShape.lineTo(gu1, bodyTop);
+    peakShape.lineTo(gu1, h1);
     // Walking span -> peak -> 0, so the h1 side's peak comes first. When the
     // two planes peak at different heights these are two points at the same u
     // and the edge between them is the clerestory.
     peakShape.lineTo(peakU, peakV1);
     if (Math.abs(peakV1 - peakV0) > 1e-6) peakShape.lineTo(peakU, peakV0);
-    peakShape.lineTo(0, h0);
+    peakShape.lineTo(gu0, h0);
     peakShape.closePath();
     for (const o of openings) {
       // A gable-end window that reaches above the eave line lives up here.
@@ -697,12 +794,11 @@ function stepOverhang(sec, neighbour, which, dim) {
  */
 function buildSectionTransition(a, b, dim, materials) {
   const ov = num(dim.eaveOverhangFt, 1);
-  const W = num(dim.widthFt, 27);
-  const zMin = -W / 2 - ov;
-  const zMax = W / 2 + ov;
+  const zMin = Math.min(a.zFront, b.zFront) - ov;
+  const zMax = Math.max(a.zBack, b.zBack) + ov;
   const eps = 1e-4;
 
-  const knots = [zMin, zMax, -W / 2, W / 2];
+  const knots = [zMin, zMax, a.zFront, a.zBack, b.zFront, b.zBack];
   for (const sec of [a, b]) knots.push(sec.ridgeCutZ - eps, sec.ridgeCutZ + eps);
   let zs = [...new Set(knots)].filter((z) => z >= zMin - eps && z <= zMax + eps).sort((p, q) => p - q);
 
@@ -761,8 +857,10 @@ function buildRoofSection(sec, span, dim, materials, sections) {
 
   if (sec.flat) {
     const len = Math.max(0.05, span.front[1] - span.front[0]);
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(len, ROOF_THICK, W + 2 * ov), materials.roof);
-    slab.position.set((span.front[0] + span.front[1]) / 2, sec.topY + ROOF_THICK / 2, 0);
+    const slab = new THREE.Mesh(
+      new THREE.BoxGeometry(len, ROOF_THICK, sec.widthFt + 2 * ov), materials.roof);
+    slab.position.set((span.front[0] + span.front[1]) / 2, sec.topY + ROOF_THICK / 2,
+      (sec.zFront + sec.zBack) / 2);
     slab.castShadow = true;
     slab.receiveShadow = true;
     slab.name = 'roofPlane:flat';
@@ -772,12 +870,12 @@ function buildRoofSection(sec, span, dim, materials, sections) {
 
   const sides = [
     {
-      which: 'front', sign: -1, edgeZ: -W / 2 - ov, eave: sec.eaveYFront,
+      which: 'front', sign: -1, edgeZ: sec.zFront - ov, eave: sec.eaveYFront,
       angle: sec.angleFront, slope: sec.slopeFront, peakY: sec.frontPeakY,
       peakZ: sec.ridgeZ + Math.max(0, sec.ridgeSail), sail: sec.ridgeSail > 0,
     },
     {
-      which: 'back', sign: 1, edgeZ: W / 2 + ov, eave: sec.eaveYBack,
+      which: 'back', sign: 1, edgeZ: sec.zBack + ov, eave: sec.eaveYBack,
       angle: sec.angleBack, slope: sec.slopeBack, peakY: sec.backPeakY,
       peakZ: sec.ridgeZ + Math.min(0, sec.ridgeSail), sail: sec.ridgeSail < 0,
     },
@@ -805,7 +903,8 @@ function buildRoofSection(sec, span, dim, materials, sections) {
     half.name = `roofPlane:${s.which}`;
     g.add(half);
 
-    const fascia = buildFascia(dim, materials, s.sign, W / 2 + ov, s.eave, s.slope, xa, xb);
+    const fascia = buildFascia(dim, materials, s.sign,
+      s.sign < 0 ? -sec.zFront + ov : sec.zBack + ov, s.eave, s.slope, xa, xb);
     if (fascia) g.add(fascia);
 
     // The sailing edge is a free drip edge, so it gets boarded like an eave.
@@ -1308,10 +1407,14 @@ function buildBump(b, frame, home, materials) {
 
   const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), frame.right);
   const sign = out ? 1 : -1;   // which way `w` runs from the wall plane
+  // A bump hangs off the wall it is on, and that stretch of wall may have been
+  // set in with its section — so a porch on a set-in half stands against the
+  // moved wall rather than out at the base rectangle.
+  const setIn = wallInsetAt(b.wall, b.offsetFt + b.lengthFt / 2, dim);
   const at = (u, v, w) => {
     const p = frame.origin.clone()
       .addScaledVector(frame.right, u)
-      .addScaledVector(frame.normal, sign * w);
+      .addScaledVector(frame.normal, sign * w - setIn);
     p.y = F + v;
     return p;
   };
@@ -1472,15 +1575,26 @@ function buildBumps(home, materials) {
 function buildSkirting(dim, materials) {
   if (dim.floorHeightFt <= 0.01) return null;
   const inset = 0.06;
-  const m = new THREE.Mesh(
-    new THREE.BoxGeometry(dim.lengthFt - inset, dim.floorHeightFt, dim.widthFt - inset),
-    materials.skirting,
-  );
-  m.position.y = dim.floorHeightFt / 2;
-  m.castShadow = true;
-  m.receiveShadow = true;
-  m.name = 'skirting';
-  return m;
+  const g = new THREE.Group();
+  g.name = 'skirting';
+  // One block per section, each as wide as that section's own footprint, so a
+  // set-in half is skirted where its walls are rather than out at the base
+  // rectangle.
+  for (const sec of resolveRoofSections(dim)) {
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(
+        Math.max(0.05, sec.x1 - sec.x0 - inset),
+        dim.floorHeightFt,
+        Math.max(0.05, sec.widthFt - inset),
+      ),
+      materials.skirting,
+    );
+    m.position.set((sec.x0 + sec.x1) / 2, dim.floorHeightFt / 2, (sec.zFront + sec.zBack) / 2);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    g.add(m);
+  }
+  return g;
 }
 
 function buildSteps(home, materials, sceneOpts = {}) {
@@ -1938,6 +2052,9 @@ function buildCornerTrim(dim, materials) {
     // is not the same length as the pair at the far one.
     const endSec = c.signX < 0 ? dv.sections[0] : dv.sections[dv.sections.length - 1];
     const eaveY = onFront ? endSec.eaveYFront : endSec.eaveYBack;
+    // Follow that section's wall line, so a corner of a set-in half is trimmed
+    // where its walls actually are.
+    const cz = onFront ? endSec.zFront : endSec.zBack;
     const longH = eaveY - minY;
     // The gable end takes its corner height from the long wall it meets, unless
     // someone typed a height for that end, in which case they meant it.
@@ -1951,7 +2068,7 @@ function buildCornerTrim(dim, materials) {
     boardLong.position.set(
       c.x + c.signX * (t - w) / 2,
       minY + longH / 2,
-      c.z + c.signZ * (t / 2),
+      cz + c.signZ * (t / 2),
     );
     boardLong.castShadow = true;
     boardLong.name = 'cornerBoard';
@@ -1962,7 +2079,7 @@ function buildCornerTrim(dim, materials) {
     boardEnd.position.set(
       c.x + c.signX * (t / 2),
       minY + endH / 2,
-      c.z - c.signZ * (w / 2),
+      cz - c.signZ * (w / 2),
     );
     boardEnd.castShadow = true;
     boardEnd.name = 'cornerBoard';

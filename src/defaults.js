@@ -53,8 +53,10 @@ export function defaultHome() {
       fasciaWidthFt: 0.55,
       // Roof sections along the LENGTH. Empty = one roof over the whole home.
       // Each entry: { id, label, startFt, pitch, pitchBack, ridgeOffsetFt,
-      //   ridgeStepFt, frontWallHeightFt, backWallHeightFt, roofStyle } — every
-      //   field but startFt may be null to inherit the whole-home value.
+      //   ridgeStepFt, frontWallHeightFt, backWallHeightFt, frontInsetFt,
+      //   backInsetFt, roofStyle } — every field but startFt may be null to
+      //   inherit the whole-home value. The insets set that part of the home
+      //   in from (or out past) the base rectangle, front and rear separately.
       roofSections: [],
       // Where one section's roof stands above the next it has nothing to butt
       // against, so it carries its overhang past the boundary.
@@ -210,7 +212,7 @@ function normalizeDormerSizes(raw) {
 
 const SECTION_NUMS = [
   'startFt', 'pitch', 'pitchBack', 'ridgeOffsetFt', 'ridgeStepFt',
-  'frontWallHeightFt', 'backWallHeightFt',
+  'frontWallHeightFt', 'backWallHeightFt', 'frontInsetFt', 'backInsetFt',
 ];
 
 /** A roof section inheriting everything but where it starts. */
@@ -218,7 +220,11 @@ export function newRoofSection(startFt = 0, label = '') {
   return {
     id: nextId('rs'), label, startFt,
     pitch: null, pitchBack: null, ridgeOffsetFt: null, ridgeStepFt: null,
-    frontWallHeightFt: null, backWallHeightFt: null, roofStyle: null,
+    frontWallHeightFt: null, backWallHeightFt: null,
+    // Positive pulls that wall line inward, so this part of the home is
+    // narrower; negative pushes it out, making this part deeper than the rest.
+    frontInsetFt: null, backInsetFt: null,
+    roofStyle: null,
   };
 }
 

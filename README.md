@@ -68,8 +68,8 @@ presets stop re-fitting your framing on export.
 Every value is also typeable in the sidebar row. `Offset` is measured left→right
 as you face that wall from outside.
 
-**Roof sections** — a spec sheet is not always one roof either. **+ Split
-section** cuts the home into roof sections measured from the left end, and each
+**Sections** — a spec sheet is not always one roof, or one rectangle. **+ Split
+section** cuts the home into sections measured from the left end, and each
 one carries its own pitches, ridge offset, ridge step, front and rear eave
 heights and style — or inherits any of them by leaving the field blank. So one
 part of the house can run a 4/12 over 8&prime; walls while the next runs a 9/12
@@ -77,6 +77,14 @@ over 11&prime;. Where two neighbouring sections disagree the wall closing the ga
 between their roofs is built for you, the long walls step at the boundary, each
 gable end is capped by the section that reaches it, and the raised roof carries
 its overhang past the step instead of being sheared off flush.
+
+A section can also be **set in**: pull its front or rear wall inward and that
+part of the house is narrower, with its roof solved over its own width — so a
+set-in half peaks lower at the same pitch. Set both equally and it is narrower
+all round; use a negative value and that part runs *deeper* than the rest. The
+gable end at that end narrows with it, the long wall turns a return at the step,
+the skirting follows, and a covered porch placed on that stretch stands against
+the moved wall rather than out at the original rectangle.
 
 **Floor plan plate** — load the spec-sheet PNG, set *Plate width (ft)* so the
 printed footprint matches the blue outline (turn on *Dimension outline on ground*
@@ -277,6 +285,13 @@ Drop a file in `homes/`, add a line to `homes/index.json`, and it shows up in th
   follows `trim`, which is what a file written before them meant.
 - `fasciaWidthFt` / `cornerTrimWidthFt` — the face dimension you would read off
   the board.
+- `frontInsetFt` / `backInsetFt` on a section — set that part of the home **in**
+  from the base rectangle (positive) or **out** past it (negative), front and
+  rear independently. Set both equally and that part is narrower all round. The
+  roof solves over the section's own width, so a narrower part peaks lower at
+  the same pitch; the gable end at that end narrows with it, the long wall turns
+  a return at the step, the skirting follows, and a porch on that stretch stands
+  against the moved wall.
 - `roofSections` — roof sections along the **length**, ordered by `startFt`
   measured in feet from the left end. The first always starts at 0 and the last
   runs to the far end; anything narrower than a foot is dropped. Each entry may
