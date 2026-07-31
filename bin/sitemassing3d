@@ -1,0 +1,27 @@
+#!/bin/sh
+# Launch SiteMassing3D: serve the app statically and open it.
+#
+# It must be served over HTTP — ES modules and the home library will not load
+# from a file:// path. The server is reused if one is already listening, so a
+# second launch opens a tab instead of failing on the port.
+set -eu
+
+# Resolve through the ~/.local/bin symlink, or ROOT lands in the bin directory.
+SELF=$(readlink -f -- "$0")
+ROOT=$(CDPATH= cd -- "$(dirname -- "$SELF")/.." && pwd)
+PORT=${SITEMASSING_PORT:-5173}
+URL="http://localhost:$PORT/index.html"
+
+if ! curl -sf -o /dev/null "$URL" 2>/dev/null; then
+  cd "$ROOT"
+  python3 -m http.server "$PORT" --bind 127.0.0.1 >/dev/null 2>&1 &
+  # Wait for it to answer rather than guessing at a sleep.
+  i=0
+  while [ $i -lt 40 ]; do
+    curl -sf -o /dev/null "$URL" 2>/dev/null && break
+    i=$((i + 1))
+    sleep 0.1
+  done
+fi
+
+exec xdg-open "$URL"

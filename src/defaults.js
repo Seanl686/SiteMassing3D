@@ -1,6 +1,10 @@
 // Default home spec and shared constants. Units are FEET throughout the app;
 // one three.js world unit == one foot.
 
+import { readSiteViews, sortSiteViews } from './siteviews.js';
+import { readHomePhotos } from './homephotos.js';
+import { readBumps } from './bumps.js';
+
 export const WALLS = ['front', 'back', 'left', 'right'];
 
 export const WALL_LABEL = {
@@ -28,39 +32,18 @@ export function defaultHome() {
       lengthFt: 56,
       wallHeightFt: 8,
       floorHeightFt: 2.5,
-      roofPitch: 4,          // rise per 12 of run
+      roofPitch: 4,          // rise per 12 of run — the FRONT slope
+      // Split-pitch roofs ("4/12 Split Pitch" on a Redman sheet) run a
+      // different pitch on the rear slope, which pushes the ridge off the
+      // centreline and makes one side of the peak higher and shorter than the
+      // other. null = both slopes match and the ridge sits over the middle.
+      roofPitchBack: null,
       eaveOverhangFt: 1.0,   // horizontal overhang past the long walls
       rakeOverhangFt: 0.75,  // horizontal overhang past the gable ends
       roofStyle: 'gable',
-      // Asymmetric roof: independent slopes either side of the ridge, a ridge
-      // that can sit off-center, and a step that lifts one plane's peak above
-      // the other. All ignored while `asymmetricRoof` is false.
-      asymmetricRoof: false,
-      frontPitch: null,      // rise per 12 on the front (-Z) plane; null = roofPitch
-      backPitch: null,       // rise per 12 on the back (+Z) plane; null = roofPitch
-      ridgeOffsetFt: 0,      // + moves the ridge toward the back wall
-      ridgeStepFt: 0,        // + lifts the back plane's peak above the front's
-      // Where one section's roof stands above the next, it has nothing to butt
-      // against — these say how far it reaches past the boundary and whether the
-      // exposed raked edge gets a barge board.
-      stepOverhang: 'raised',   // 'none' (butt), 'raised' (tall side), 'both'
-      stepOverhangFt: null,     // ft past the boundary; null = rakeOverhangFt
-      stepRakeFascia: true,     // board along a step overhang's raked edge
-      endRakeFascia: false,     // the same board on the outer gable-end rakes
-      // Where one plane peaks above the other there is no ridge to meet at, so
-      // the taller plane can sail past and hang over the clerestory below.
-      ridgeOverhang: 'raised',  // 'raised' (taller plane sails) or 'none'
-      ridgeOverhangFt: null,    // ft past the ridge; null = eaveOverhangFt
-      // Trim board sizes. Widths are the face dimension you would read off a
-      // board: 0.55 ft is a nominal 1x8 fascia, 0.29 ft a 1x4 corner board.
-      fasciaWidthFt: 0.55,
-      cornerBoards: true,
-      cornerBoardWidthFt: 0.29,
-      // Roof sections along the length. Empty = one roof over the whole home.
-      // Each entry: { id, label, startFt, pitch, frontPitch, backPitch,
-      //   ridgeOffsetFt, ridgeStepFt, frontWallHeightFt, backWallHeightFt,
-      //   roofStyle } — every field but startFt may be null to inherit.
-      roofSections: [],
+      headAlign: false,        // park every opening head a fixed drop below the wall top
+      windowHeadDropFt: 1.0,   // top of wall -> top of window
+      doorHeadDropFt: 1.33,    // top of wall -> top of door (6'-8" head in an 8' wall)
       dormerCount: 0,         // 0 (none), 1 (single), 2 (double)
       dormerStyle: 'gable',   // 'gable', 'shed', 'hip'
       dormerWidthFt: 10.0,
@@ -68,14 +51,26 @@ export function defaultHome() {
       dormerFalseEave: true,
       dormerInnerFalseEave: true,  // nested inner return band (double-wide)
       dormerConnected: false,      // merge double dormers into one continuous cap
+      dormerNested: false,         // dormer 2 sits inside dormer 1 (gable-in-gable)
+      dormerNestOffsetFt: 0,       // inner gable X offset from the outer gable center
       dormerWindow: true,
+      dormerDripEdge: true,        // horizontal drip edge / eave trim under dormer
+      dormerContinuousWall: false, // continue wall siding straight up into dormer face
       dormerPositions: [],          // custom X offsets in ft; empty = auto-place
+      dormerLinkSizes: false,       // true = every dormer shares the global size
+      dormerSizes: [],              // per-dormer { widthFt, heightFt } overrides
+      sidingTexture: 'horizontal_lap', // 'horizontal_lap', 'board_batten', 'cedar_shingle', 'smooth'
+      dormerSidingTexture: 'horizontal_lap',
+      gableSidingTexture: 'horizontal_lap',
+      cornerTrim: true,
+      cornerTrimWidthFt: 0.5,       // 6-inch vertical corner trim boards
     },
     colors: {
       siding: '#8d9299',
+      belowDormerSiding: '#8d9299',
+      dormerSiding: '#8d9299',
+      gableSiding: '#8d9299',
       trim: '#f2f2f0',
-      fascia: '#f2f2f0',   // fascia, rake and ridge boards
-      corner: '#f2f2f0',   // corner boards
       roof: '#3a3d42',
       skirting: '#e6e6e1',
       door: '#f2f2f0',
@@ -90,8 +85,51 @@ export function defaultHome() {
       { id: nextId('w'), type: 'window', wall: 'left',  offsetFt: 9,  widthFt: 4, heightFt: 3.5, sillFt: 3.5, label: 'Primary bedroom' },
       { id: nextId('w'), type: 'window', wall: 'right', offsetFt: 9,  widthFt: 3, heightFt: 3.5, sillFt: 3.5, label: 'Bedroom 3' },
     ],
+    // Departures from the plain rectangle: 16" box-outs, recessed corners, and
+    // the covered porch the spec sheet draws inside the footprint. See bumps.js.
+    bumps: [],
     plan: { src: null, widthFt: 56, offsetX: 0, offsetZ: 0, rotation: 0, opacity: 0.65, show: true },
-    sitePhoto: { src: null, show: true, fitMode: 'contain', opacity: 0.85, scale: 1.0, panX: 0, panY: 0, rotation: 0, baselineY: 0, camDist: 60, posX: 0, posZ: 0, rotY: 0 },
+    sitePhoto: { src: null, show: true, fitMode: 'camera', opacity: 0.85, scale: 1.0, panX: 0, panY: 0, rotation: 0, baselineY: 0, camDist: 60, posX: 0, posZ: 0, rotY: 0 },
+    // The site plan / spec sheet that ships with the render package. `src` is
+    // always a PNG — a PDF page is converted on load, because image models
+    // ignore PDF attachments. `pdf` keeps the original for the human.
+    sitePlan: { src: null, pdf: null, name: '', page: 1, pageCount: 0, width: 0, height: 0 },
+    // Equirectangular 360 photo wrapped on a sphere centred on the site, so the
+    // camera can orbit the home and stay inside the real surroundings. Supersedes
+    // the flat site photo while it is showing.
+    panorama: {
+      src: null, show: true,
+      yawDeg: 0,        // spin the lot around the home until north lines up
+      tiltDeg: 0,       // level a hand-held shot
+      radiusFt: 300,    // how far away the horizon reads
+      heightFt: 5.5,    // tripod height the pano was shot at
+      brightness: 1,
+      opacity: 1,
+    },
+    // Photographs of the REAL home, keyed by the wall each one shows. These are
+    // the authority on how the home looks; the plates are the authority on where
+    // everything is. See homephotos.js.
+    homePhotos: {},
+    // Named lot-photo + camera set-ups. One lot photo renders one view, so a
+    // site shot from four positions is four of these — see siteviews.js.
+    siteViews: [],
+    activeSiteViewId: null,
+    // The handful of things the model cannot know because they are on the lot,
+    // not in the spec. Everything else in the render brief is measured.
+    brief: defaultBrief(),
+  };
+}
+
+/** Free-text blanks the render brief needs from the person looking at the lot. */
+export function defaultBrief() {
+  return {
+    nearCorner: '',   // blank = use the corner measured from the live camera
+    pad: '',
+    landmark: '',
+    keep: '',
+    heightRef: '',
+    light: '',        // blank = derived from the sun / overcast controls
+    notes: '',
   };
 }
 
@@ -104,6 +142,7 @@ export function defaultScene() {
     eye: 5.5,         // eye height in ft for the "Eye level" preset
     bg: '#20242a',
     grid: true,
+    groundExtentFt: 150,  // ground plane / grid radius; keeps the lot from reading as infinite
     shadow: true,
     steps: true,
     stepLanding: true,
@@ -112,6 +151,10 @@ export function defaultScene() {
     railMat: 'pressure_treated', // 'pressure_treated', 'white_trim', 'black_metal', 'matching_trim'
     balusterStyle: 'balusters', // 'balusters', 'horizontal_cables', 'open'
     wireframe: false,
+    // Flat, unlit shading with tone mapping off, so every surface renders as
+    // exactly the hex it was given. The check that a finish picked off a
+    // photograph really is one for one — the lit render cannot answer that.
+    trueColor: false,
     blockLandscape: false,
     labels: false,
     dims: false,
@@ -122,63 +165,50 @@ export function defaultExport() {
   return { w: 2400, h: 1600, alpha: false, burn: true };
 }
 
-const SECTION_NUMS = [
-  'startFt', 'pitch', 'frontPitch', 'backPitch', 'ridgeOffsetFt', 'ridgeStepFt',
-  'frontWallHeightFt', 'backWallHeightFt',
-];
+/** Dormer sizes live on a quarter-foot grid so the spinner steps land on whole
+ *  feet; saves written before that grid existed get snapped on load. */
+const quarterFt = (v) => Math.max(0.25, Math.round(v * 4) / 4);
 
-/** A roof section over the whole length unless told otherwise. */
-export function newRoofSection(startFt = 0, label = '') {
-  return {
-    id: nextId('rs'),
-    label,
-    startFt,
-    pitch: null,
-    frontPitch: null,
-    backPitch: null,
-    ridgeOffsetFt: null,
-    ridgeStepFt: null,
-    frontWallHeightFt: null,
-    backWallHeightFt: null,
-    roofStyle: null,
-  };
-}
-
-/** Coerce whatever a JSON file offers into well-formed section records. */
-export function normalizeRoofSections(list) {
-  if (!Array.isArray(list)) return [];
-  return list
-    .filter((s) => s && typeof s === 'object')
-    .map((s) => {
-      const out = { ...newRoofSection(0), ...s, id: s.id || nextId('rs') };
-      for (const k of SECTION_NUMS) {
-        const v = s[k];
-        out[k] = v === null || v === undefined || v === '' || Number.isNaN(+v) ? null : +v;
-      }
-      out.startFt = out.startFt ?? 0;
-      out.roofStyle = s.roofStyle || null;
-      out.label = s.label || '';
-      return out;
-    })
-    .sort((a, b) => a.startFt - b.startFt);
+/** Coerce the per-dormer size overrides into a clean array of partial specs.
+ *  A null entry (or a missing field) means "inherit the global dormer size". */
+function normalizeDormerSizes(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((s) => {
+    if (!s || typeof s !== 'object') return null;
+    const out = {};
+    if (Number.isFinite(+s.widthFt) && +s.widthFt > 0) out.widthFt = quarterFt(+s.widthFt);
+    if (Number.isFinite(+s.heightFt) && +s.heightFt > 0) out.heightFt = quarterFt(+s.heightFt);
+    return Object.keys(out).length ? out : null;
+  });
 }
 
 export function migrate(home) {
   const base = defaultHome();
-  const dims = { ...base.dimensions, ...(home.dimensions || {}) };
-  dims.roofSections = normalizeRoofSections(dims.roofSections);
-
-  const rawColors = home.colors || {};
-  const colors = { ...base.colors, ...rawColors };
-  // A file written before the fascia and corner boards had their own colors
-  // meant "same as the trim" — inheriting the base default instead would
-  // repaint someone's home the moment they opened it.
-  if (!rawColors.fascia) colors.fascia = colors.trim;
-  if (!rawColors.corner) colors.corner = colors.trim;
+  const dimensions = { ...base.dimensions, ...(home.dimensions || {}) };
+  dimensions.dormerSizes = normalizeDormerSizes(dimensions.dormerSizes);
+  // A blank, zero or junk rear pitch means "mirror the front", not "flat".
+  dimensions.roofPitchBack = Number.isFinite(+dimensions.roofPitchBack) && +dimensions.roofPitchBack > 0
+    ? +dimensions.roofPitchBack
+    : null;
+  dimensions.dormerPositions = Array.isArray(dimensions.dormerPositions)
+    ? dimensions.dormerPositions.map((v) => +v).filter((v) => Number.isFinite(v))
+    : [];
+  // Sizes are independent unless a save explicitly asked for linked sizes.
+  dimensions.dormerLinkSizes = dimensions.dormerLinkSizes === true;
+  const colors = { ...base.colors, ...(home.colors || {}) };
+  if (!home.colors?.belowDormerSiding) colors.belowDormerSiding = colors.siding;
+  if (!home.colors?.dormerSiding) colors.dormerSiding = colors.siding;
+  if (!home.colors?.gableSiding) colors.gableSiding = colors.siding;
+  // Plate modes were renamed when the plate was locked to the camera:
+  // 'contain' scaled off whichever axis bound first, which is what made the
+  // photo drift against the model on a resize.
+  const sitePhoto = { ...base.sitePhoto, ...(home.sitePhoto || {}) };
+  if (sitePhoto.fitMode === 'contain') sitePhoto.fitMode = 'camera';
+  if (sitePhoto.fitMode === '100% 100%') sitePhoto.fitMode = 'stretch';
 
   const out = {
     name: home.name || base.name,
-    dimensions: dims,
+    dimensions,
     colors,
     openings: (home.openings || []).map((o) => ({
       id: o.id || nextId('o'),
@@ -189,13 +219,24 @@ export function migrate(home) {
       heightFt: +o.heightFt || 3,
       sillFt: +o.sillFt || 0,
       label: o.label || '',
+      headFree: !!o.headFree,   // opt this opening out of the global head alignment
       stepMat: o.stepMat,
       stepEgress: o.stepEgress,
+      stepRailings: o.stepRailings,
       railMat: o.railMat,
       balusterStyle: o.balusterStyle,
     })),
+    bumps: readBumps(home.bumps),
     plan: { ...base.plan, ...(home.plan || {}) },
-    sitePhoto: { ...base.sitePhoto, ...(home.sitePhoto || {}) },
+    sitePhoto,
+    sitePlan: { ...base.sitePlan, ...(home.sitePlan || {}) },
+    panorama: { ...base.panorama, ...(home.panorama || {}) },
+    homePhotos: readHomePhotos(home.homePhotos),
+    siteViews: sortSiteViews(readSiteViews(home.siteViews)),
+    activeSiteViewId: home.activeSiteViewId || null,
+    brief: { ...base.brief, ...(home.brief || {}) },
   };
+  // A dangling active id would light up a row that is no longer there.
+  if (!out.siteViews.some((v) => v.id === out.activeSiteViewId)) out.activeSiteViewId = null;
   return out;
 }

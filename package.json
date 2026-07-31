@@ -1,7 +1,7 @@
 {
   "name": "sitemassing3d",
-  "version": "0.1.0",
-  "description": "Parametric double-wide massing model with defined exterior doors, elevation and 3/4 views, and PNG export for site-render plates.",
+  "version": "0.11.0",
+  "description": "Parametric double-wide massing model with defined exterior doors, elevation and 3/4 views, and a one-file AI render package: plates, lot photo, converted site plan and a measured prompt brief.",
   "scripts": {
     "start": "npx --yes serve@14 -l 5173 .",
     "serve": "python3 -m http.server 5173",
@@ -10,6 +10,7 @@
   "keywords": [],
   "type": "module",
   "dependencies": {
+    "pdfjs-dist": "^4.10.38",
     "three": "^0.185.1"
   },
   "private": true

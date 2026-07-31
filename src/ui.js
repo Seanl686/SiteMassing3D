@@ -1,5 +1,5 @@
 import { WALLS, WALL_LABEL, OPENING_PRESETS } from './defaults.js';
-import { fmtAllUnits, fmtFt, ROOF_STYLES, ROOF_STYLE_LABEL } from './build.js';
+import { fmtAllUnits } from './build.js';
 
 const TYPES = [['door', 'Door'], ['slider', 'Slider'], ['window', 'Window']];
 const NUMS = [
@@ -24,211 +24,37 @@ export function initAccordions() {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Roof sections
-// ---------------------------------------------------------------------------
-
-const SECTION_NUMS = [
-  ['Start ft', 'startFt', '0.5'],
-  ['Front /12', 'frontPitch', '0.5'],
-  ['Back /12', 'backPitch', '0.5'],
-  ['Ridge off ft', 'ridgeOffsetFt', '0.25'],
-  ['Ridge step ft', 'ridgeStepFt', '0.25'],
-  ['Front eave ft', 'frontWallHeightFt', '0.25'],
-  ['Back eave ft', 'backWallHeightFt', '0.25'],
-];
-
-/** "front peak 13'-2" · rear peak 11'-4"" — the numbers this section resolves to. */
-function sectionReadout(sec) {
-  const el = document.createElement('div');
-  el.className = 'readout';
-  if (!sec) {
-    el.textContent = 'Too narrow to build — widen or remove this section.';
-    return el;
-  }
-  const step = sec.backPeakY - sec.frontPeakY;
-  const pitch = (s) => `${(s * 12).toFixed(1)}/12`;
-  const stepNote = Math.abs(step) > 0.02
-    ? ` · <b>${step > 0 ? 'rear' : 'front'} peak ${fmtFt(Math.abs(step))} higher</b>`
-    : ' · peaks level';
-  // A sailing plane tops out past the ridge, so the peak is no longer the
-  // highest point on the roof.
-  const sailNote = sec.ridgeSail
-    ? ` · ${sec.ridgeSail > 0 ? 'front' : 'rear'} plane sails ${fmtFt(Math.abs(sec.ridgeSail))} past the ridge to ${fmtFt(sec.topY)}`
-    : '';
-  el.innerHTML =
-    `front peak <b>${fmtFt(sec.frontPeakY)}</b> at ${pitch(sec.frontSlope)} · ` +
-    `rear peak <b>${fmtFt(sec.backPeakY)}</b> at ${pitch(sec.backSlope)}${stepNote}<br>` +
-    `eaves ${fmtFt(sec.frontEaveY)} front / ${fmtFt(sec.backEaveY)} rear · ` +
-    `ridge ${sec.ridgeZ === 0 ? 'on center' : `${fmtFt(Math.abs(sec.ridgeZ))} ${sec.ridgeZ > 0 ? 'rear' : 'front'} of center`}${sailNote}`;
-  return el;
-}
-
-/**
- * The roof-section editor. Rows map one-to-one onto `dim.roofSections`; when
- * that list is empty the roof is a single implicit section and we show it as a
- * read-only summary of the whole-home settings above.
- */
-const sortedSpecs = (dim) => (Array.isArray(dim?.roofSections) ? dim.roofSections : [])
-  .slice()
-  .sort((a, b) => (a.startFt ?? 0) - (b.startFt ?? 0));
-
-export function renderRoofSectionList(container, dim, resolved, cb) {
-  container.textContent = '';
-  const specs = sortedSpecs(dim);
-  const byId = new Map(resolved.map((s) => [s.id, s]));
-
-  if (!specs.length) {
-    const card = document.createElement('div');
-    card.className = 'opening roof-section locked';
-    const head = document.createElement('header');
-    const tag = document.createElement('span');
-    tag.className = 'tag';
-    tag.textContent = 'whole roof';
-    const name = document.createElement('span');
-    name.textContent = 'One roof over the full length';
-    name.style.cssText = 'flex:1;font-size:12px;';
-    const span = document.createElement('span');
-    span.className = 'span';
-    span.textContent = `0 – ${fmtFt(dim.lengthFt)}`;
-    head.append(tag, name, span);
-    card.appendChild(head);
-    card.appendChild(sectionReadout(resolved[0]));
-    container.appendChild(card);
-    return;
-  }
-
-  for (let i = 0; i < specs.length; i++) {
-    const spec = specs[i];
-    const sec = byId.get(spec.id);
-    const card = document.createElement('div');
-    card.className = 'opening roof-section';
-    card.dataset.id = spec.id;
-
-    const head = document.createElement('header');
-    const tag = document.createElement('span');
-    tag.className = 'tag';
-    tag.textContent = `S${i + 1}`;
-    head.appendChild(tag);
-
-    const lbl = document.createElement('input');
-    lbl.className = 'lbl';
-    lbl.type = 'text';
-    lbl.autocomplete = 'off';
-    lbl.placeholder = 'section label';
-    lbl.value = spec.label || '';
-    lbl.addEventListener('input', () => { spec.label = lbl.value; cb.onEdit(false); });
-    head.appendChild(lbl);
-
-    const span = document.createElement('span');
-    span.className = 'span';
-    span.textContent = sec ? `${fmtFt(sec.startFt)} – ${fmtFt(sec.endFt)}` : '—';
-    head.appendChild(span);
-    card.appendChild(head);
-
-    const grid = document.createElement('div');
-    grid.className = 'grid4 sec-grid';
-    for (const [name, key, step] of SECTION_NUMS) {
-      const l = document.createElement('label');
-      const s = document.createElement('span');
-      s.textContent = name;
-      const input = document.createElement('input');
-      input.type = 'number';
-      input.step = step;
-      input.autocomplete = 'off';
-      input.dataset.key = key;
-      // Blank means "inherit from the whole-home settings", which is not the
-      // same as zero — so the field has to be able to hold nothing at all.
-      input.placeholder = key === 'startFt' ? '0' : 'Auto';
-      input.value = spec[key] ?? '';
-      if (key === 'startFt' && i === 0) {
-        input.value = 0;
-        input.disabled = true;
-        input.title = 'The first section always starts at the left end';
-      }
-      input.addEventListener('input', () => {
-        const raw = input.value.trim();
-        if (raw === '') {
-          spec[key] = key === 'startFt' ? 0 : null;
-        } else {
-          const v = parseFloat(raw);
-          if (Number.isNaN(v)) return; // mid-typing
-          spec[key] = v;
-        }
-        cb.onEdit(key === 'startFt');
-      });
-      l.append(s, input);
-      grid.appendChild(l);
-    }
-    card.appendChild(grid);
-
-    const foot = document.createElement('div');
-    foot.className = 'foot';
-    const styleSel = document.createElement('select');
-    const inheritOpt = document.createElement('option');
-    inheritOpt.value = '';
-    inheritOpt.textContent = 'Roof style: inherit';
-    styleSel.appendChild(inheritOpt);
-    for (const v of ROOF_STYLES) {
-      const opt = document.createElement('option');
-      opt.value = v;
-      opt.textContent = ROOF_STYLE_LABEL[v];
-      styleSel.appendChild(opt);
-    }
-    styleSel.value = ROOF_STYLES.includes(spec.roofStyle) ? spec.roofStyle : '';
-    styleSel.addEventListener('change', () => {
-      spec.roofStyle = styleSel.value || null;
-      cb.onEdit(true);
-    });
-    foot.appendChild(styleSel);
-
-    const del = document.createElement('button');
-    del.type = 'button';
-    del.className = 'danger';
-    del.textContent = '✕';
-    del.title = 'Remove this section';
-    del.addEventListener('click', () => cb.onDelete(spec.id));
-    foot.appendChild(del);
-    card.appendChild(foot);
-
-    card.appendChild(sectionReadout(sec));
-    container.appendChild(card);
-  }
-}
-
-/** Refresh each card's resolved numbers in place, leaving the inputs alone. */
-export function syncRoofSectionReadouts(container, resolved, dim) {
-  if (!container) return;
-  const byId = new Map(resolved.map((s) => [s.id, s]));
-  const cards = container.querySelectorAll('.roof-section');
-  const specs = sortedSpecs(dim);
-  for (const card of cards) {
-    const sec = card.dataset.id ? byId.get(card.dataset.id) : resolved[0];
-    const old = card.querySelector('.readout');
-    if (old) card.replaceChild(sectionReadout(sec), old);
-    const span = card.querySelector('.span');
-    if (span) span.textContent = sec ? `${fmtFt(sec.startFt)} – ${fmtFt(sec.endFt)}` : '—';
-  }
-  // A start offset can reorder the sections; when it does, the rows have to be
-  // rebuilt rather than patched.
-  const order = specs.map((s) => s.id).join(',');
-  const shown = [...cards].map((c) => c.dataset.id).filter(Boolean).join(',');
-  return order !== shown;
-}
+/** Ids in the current multi-selection, tolerating a caller that passes none. */
+const selSet = (cb) => (cb && cb.selectedIds instanceof Set ? cb.selectedIds : new Set());
 
 export function renderOpeningList(container, home, cb) {
   container.textContent = '';
 
+  const ids = selSet(cb);
+  const groupUnits = home.openings.filter((o) => ids.has(o.id));
   const selectedUnit = home.openings.find((o) => o.id === cb.selectedId);
 
-  // If a unit is selected, render the Selected Unit Details card at the top of the sidebar!
-  if (selectedUnit) {
+  // Two or more units selected -> the group editor replaces the single-unit card.
+  if (groupUnits.length > 1) {
     const topSec = document.createElement('div');
     topSec.className = 'selected-unit-section';
 
     const h = document.createElement('h3');
-    h.textContent = 'Selected Unit Details';
-    h.style.cssText = 'margin:6px 0 6px;font-size:11px;color:#6fb2ff;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;';
+    h.className = 'subhead group';
+    h.textContent = `Group edit — ${groupUnits.length} selected`;
+    topSec.appendChild(h);
+    topSec.appendChild(renderGroupCard(groupUnits, cb));
+    container.appendChild(topSec);
+  }
+
+  // If a single unit is selected, render the Selected Unit Details card at the top of the sidebar!
+  if (selectedUnit && groupUnits.length <= 1) {
+    const topSec = document.createElement('div');
+    topSec.className = 'selected-unit-section';
+
+    const h = document.createElement('h3');
+    h.className = 'subhead';
+    h.textContent = 'Selected unit';
     topSec.appendChild(h);
 
     const card = renderSelectedUnitCard(selectedUnit, cb);
@@ -243,8 +69,8 @@ export function renderOpeningList(container, home, cb) {
   }
 
   const allHeader = document.createElement('h3');
-  allHeader.textContent = selectedUnit ? 'All Openings by Wall' : 'Openings';
-  allHeader.style.cssText = 'margin:12px 0 6px;font-size:11px;color:#9aa2ad;font-weight:600;';
+  allHeader.className = 'subhead';
+  allHeader.textContent = selectedUnit ? 'All openings by wall' : 'All openings';
   container.appendChild(allHeader);
 
   for (const wall of WALLS) {
@@ -252,27 +78,29 @@ export function renderOpeningList(container, home, cb) {
     if (!list.length) continue;
 
     const h = document.createElement('div');
+    h.className = 'wall-head';
     h.textContent = WALL_LABEL[wall];
-    h.style.cssText = 'margin:8px 0 4px;font-size:10px;color:#858d98;font-weight:600;text-transform:uppercase;';
     container.appendChild(h);
 
     for (const o of list) {
-      if (selectedUnit && o.id === selectedUnit.id) continue;
+      if (groupUnits.length <= 1 && selectedUnit && o.id === selectedUnit.id) continue;
       container.appendChild(row(o, cb));
     }
   }
-  syncOpeningValues(container, home, cb.selectedId);
+  syncOpeningValues(container, home, cb.selectedId, cb);
 }
 
 const MAT_LABELS = { concrete: '🧱 Concrete', pressure_treated: '🪵 Wood', dark_composite: '⬛ Composite' };
 const EGRESS_LABELS = { front: '⬆ Front', left: '⬅ Left', right: '➡ Right', split: '↔ Split' };
 const RAIL_MAT_LABELS = { pressure_treated: '🪵 Wood', white_trim: '⚪ White', black_metal: '⬛ Iron', matching_trim: '🎨 Trim' };
 const BALUSTER_LABELS = { balusters: '║║ Spindles', horizontal_cables: '═ Cables', open: '🔓 Open' };
+const RAILINGS_LABELS = { both: '↔ Both & Outer', outer: '🛡️ Outer (Away Side)', all: '🏰 Full Surround', left: '⬅ Left Side', right: '➡ Right Side', none: '🚫 None' };
 
 const MAT_ARR = ['concrete', 'pressure_treated', 'dark_composite'];
 const EGRESS_ARR = ['front', 'left', 'right', 'split'];
 const RAIL_MAT_ARR = ['pressure_treated', 'white_trim', 'black_metal', 'matching_trim'];
 const BALUSTER_ARR = ['balusters', 'horizontal_cables', 'open'];
+const RAILINGS_ARR = ['both', 'outer', 'all', 'left', 'right', 'none'];
 
 function cycleNext(arr, current) {
   const idx = arr.indexOf(current || arr[0]);
@@ -332,6 +160,12 @@ function buildSummaryPills(summaryEl, o, cb) {
       cb.onEdit(o, true);
     }));
 
+    const rPlacement = o.stepRailings || 'both';
+    summaryEl.appendChild(createPill('Railings', RAILINGS_LABELS[rPlacement] || rPlacement, () => {
+      o.stepRailings = cycleNext(RAILINGS_ARR, rPlacement);
+      cb.onEdit(o, true);
+    }));
+
     const rMat = o.railMat || 'pressure_treated';
     summaryEl.appendChild(createPill('Rail Mat', RAIL_MAT_LABELS[rMat] || rMat, () => {
       o.railMat = cycleNext(RAIL_MAT_ARR, rMat);
@@ -344,6 +178,209 @@ function buildSummaryPills(summaryEl, o, cb) {
       cb.onEdit(o, true);
     }));
   }
+}
+
+// --------------------------------------------------------------------------
+// Group edit card
+// --------------------------------------------------------------------------
+
+/** Shared value of `key` across the selection, or null when the units differ. */
+function commonValue(list, key) {
+  const first = round(list[0][key]);
+  return list.every((o) => round(o[key]) === first) ? first : null;
+}
+
+/** Shared raw value of `key` (strings, booleans), or undefined when mixed. */
+function commonRaw(list, key, fallback) {
+  const first = list[0][key] ?? fallback;
+  return list.every((o) => (o[key] ?? fallback) === first) ? first : undefined;
+}
+
+function groupButton(label, title, onClick) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = label;
+  b.title = title;
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+/** Select whose first entry means "leave each unit as it is". */
+function mixedSelect(entries, current, keepLabel, onChange) {
+  const sel = document.createElement('select');
+  const keep = document.createElement('option');
+  keep.value = '';
+  keep.textContent = keepLabel;
+  sel.appendChild(keep);
+  for (const [v, name] of entries) {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = name;
+    sel.appendChild(opt);
+  }
+  sel.value = current === undefined ? '' : current;
+  sel.addEventListener('change', () => {
+    if (!sel.value) return;
+    onChange(sel.value);
+  });
+  return sel;
+}
+
+function renderGroupCard(list, cb) {
+  const card = document.createElement('div');
+  card.className = 'selected-card group-card';
+
+  const doors = list.filter((o) => o.type !== 'window').length;
+  const head = document.createElement('div');
+  head.className = 'group-head';
+  const title = document.createElement('span');
+  title.textContent = `${doors} door/slider · ${list.length - doors} window`;
+  head.appendChild(title);
+  head.appendChild(groupButton('Clear', 'Deselect everything', () => cb.onClearSelection?.()));
+  card.appendChild(head);
+
+  const hint = document.createElement('p');
+  hint.className = 'hint';
+  hint.style.cssText = 'margin:0 0 6px;font-size:10px;';
+  hint.textContent = 'Typing a number sets it on every selected unit. ± buttons shift each unit by that amount. Align / match use the last-clicked unit as the anchor.';
+  card.appendChild(hint);
+
+  // Absolute values — blank means the units currently disagree.
+  const grid = document.createElement('div');
+  grid.className = 'grid4';
+  for (const [name, key] of NUMS) {
+    const l = document.createElement('label');
+    const s = document.createElement('span');
+    s.textContent = name;
+    const i = document.createElement('input');
+    i.type = 'number';
+    i.step = '0.25';
+    i.autocomplete = 'off';
+    i.dataset.gkey = key;
+    if (key === 'heightFt') i.setAttribute('list', 'heightPresets');
+    else if (key === 'widthFt') i.setAttribute('list', 'widthPresets');
+    const cv = commonValue(list, key);
+    if (cv === null) { i.value = ''; i.placeholder = 'mixed'; } else i.value = cv;
+    i.addEventListener('input', () => {
+      const v = parseFloat(i.value);
+      if (Number.isNaN(v)) return; // mid-typing — wait for a real number
+      cb.onGroupEdit((o) => { o[key] = v; }, true);
+    });
+    l.append(s, i);
+    grid.appendChild(l);
+  }
+  card.appendChild(grid);
+
+  // Relative nudges — keep the units' existing spread, move the whole set.
+  for (const [label, key] of [['Offset', 'offsetFt'], ['Sill', 'sillFt']]) {
+    const nudge = document.createElement('div');
+    nudge.className = 'group-nudge';
+    const cap = document.createElement('span');
+    cap.textContent = `${label} shift`;
+    nudge.appendChild(cap);
+    for (const d of [-1, -0.25, 0.25, 1]) {
+      const txt = `${d > 0 ? '+' : '−'}${Math.abs(d)}`;
+      nudge.appendChild(groupButton(txt, `Shift every selected ${label.toLowerCase()} by ${d} ft`, () => {
+        cb.onGroupEdit((o) => { o[key] = Math.max(key === 'sillFt' ? 0 : -1e6, (+o[key] || 0) + d); }, true);
+      }));
+    }
+    card.appendChild(nudge);
+  }
+
+  // Wall / type / head alignment for the whole set.
+  const foot = document.createElement('div');
+  foot.className = 'foot';
+  foot.appendChild(mixedSelect(
+    WALLS.map((w) => [w, WALL_LABEL[w]]),
+    commonRaw(list, 'wall', 'front'),
+    '— move to wall —',
+    (v) => cb.onGroupRestructure((o) => { o.wall = v; }),
+  ));
+  foot.appendChild(mixedSelect(
+    TYPES,
+    commonRaw(list, 'type', 'window'),
+    '— set type —',
+    (v) => cb.onGroupRestructure((o) => {
+      const oldPreset = OPENING_PRESETS[o.type];
+      const preset = OPENING_PRESETS[v];
+      o.type = v;
+      if (!preset) return;
+      o.widthFt = preset.widthFt;
+      o.heightFt = preset.heightFt;
+      o.sillFt = preset.sillFt;
+      if (!o.label || (oldPreset && o.label === oldPreset.label)) o.label = preset.label;
+    }),
+  ));
+
+  const freeLabel = document.createElement('label');
+  freeLabel.className = 'check';
+  freeLabel.title = 'Ignore the global opening head drop for every selected unit';
+  freeLabel.style.cssText = 'display:flex;align-items:center;gap:3px;font-size:10px;white-space:nowrap;';
+  const freeBox = document.createElement('input');
+  freeBox.type = 'checkbox';
+  const freeCommon = commonRaw(list, 'headFree', false);
+  freeBox.checked = freeCommon === true;
+  freeBox.indeterminate = freeCommon === undefined;
+  freeBox.addEventListener('change', () => {
+    const v = freeBox.checked;
+    cb.onGroupEdit((o) => { o.headFree = v; }, true);
+  });
+  const freeText = document.createElement('span');
+  freeText.textContent = 'Free head';
+  freeLabel.append(freeBox, freeText);
+  foot.appendChild(freeLabel);
+  card.appendChild(foot);
+
+  // Alignment / distribution / bulk duplicate + delete.
+  const acts = document.createElement('div');
+  acts.className = 'group-actions';
+  const act = (label, name, title) => acts.appendChild(groupButton(label, title, () => cb.onGroupAction(name)));
+  act('⊤ Align heads', 'alignTop', 'Match every head height to the anchor');
+  act('⊥ Align sills', 'alignSill', 'Match every sill height to the anchor');
+  act('⊢ Align offsets', 'alignLeft', 'Match every left edge to the anchor');
+  act('⊕ Align centers', 'alignCenter', 'Center every unit on the anchor centerline');
+  act('↔ Even spacing', 'distribute', 'Equalise the gaps between units on each wall');
+  act('⇔ Match width', 'matchWidth', 'Match every width to the anchor');
+  act('⇕ Match height', 'matchHeight', 'Match every height to the anchor');
+  act('⧉ Duplicate all', 'duplicate', 'Duplicate every selected unit');
+  const del = groupButton('✕ Delete all', 'Delete every selected unit', () => cb.onGroupAction('delete'));
+  del.className = 'danger';
+  acts.appendChild(del);
+  card.appendChild(acts);
+
+  // Stair / railing settings, shown when the set contains a door or slider.
+  if (doors) {
+    const sub = document.createElement('div');
+    sub.className = 'stair-custom-sub';
+    sub.style.cssText = 'margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.08);';
+
+    const subTitle = document.createElement('div');
+    subTitle.style.cssText = 'font-size:10px;color:#ffd479;font-weight:600;margin-bottom:4px;text-transform:uppercase;';
+    subTitle.textContent = `Stair & Deck — applies to ${doors} door/slider`;
+    sub.appendChild(subTitle);
+
+    const subGrid = document.createElement('div');
+    subGrid.className = 'grid2';
+    const doorUnits = list.filter((o) => o.type !== 'window');
+    const addSel = (name, key, entries, fallback) => {
+      const l = document.createElement('label');
+      const s = document.createElement('span');
+      s.textContent = name;
+      l.append(s, mixedSelect(entries, commonRaw(doorUnits, key, fallback), '— keep —', (v) => {
+        cb.onGroupEdit((o) => { if (o.type !== 'window') o[key] = v; }, true);
+      }));
+      subGrid.appendChild(l);
+    };
+    addSel('Stair Material', 'stepMat', MAT_ARR.map((v) => [v, MAT_LABELS[v]]), 'concrete');
+    addSel('Egress Direction', 'stepEgress', EGRESS_ARR.map((v) => [v, EGRESS_LABELS[v]]), 'front');
+    addSel('Stair Railings', 'stepRailings', RAILINGS_ARR.map((v) => [v, RAILINGS_LABELS[v]]), 'both');
+    addSel('Railing Material', 'railMat', RAIL_MAT_ARR.map((v) => [v, RAIL_MAT_LABELS[v]]), 'pressure_treated');
+    addSel('Balusters / Infill', 'balusterStyle', BALUSTER_ARR.map((v) => [v, BALUSTER_LABELS[v]]), 'balusters');
+    sub.appendChild(subGrid);
+    card.appendChild(sub);
+  }
+
+  return card;
 }
 
 function renderSelectedUnitCard(o, cb) {
@@ -363,16 +400,35 @@ function renderSelectedUnitCard(o, cb) {
 
 /** Push current values into the existing rows without rebuilding them. */
 export function syncOpeningValues(container, home, selectedId, cb) {
+  const ids = selSet(cb);
   for (const el of container.querySelectorAll('.opening')) {
     const o = home.openings.find((x) => x.id === el.dataset.id);
     if (!o) continue;
     el.classList.toggle('sel', o.id === selectedId);
+    el.classList.toggle('ingroup', ids.size > 1 && ids.has(o.id));
+    const pick = el.querySelector('input.pick');
+    if (pick) pick.checked = ids.has(o.id);
     for (const input of el.querySelectorAll('input[data-key]')) {
       if (document.activeElement === input) continue; // never fight the user's cursor
       input.value = round(o[input.dataset.key]);
     }
+    for (const sel of el.querySelectorAll('select[data-key]')) {
+      if (document.activeElement === sel) continue;
+      const key = sel.dataset.key;
+      if (o[key] !== undefined) sel.value = o[key];
+    }
     const lbl = el.querySelector('input.lbl');
     if (lbl && document.activeElement !== lbl) lbl.value = o.label || '';
+  }
+
+  // Group card: refresh the shared values, but never fight a focused field.
+  const groupUnits = home.openings.filter((o) => ids.has(o.id));
+  if (groupUnits.length > 1) {
+    for (const input of container.querySelectorAll('input[data-gkey]')) {
+      if (document.activeElement === input) continue;
+      const cv = commonValue(groupUnits, input.dataset.gkey);
+      if (cv === null) { input.value = ''; input.placeholder = 'mixed'; } else input.value = cv;
+    }
   }
 
   for (const card of container.querySelectorAll('.selected-card')) {
@@ -395,12 +451,23 @@ function row(o, cb) {
   // swallow interaction with the controls inside it.
   el.addEventListener('pointerdown', (e) => {
     if (e.target.closest('input, select, button')) return;
-    cb.onSelect(o.id);
+    // Ctrl/Cmd or Shift extends the selection instead of replacing it.
+    cb.onSelect(o.id, e.ctrlKey || e.metaKey || e.shiftKey ? 'toggle' : 'replace');
   });
 
   const head = document.createElement('header');
+
+  // Checkbox is the explicit, mouse-only way to build a group selection.
+  const pick = document.createElement('input');
+  pick.type = 'checkbox';
+  pick.className = 'pick';
+  pick.title = 'Include in group selection';
+  pick.checked = selSet(cb).has(o.id);
+  pick.addEventListener('change', () => cb.onSelect(o.id, 'toggle'));
+  head.appendChild(pick);
+
   const tag = document.createElement('span');
-  tag.className = 'tag' + (o.type === 'window' ? ' window' : '');
+  tag.className = `tag ${o.type}`;
   tag.textContent = o.type;
   head.appendChild(tag);
 
@@ -411,7 +478,7 @@ function row(o, cb) {
   lbl.placeholder = 'label';
   lbl.value = o.label || '';
   lbl.addEventListener('input', () => { o.label = lbl.value; cb.onEdit(o, false); });
-  lbl.addEventListener('focus', () => cb.onSelect(o.id));
+  lbl.addEventListener('focus', () => cb.onSelect(o.id, 'anchor'));
   head.appendChild(lbl);
   el.appendChild(head);
 
@@ -432,7 +499,7 @@ function row(o, cb) {
       i.setAttribute('list', 'widthPresets');
     }
     i.value = round(o[key]);
-    i.addEventListener('focus', () => cb.onSelect(o.id));
+    i.addEventListener('focus', () => cb.onSelect(o.id, 'anchor'));
     i.addEventListener('input', () => {
       const v = parseFloat(i.value);
       if (Number.isNaN(v)) return; // mid-typing ("", "-", "3.") — wait for a real number
@@ -481,6 +548,22 @@ function row(o, cb) {
   });
   foot.appendChild(tsel);
 
+  // Opt this opening out of the global head alignment so it keeps the sill and
+  // height the user set by hand.
+  const freeLabel = document.createElement('label');
+  freeLabel.className = 'check';
+  freeLabel.title = 'Ignore the global opening head drop for this unit';
+  freeLabel.style.cssText = 'display:flex;align-items:center;gap:3px;font-size:10px;white-space:nowrap;';
+  const freeBox = document.createElement('input');
+  freeBox.type = 'checkbox';
+  freeBox.checked = !!o.headFree;
+  freeBox.addEventListener('change', () => { o.headFree = freeBox.checked; cb.onEdit(o, true); });
+  const freeText = document.createElement('span');
+  freeText.textContent = 'Free head';
+  freeLabel.appendChild(freeBox);
+  freeLabel.appendChild(freeText);
+  foot.appendChild(freeLabel);
+
   const dup = document.createElement('button');
   dup.type = 'button';
   dup.textContent = '⧉';
@@ -522,7 +605,7 @@ function row(o, cb) {
       <option value="dark_composite">Dark Composite</option>
     `;
     matSelect.value = o.stepMat || 'concrete';
-    matSelect.addEventListener('focus', () => cb.onSelect(o.id));
+    matSelect.addEventListener('focus', () => cb.onSelect(o.id, 'anchor'));
     matSelect.addEventListener('change', () => {
       o.stepMat = matSelect.value;
       cb.onEdit(o, true);
@@ -542,13 +625,35 @@ function row(o, cb) {
       <option value="split">Split (Both sides)</option>
     `;
     egressSelect.value = o.stepEgress || 'front';
-    egressSelect.addEventListener('focus', () => cb.onSelect(o.id));
+    egressSelect.addEventListener('focus', () => cb.onSelect(o.id, 'anchor'));
     egressSelect.addEventListener('change', () => {
       o.stepEgress = egressSelect.value;
       cb.onEdit(o, true);
     });
     egressLabel.append(egressSpan, egressSelect);
     subGrid.appendChild(egressLabel);
+
+    const railingsLabel = document.createElement('label');
+    const railingsSpan = document.createElement('span');
+    railingsSpan.textContent = 'Stair Railings';
+    const railingsSelect = document.createElement('select');
+    railingsSelect.dataset.key = 'stepRailings';
+    railingsSelect.innerHTML = `
+      <option value="both">Both sides &amp; outer</option>
+      <option value="outer">Outer side away from house</option>
+      <option value="all">Full surround (All sides)</option>
+      <option value="left">Left side only</option>
+      <option value="right">Right side only</option>
+      <option value="none">None</option>
+    `;
+    railingsSelect.value = o.stepRailings || 'both';
+    railingsSelect.addEventListener('focus', () => cb.onSelect(o.id, 'anchor'));
+    railingsSelect.addEventListener('change', () => {
+      o.stepRailings = railingsSelect.value;
+      cb.onEdit(o, true);
+    });
+    railingsLabel.append(railingsSpan, railingsSelect);
+    subGrid.appendChild(railingsLabel);
 
     const railMatLabel = document.createElement('label');
     const railMatSpan = document.createElement('span');
@@ -562,7 +667,7 @@ function row(o, cb) {
       <option value="matching_trim">Matching House Trim</option>
     `;
     railMatSelect.value = o.railMat || 'pressure_treated';
-    railMatSelect.addEventListener('focus', () => cb.onSelect(o.id));
+    railMatSelect.addEventListener('focus', () => cb.onSelect(o.id, 'anchor'));
     railMatSelect.addEventListener('change', () => {
       o.railMat = railMatSelect.value;
       cb.onEdit(o, true);
@@ -581,7 +686,7 @@ function row(o, cb) {
       <option value="open">Open Post &amp; Rail</option>
     `;
     balusterSelect.value = o.balusterStyle || 'balusters';
-    balusterSelect.addEventListener('focus', () => cb.onSelect(o.id));
+    balusterSelect.addEventListener('focus', () => cb.onSelect(o.id, 'anchor'));
     balusterSelect.addEventListener('change', () => {
       o.balusterStyle = balusterSelect.value;
       cb.onEdit(o, true);

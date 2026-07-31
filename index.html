@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SiteMassing3D — double-wide massing &amp; elevation renderer</title>
 <!-- ?v= bust: plain static servers hand Chrome a cached stylesheet after edits -->
-<link rel="stylesheet" href="css/app.css?v=3">
+<link rel="stylesheet" href="css/app.css?v=18">
 <script type="importmap">
 {
   "imports": {
@@ -35,11 +35,16 @@
   </div>
   <div class="spacer"></div>
   <div class="fileops">
+    <div class="history-group">
+      <button id="btnUndo" title="Nothing to undo" disabled>&#8630; Undo</button>
+      <button id="btnRedo" title="Nothing to redo" disabled>&#8631; Redo</button>
+    </div>
     <select id="library" title="Home library (homes/ folder)"><option value="">Library…</option></select>
     <button id="btnNew">New</button>
     <label class="btn" for="fileHome">Open JSON</label>
     <input type="file" id="fileHome" accept="application/json" hidden>
     <button id="btnSave">Save JSON</button>
+    <button id="btnAiSettings" title="Configure OpenAI, Grok, Gemini, or Claude API Keys">🔑 AI API Keys</button>
     <button id="btnShot" class="primary">Screenshot</button>
   </div>
 </header>
@@ -50,7 +55,7 @@
 
     <section class="panel collapsible open" id="panel_building">
       <div class="panel-header">
-        <h2><span class="icon">🏡</span> Building Dimensions</h2>
+        <h2><span class="code">BLD</span> Building Dimensions</h2>
         <span class="chevron">▲</span>
       </div>
       <div class="panel-body">
@@ -71,77 +76,34 @@
           <label><span>Eave overhang (ft)</span><input id="f_eaveOverhang" type="number" autocomplete="off" step="0.1" min="0"></label>
           <label><span>Rake overhang (ft)</span><input id="f_rakeOverhang" type="number" autocomplete="off" step="0.1" min="0"></label>
           <label><span>Roof style</span>
-            <select id="f_roofStyle">
-              <option value="gable">Gable (ridge along length)</option>
-              <option value="shed">Shed — high at back</option>
-              <option value="shedFront">Shed — high at front</option>
-              <option value="flat">Flat / low slope</option>
-            </select>
+            <select id="f_roofStyle"><option value="gable">Gable (ridge along length)</option><option value="flat">Flat / low slope</option></select>
           </label>
+          <label><span>Rear pitch (/12)</span><input id="f_pitchBack" type="number" autocomplete="off" step="0.5" min="0" max="12" placeholder="Same as front"></label>
         </div>
+        <p style="font-size:11px;color:#9aa;margin:4px 0 2px;line-height:1.3;">A <b>split-pitch</b> roof runs a different pitch on the rear slope, so the ridge sits off the centreline and one side of the peak is higher and shorter than the other. Leave the rear pitch blank for a symmetrical gable.</p>
+        <p class="hint" id="ridgeHint"></p>
 
-        <h3 style="margin:10px 0 4px;font-size:10px;color:#6fb2ff;font-weight:600;text-transform:uppercase;">Per-Wall Custom Heights (Optional)</h3>
+        <h3 class="subhead">Per-Wall Custom Heights (Optional)</h3>
         <div class="grid2">
           <label><span>Front wall (ft)</span><input id="f_frontWallHeight" type="number" autocomplete="off" step="0.1" placeholder="Auto"></label>
           <label><span>Back wall (ft)</span><input id="f_backWallHeight" type="number" autocomplete="off" step="0.1" placeholder="Auto"></label>
           <label><span>Left wall (ft)</span><input id="f_leftWallHeight" type="number" autocomplete="off" step="0.1" placeholder="Auto"></label>
           <label><span>Right wall (ft)</span><input id="f_rightWallHeight" type="number" autocomplete="off" step="0.1" placeholder="Auto"></label>
         </div>
+        <h3 class="subhead">Opening Head Heights</h3>
+        <label class="row check"><input id="f_headAlign" type="checkbox" autocomplete="off"><span>Align all heads below wall top</span></label>
+        <div class="grid2" id="row_headDrops">
+          <label><span>Window head drop (ft)</span><input id="f_windowHeadDrop" type="number" autocomplete="off" step="0.25" min="0" max="10"></label>
+          <label><span>Door head drop (ft)</span><input id="f_doorHeadDrop" type="number" autocomplete="off" step="0.25" min="0" max="10"></label>
+        </div>
+        <p style="font-size:11px;color:#9aa;margin:4px 0 2px;line-height:1.3;">Measured down from the top of each wall. Windows keep their height and ride on the sill; doors stay on the floor, so the drop sets their height. Tick "Free head" on an opening to leave it alone.</p>
         <p class="hint" id="ratioHint"></p>
-      </div>
-    </section>
-
-    <section class="panel collapsible" id="panel_roof">
-      <div class="panel-header">
-        <h2><span class="icon">🏔️</span> Asymmetric Roof &amp; Sections</h2>
-        <span class="chevron">▼</span>
-      </div>
-      <div class="panel-body">
-        <label class="row check"><input id="f_asymRoof" type="checkbox" autocomplete="off"><span style="color:#6fb2ff;font-weight:600;">Independent front / back roof slopes</span></label>
-        <div class="grid2" id="asymFields">
-          <label><span>Front pitch (/12)</span><input id="f_frontPitch" type="number" autocomplete="off" step="0.5" min="0" max="24" placeholder="Auto"></label>
-          <label><span>Back pitch (/12)</span><input id="f_backPitch" type="number" autocomplete="off" step="0.5" min="0" max="24" placeholder="Auto"></label>
-          <label><span>Ridge offset (ft)</span><input id="f_ridgeOffset" type="number" autocomplete="off" step="0.25"></label>
-          <label><span>Ridge step / peak rise (ft)</span><input id="f_ridgeStep" type="number" autocomplete="off" step="0.25"></label>
-        </div>
-        <p class="hint">Ridge offset moves the peak off center (+ toward the rear wall). Ridge step lifts the rear plane's peak above the front's, opening a clerestory wall between them — negative drops it.</p>
-        <p class="hint" id="roofPeakHint"></p>
-
-        <h3 style="margin:12px 0 4px;font-size:10px;color:#6fb2ff;font-weight:600;text-transform:uppercase;">Overhangs at Steps &amp; Peaks</h3>
-        <div class="grid2">
-          <label><span>Ridge overhang</span>
-            <select id="f_ridgeOverhang">
-              <option value="raised">Taller plane sails past</option>
-              <option value="none">None (stops at ridge)</option>
-            </select>
-          </label>
-          <label><span>Ridge ovh (ft)</span><input id="f_ridgeOverhangFt" type="number" autocomplete="off" step="0.25" min="0" placeholder="Auto (eave)"></label>
-          <label><span>Step overhang</span>
-            <select id="f_stepOverhang">
-              <option value="raised">Raised roof only</option>
-              <option value="both">Both sides of the step</option>
-              <option value="none">None (butt joint)</option>
-            </select>
-          </label>
-          <label><span>Step ovh (ft)</span><input id="f_stepOverhangFt" type="number" autocomplete="off" step="0.25" min="0" placeholder="Auto (rake)"></label>
-        </div>
-        <label class="row check"><input id="f_stepRakeFascia" type="checkbox" autocomplete="off"><span>Rake board on step overhangs</span></label>
-        <label class="row check"><input id="f_endRakeFascia" type="checkbox" autocomplete="off"><span>Rake board on the gable ends too</span></label>
-        <p class="hint"><b>Ridge:</b> when one pitch peaks above the other there is no ridge to meet at, so the taller plane keeps climbing past it and hangs over the clerestory, with a fascia on that free edge. <b>Step:</b> a section standing above its neighbour carries an eave past the boundary the same way it does at a gable end — on every side that hangs free. <i>Both sides</i> gives the lower roof one too.</p>
-
-        <h3 style="margin:12px 0 4px;font-size:10px;color:#6fb2ff;font-weight:600;text-transform:uppercase;">Roof Sections Along the Length</h3>
-        <div id="roofSectionList"></div>
-        <div class="btnrow">
-          <button id="btnAddRoofSection" type="button">+ Split section</button>
-          <button id="btnResetRoofSections" type="button">Reset to one roof</button>
-        </div>
-        <p class="hint">Split the home into sections measured from the <b>left end</b>. Each section can carry its own pitches, ridge offset, ridge step, eave heights and roof style, so one half of the house can sit at a different pitch and peak than the other. Where two sections disagree, the gap between their roofs is closed with a wall automatically.</p>
       </div>
     </section>
 
     <section class="panel collapsible" id="panel_dormers">
       <div class="panel-header">
-        <h2><span class="icon">🏛️</span> Roof Dormers &amp; False Eaves</h2>
+        <h2><span class="code">DRM</span> Roof Dormers &amp; False Eaves</h2>
         <span class="chevron">▼</span>
       </div>
       <div class="panel-body">
@@ -158,55 +120,113 @@
               <option value="gable">Gable Dormer</option>
             </select>
           </label>
-          <label><span>Dormer width (ft)</span><input id="f_dormerWidth" type="number" autocomplete="off" step="0.5" min="4" max="20"></label>
-          <label><span>Dormer height (ft)</span><input id="f_dormerHeight" type="number" autocomplete="off" step="0.5" min="2" max="10"></label>
+          <label id="row_dormerWidth"><span>Dormer width (ft)</span><input id="f_dormerWidth" type="number" autocomplete="off" step="0.25" min="0.25" max="40"></label>
+          <label id="row_dormerHeight"><span>Dormer height (ft)</span><input id="f_dormerHeight" type="number" autocomplete="off" step="0.25" min="0.25" max="20"></label>
         </div>
-        <label class="row check" style="margin-top:6px;"><input id="f_dormerFalseEave" type="checkbox" autocomplete="off"><span>False eave return band</span></label>
+        <label class="row check" style="margin-top:6px;"><input id="f_dormerLinkSizes" type="checkbox" autocomplete="off"><span>Link dormer sizes (all match)</span></label>
+        <div id="dormerSizeRows"></div>
+        <label class="row check"><input id="f_dormerFalseEave" type="checkbox" autocomplete="off"><span>False eave return band</span></label>
         <label class="row check"><input id="f_dormerInnerFalseEave" type="checkbox" autocomplete="off"><span>Inner false eave (double-wide)</span></label>
+        <label class="row check"><input id="f_dormerDripEdge" type="checkbox" autocomplete="off"><span>Drip edge / bottom eave trim band</span></label>
+        <label class="row check"><input id="f_dormerContinuousWall" type="checkbox" autocomplete="off"><span>Continue wall siding up into dormer (no seam)</span></label>
         <label class="row check"><input id="f_dormerConnected" type="checkbox" autocomplete="off"><span>Connected dormer cap</span></label>
+        <label class="row check"><input id="f_dormerNested" type="checkbox" autocomplete="off"><span>Nested dormer (2nd inside 1st)</span></label>
+        <label id="row_dormerNestOffset"><span>Nested offset (ft)</span><input id="f_dormerNestOffset" type="number" autocomplete="off" step="0.25" min="-20" max="20"></label>
         <label class="row check"><input id="f_dormerWindow" type="checkbox" autocomplete="off"><span>Accent dormer window</span></label>
         <p style="font-size:11px;color:#9aa;margin:6px 0 2px;line-height:1.3;">💡 Click &amp; drag dormers in the 3D view to reposition along the ridge.</p>
         <button id="btnResetDormerPos" type="button" style="font-size:11px;padding:3px 8px;">Reset positions</button>
       </div>
     </section>
 
-    <section class="panel collapsible" id="panel_colors">
+    <section class="panel collapsible" id="panel_bumps">
       <div class="panel-header">
-        <h2><span class="icon">🎨</span> Exterior Materials &amp; Colors</h2>
+        <h2><span class="code">BMP</span> Porches &amp; Wall Bump-Outs <span class="count" id="bumpCount"></span></h2>
         <span class="chevron">▼</span>
       </div>
       <div class="panel-body">
-        <div class="grid2 colors">
-          <label><span>Siding</span><input id="c_siding" type="color" autocomplete="off"></label>
-          <label><span>Trim (casing)</span><input id="c_trim" type="color" autocomplete="off"></label>
-          <label><span>Fascia &amp; rake</span><input id="c_fascia" type="color" autocomplete="off"></label>
-          <label><span>Corner boards</span><input id="c_corner" type="color" autocomplete="off"></label>
+        <p class="hint">Where the plan stops being a rectangle. Two dimension lines that disagree — <b>58'-8"</b> one side, <b>56'-0"</b> the other — is a recess; a <b>+16"</b> note is a bump-out; a <b>6' PORCH</b> drawn inside the outline is a covered deck tucked under the main roof.</p>
+        <div class="btnrow">
+          <button id="btnAddPorch">+ Covered porch</button>
+          <button id="btnAddBump">+ Wall bump</button>
+        </div>
+        <p class="hint"><b>Depth</b> is signed: positive projects <b>out</b> past the wall, negative cuts a recess <b>in</b>. Offset runs left&rarr;right as seen from outside, same as an opening.</p>
+        <div id="bumpList"></div>
+      </div>
+    </section>
+
+    <section class="panel collapsible" id="panel_colors">
+      <div class="panel-header">
+        <h2><span class="code">MAT</span> Exterior Materials &amp; Colors</h2>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="panel-body">
+        <div class="grid2">
+          <label><span>Main siding style</span>
+            <select id="f_sidingTexture">
+              <option value="horizontal_lap">Horizontal Lap</option>
+              <option value="board_batten">Board &amp; Batten</option>
+              <option value="cedar_shingle">Cedar Shingle / Shake</option>
+              <option value="smooth">Smooth Vinyl</option>
+            </select>
+          </label>
+          <label><span>Dormer siding style</span>
+            <select id="f_dormerSidingTexture">
+              <option value="horizontal_lap">Horizontal Lap</option>
+              <option value="board_batten">Board &amp; Batten</option>
+              <option value="cedar_shingle">Cedar Shingle / Shake</option>
+              <option value="smooth">Smooth Vinyl</option>
+            </select>
+          </label>
+          <label><span>Gable end accent style</span>
+            <select id="f_gableSidingTexture">
+              <option value="horizontal_lap">Horizontal Lap</option>
+              <option value="board_batten">Board &amp; Batten</option>
+              <option value="cedar_shingle">Cedar Shingle / Shake</option>
+              <option value="smooth">Smooth Vinyl</option>
+            </select>
+          </label>
+          <label><span>Corner trim width (in)</span>
+            <input id="f_cornerTrimWidth" type="number" autocomplete="off" step="1" min="2" max="12">
+          </label>
+        </div>
+        <div class="grid2 colors" style="margin-top:8px;">
+          <label><span>Main Siding</span><input id="c_siding" type="color" autocomplete="off"></label>
+          <label><span>Below-Dormer Siding</span><input id="c_belowDormerSiding" type="color" autocomplete="off"></label>
+          <label><span>Dormer Siding</span><input id="c_dormerSiding" type="color" autocomplete="off"></label>
+          <label><span>Gable Siding</span><input id="c_gableSiding" type="color" autocomplete="off"></label>
+          <label><span>Trim</span><input id="c_trim" type="color" autocomplete="off"></label>
           <label><span>Roof</span><input id="c_roof" type="color" autocomplete="off"></label>
           <label><span>Skirting</span><input id="c_skirting" type="color" autocomplete="off"></label>
           <label><span>Door</span><input id="c_door" type="color" autocomplete="off"></label>
           <label><span>Glass</span><input id="c_glass" type="color" autocomplete="off"></label>
         </div>
+        <label class="row check" style="margin-top:6px;"><input id="f_cornerTrim" type="checkbox" autocomplete="off"><span>Corner trim boards</span></label>
 
-        <h3 style="margin:12px 0 4px;font-size:10px;color:#6fb2ff;font-weight:600;text-transform:uppercase;">Trim Board Sizes</h3>
-        <div class="grid2">
-          <label><span>Fascia width (ft)</span><input id="f_fasciaWidth" type="number" autocomplete="off" step="0.05" min="0.1" list="boardWidths"></label>
-          <label><span>Corner board (ft)</span><input id="f_cornerBoardWidth" type="number" autocomplete="off" step="0.05" min="0.1" list="boardWidths"></label>
-        </div>
-        <datalist id="boardWidths">
-          <option value="0.29" label="3&frac12;&quot; (1x4)"></option>
-          <option value="0.46" label="5&frac12;&quot; (1x6)"></option>
-          <option value="0.55" label="6&frac58;&quot; (1x8 fascia)"></option>
-          <option value="0.6" label="7&frac14;&quot; (1x8)"></option>
-          <option value="0.79" label="9&frac12;&quot; (1x10)"></option>
-        </datalist>
-        <label class="row check"><input id="f_cornerBoards" type="checkbox" autocomplete="off"><span>Corner boards at the four corners</span></label>
-        <p class="hint">Widths are the face dimension you would read off the board. Corner boards run from the skirting to the eave, one lying flat on each wall, with the long walls lapping over the gable ends.</p>
+        <h3 class="subhead">Match The Real Home</h3>
+        <p class="hint">A typed hex is a guess, and the guess always comes out too clean — real siding photographs greyer and cooler than its swatch name, and a roof read by eye lands a couple of shades light. Pick the colours straight off the photograph instead and the render is one for one with the unit.</p>
+        <div id="matPhotoSources"></div>
+        <button id="btnPickColors" class="primary block">🎯 Pick colours off the photo</button>
+        <p class="hint" id="matPickStatus"></p>
+      </div>
+    </section>
+
+    <section class="panel collapsible" id="panel_homephotos">
+      <div class="panel-header">
+        <h2><span class="code">HOM</span> Photos Of The Real Home</h2>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="panel-body">
+        <p class="hint">Not the lot — <b>the home itself</b>. Dealer-lot or catalogue shots of this model, one per wall. These are what the finished render must <i>look</i> like: the real siding profile and colour, the real window proportions, the trim, the roof as photographed. The massing plates stay the authority on <i>where</i> everything is; each photo is laid over its matching plate, not used instead of it.</p>
+        <p class="hint">Load the ones you have. <b>Walls you cannot photograph are exactly why the plates exist</b> — the package tells the model to follow the plate and the written spec there, and to invent nothing.</p>
+        <div id="homePhotoList"></div>
+        <input type="file" id="fileHomePhoto" accept="image/*" hidden>
+        <p class="hint" id="homePhotoLinks"></p>
       </div>
     </section>
 
     <section class="panel collapsible open" id="panel_openings">
       <div class="panel-header">
-        <h2><span class="icon">🚪</span> Openings <span class="count" id="openCount"></span></h2>
+        <h2><span class="code">OPN</span> Openings <span class="count" id="openCount"></span></h2>
         <span class="chevron">▲</span>
       </div>
       <div class="panel-body">
@@ -215,7 +235,8 @@
           <button id="btnAddSlider">+ Slider</button>
           <button id="btnAddWindow">+ Window</button>
         </div>
-        <p class="hint">Click a wall to add at that spot. Click a door or window to select it, drag to move, drag a blue handle to resize. <b>Shift</b> locks to one axis, <b>Alt</b> disables the 1&Prime; snap, <b>Del</b> removes. Offset is measured left&rarr;right as seen from outside that wall.</p>
+        <p class="hint">Click a wall to add. Click a unit to select, drag to move, drag a handle to resize. <b>Shift</b> locks one axis, <b>Alt</b> turns off the 1&Prime; snap, <b>Del</b> removes. Offset runs left&rarr;right as seen from outside the wall.</p>
+        <p class="hint"><b>Edit several at once:</b> <b>Ctrl</b>-click units in the view or tick a row's box; <b>Ctrl+A</b> takes all. The last unit clicked is the anchor that align and match measure from.</p>
         <div id="openingList"></div>
         <datalist id="heightPresets">
           <option value="6.67" label="6'-8&quot; (Standard Door)"></option>
@@ -238,7 +259,7 @@
 
     <section class="panel collapsible" id="panel_stairs">
       <div class="panel-header">
-        <h2><span class="icon">🪜</span> Decks, Stairs &amp; Railings</h2>
+        <h2><span class="code">STR</span> Decks, Stairs &amp; Railings</h2>
         <span class="chevron">▼</span>
       </div>
       <div class="panel-body">
@@ -248,7 +269,9 @@
           <label><span>Landing depth (ft)</span><input id="s_landingDepth" type="number" autocomplete="off" step="0.5" min="2" max="10"></label>
           <label><span>Stair railings</span>
             <select id="s_stepRailings">
-              <option value="both">Both sides</option>
+              <option value="both">Both sides &amp; outer</option>
+              <option value="outer">Outer side away from house</option>
+              <option value="all">Full surround (All sides)</option>
               <option value="left">Left side only</option>
               <option value="right">Right side only</option>
               <option value="none">None</option>
@@ -290,18 +313,26 @@
 
     <section class="panel collapsible open" id="panel_photo">
       <div class="panel-header">
-        <h2><span class="icon">📸</span> Site Photo &amp; Camera Framing</h2>
+        <h2><span class="code">PHT</span> Site Photo &amp; Camera Framing</h2>
         <span class="chevron">▲</span>
       </div>
       <div class="panel-body">
+        <h3 class="subhead">The Four Lot Photos</h3>
+        <p class="hint">A render can only be made from a position the lot was actually photographed from, so each slot below is a <b>specific place to stand with the camera</b>. Load the matching shot into each. Loading one jumps the 3D camera to that position — align the model to the photo, and the slot remembers it. You do not need all four; each one you fill becomes its own render pass in the package.</p>
+        <div id="slotList"></div>
+        <input type="file" id="fileSlotPhoto" accept="image/*" hidden>
+
+        <h3 class="subhead">Free-form Photo</h3>
+        <p class="hint">Any other angle — loads into the live view without claiming a slot.</p>
         <label class="btn block" for="fileSitePhoto">Load site photo (PNG/JPG)</label>
         <input type="file" id="fileSitePhoto" accept="image/*" hidden>
+        <div id="freePhotoLinks"></div>
         <div class="grid2">
           <label><span>Photo fit mode</span>
             <select id="sp_fitMode">
-              <option value="contain">Full photo (contain)</option>
-              <option value="cover">Fill stage (cover)</option>
-              <option value="100% 100%">Stretch to fit</option>
+              <option value="camera">Lock to camera (recommended)</option>
+              <option value="cover">Fill stage (crops on resize)</option>
+              <option value="stretch">Stretch to fit (distorts)</option>
             </select>
           </label>
           <label><span>Photo opacity</span><input id="sp_op" type="range" autocomplete="off" min="0.1" max="1" step="0.05"></label>
@@ -313,13 +344,13 @@
         <label class="row check"><input id="sp_show" type="checkbox" autocomplete="off"><span>Show site photo background</span></label>
         <label class="row check" style="margin-top:8px;background:rgba(111,178,255,0.12);padding:5px 8px;border-radius:4px;border:1px solid rgba(111,178,255,0.3);"><input id="sp_dragMode" type="checkbox" autocomplete="off"><span style="color:#6fb2ff;font-weight:600;">🖱️ Mouse Photo Drag: Pan &amp; Zoom photo with mouse</span></label>
 
-        <h3 style="margin:10px 0 6px;font-size:10px;color:#858d98;text-transform:uppercase;">Ground Horizon &amp; Camera Distance</h3>
+        <h3 class="subhead">Ground Horizon &amp; Camera Distance</h3>
         <div class="grid2">
           <label><span>Ground baseline Y (ft)</span><input id="sp_baselineY" type="number" autocomplete="off" step="0.5" min="-50" max="50"></label>
           <label><span>Cam distance (ft)</span><input id="sp_camDist" type="number" autocomplete="off" step="1" min="5" max="500"></label>
         </div>
 
-        <h3 style="margin:10px 0 6px;font-size:10px;color:#858d98;text-transform:uppercase;">House Realignment / Lot Offset</h3>
+        <h3 class="subhead">House Realignment / Lot Offset</h3>
         <div class="grid2">
           <label><span>House X (ft)</span><input id="sp_posX" type="number" autocomplete="off" step="0.5"></label>
           <label><span>House Z (ft)</span><input id="sp_posZ" type="number" autocomplete="off" step="0.5"></label>
@@ -327,17 +358,52 @@
           <button id="btnResetPhoto" style="margin-top: auto;">Reset all align</button>
         </div>
         <p class="hint">Full photo displays uncropped. Adjust photo pan/zoom, ground baseline Y, and camera distance to align perspective independently of house lot position.</p>
+
+        <h3 class="subhead">Saved Site Views</h3>
+        <p class="hint">A site view stores this lot photo, its alignment <i>and</i> the camera framed onto it, under a name. Shoot the lot from four positions, set each one up once, and cycle between them — or let the render package render every one of them in a pass. <b>[</b> and <b>]</b> cycle.</p>
+        <div class="btnrow">
+          <button id="btnPrevSiteView" title="Previous site view ([)">‹ Prev</button>
+          <button id="btnNextSiteView" title="Next site view (])">Next ›</button>
+          <button id="btnAddSiteView" class="primary" title="Store the current lot photo, its alignment and the camera as a new site view">+ Save current</button>
+        </div>
+        <div id="siteViewList"></div>
+      </div>
+    </section>
+
+    <section class="panel collapsible" id="panel_pano">
+      <div class="panel-header">
+        <h2><span class="code">360</span> Panorama Site Wrap</h2>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="panel-body">
+        <p class="hint">An equirectangular (2:1) 360° photo shot from the middle of the pad, wrapped on a sphere <b>centred on the house site</b> — not pinned to the camera. Orbit the home and you walk around the real lot, so every angle is a valid render position instead of only the one the flat photo was shot from.</p>
+        <label class="btn block" for="filePanorama">Load 360° panorama (equirectangular JPG/PNG)</label>
+        <input type="file" id="filePanorama" accept="image/*" hidden>
+        <p class="hint" id="panoStatus">No panorama loaded.</p>
+        <button id="btnDeletePano" class="block danger" style="display:none;">Delete this panorama</button>
+        <label class="row check"><input id="pn_show" type="checkbox" autocomplete="off" checked><span>Wrap panorama around the site</span></label>
+        <div class="grid2">
+          <label><span>Heading / yaw (°)</span><input id="pn_yaw" type="number" autocomplete="off" step="1" min="-180" max="180"></label>
+          <label><span>Level / tilt (°)</span><input id="pn_tilt" type="number" autocomplete="off" step="0.5" min="-30" max="30"></label>
+          <label><span>Horizon radius (ft)</span><input id="pn_radius" type="number" autocomplete="off" step="10" min="20" max="2000"></label>
+          <label><span>Shot height (ft)</span><input id="pn_height" type="number" autocomplete="off" step="0.5" min="-20" max="60"></label>
+          <label><span>Brightness</span><input id="pn_brightness" type="range" autocomplete="off" min="0.2" max="2" step="0.05"></label>
+          <label><span>Opacity</span><input id="pn_opacity" type="range" autocomplete="off" min="0.1" max="1" step="0.05"></label>
+        </div>
+        <button id="btnPanoSpin" class="block" title="Rotate the camera around the house through the panorama">Orbit 45° through the panorama</button>
+        <p class="hint">Set <i>Shot height</i> to the tripod height and <i>Horizon radius</i> to roughly how far the treeline is, then nudge <i>Level</i> until the horizon sits flat against the ground grid. Yaw spins the lot until the pad faces the way the house should. A panorama supersedes the flat site photo while it is showing.</p>
       </div>
     </section>
 
     <section class="panel collapsible" id="panel_plan">
       <div class="panel-header">
-        <h2><span class="icon">📐</span> Floor Plan Tracing Plate</h2>
+        <h2><span class="code">PLN</span> Floor Plan Tracing Plate</h2>
         <span class="chevron">▼</span>
       </div>
       <div class="panel-body">
         <label class="btn block" for="filePlan">Load plan image (PNG/JPG)</label>
         <input type="file" id="filePlan" accept="image/*" hidden>
+        <button id="btnDeletePlate" class="block danger" style="display:none;">Delete this tracing plate</button>
         <div class="grid2">
           <label><span>Plate width (ft)</span><input id="p_width" type="number" autocomplete="off" step="0.5"></label>
           <label><span>Rotation (deg)</span><input id="p_rot" type="number" autocomplete="off" step="1"></label>
@@ -348,16 +414,127 @@
         </div>
         <label class="row check"><input id="p_pick" type="checkbox" autocomplete="off"><span>Plan-pick mode: click plan to drop a door on nearest wall</span></label>
         <p class="hint">Scale the plate so its printed footprint matches the white outline, then trace door positions off it.</p>
+        <div id="planLinkRow"></div>
+      </div>
+    </section>
+
+    <section class="panel collapsible" id="panel_readplan">
+      <div class="panel-header">
+        <h2><span class="code">RDP</span> Build The Model From The Plan</h2>
+        <span class="chevron">&#9660;</span>
+      </div>
+      <div class="panel-body">
+        <p class="hint">Typing the dimensions and tracing the doors is the slowest, least reliable step in this whole workflow &mdash; it is where 27'-7&Prime; becomes 27' and every plate downstream inherits it. The plan already holds all of it. Hand the page to a vision model and get the home back as data.</p>
+        <p class="hint" id="rdpPlanState">Load a site plan in the <b>AI Render Package</b> panel first &mdash; that page is what this reads.</p>
+
+        <h3 class="subhead">1 &middot; Without an API key</h3>
+        <p class="hint">Copy the prompt, attach the plan page in Claude / Gemini / ChatGPT, then paste the JSON it returns into the box below.</p>
+        <div class="btnrow">
+          <button id="btnCopyPlanPrompt">Copy plan-reading prompt</button>
+          <button id="btnSavePlanPage">Save plan page (.png)</button>
+        </div>
+
+        <h3 class="subhead">2 &middot; Read with AI Vision (Multi-Provider)</h3>
+        <label class="row">
+          <span>Active Provider</span>
+          <select id="rdp_provider" style="padding:4px;background:#0d1117;color:#fff;border:1px solid #333;border-radius:4px;font-size:11px;">
+            <option value="anthropic">Anthropic Claude (Claude Opus 5)</option>
+            <option value="openai">OpenAI (GPT-4o Vision)</option>
+            <option value="grok">xAI Grok (Grok-2-Vision)</option>
+            <option value="gemini">Google Gemini (Gemini 2.0 Flash)</option>
+            <option value="autocycle">🔄 Auto-Cycle / Fallback (All Added Keys)</option>
+          </select>
+        </label>
+        <button id="btnCycleProvider" type="button" class="block" style="padding:4px 8px;font-size:11px;background:#242936;border:1px solid #444;color:#6fb2ff;cursor:pointer;margin-bottom:6px;">🔄 Cycle Active AI Key / Provider</button>
+
+        <label class="row"><span>Anthropic Key</span><input id="rdp_key_anthropic" type="password" autocomplete="off" placeholder="sk-ant-&hellip;"></label>
+        <label class="row"><span>OpenAI Key</span><input id="rdp_key_openai" type="password" autocomplete="off" placeholder="sk-proj-&hellip;"></label>
+        <label class="row"><span>xAI Grok Key</span><input id="rdp_key_grok" type="password" autocomplete="off" placeholder="xai-&hellip;"></label>
+        <label class="row"><span>Gemini Key</span><input id="rdp_key_gemini" type="password" autocomplete="off" placeholder="AIza&hellip;"></label>
+
+        <label class="row check"><input id="rdp_persist" type="checkbox" autocomplete="off"><span>Remember keys in browser storage</span></label>
+        <p class="hint">Keys stay in your browser local/session storage. Sent only to the official provider endpoint (Anthropic, OpenAI, xAI, Google).</p>
+        <button id="btnReadPlan" class="primary block">Read Plan with AI Vision</button>
+
+        <h3 class="subhead">3 &middot; Paste the answer</h3>
+        <textarea id="rdp_json" rows="5" placeholder="Paste the JSON here &mdash; a code fence or surrounding prose is fine"></textarea>
+        <button id="btnApplySpec" class="block">Check and apply to the model</button>
+
+        <h3 class="subhead">What it read</h3>
+        <div id="rdpReport"><p class="hint">Nothing read yet.</p></div>
+      </div>
+    </section>
+
+    <section class="panel collapsible open" id="panel_package">
+      <div class="panel-header">
+        <h2><span class="code">PKG</span> AI Render Package</h2>
+        <span class="chevron">▲</span>
+      </div>
+      <div class="panel-body">
+        <p class="hint">One zip carrying the massing plates, the lot photo, the site plan and a written brief with every dimension measured off this model — the whole hand-off to Gemini / Midjourney / Flux in a single file.</p>
+
+        <h3 class="subhead">Everything loaded so far</h3>
+        <p class="hint">Every image this project holds, whichever panel loaded it. Click one to jump to the panel that owns it.</p>
+        <div id="assetRail"></div>
+
+        <h3 class="subhead">Site plan / spec sheet</h3>
+        <label class="btn block" for="fileSitePlan">Load site plan (PDF, PNG or JPG)</label>
+        <input type="file" id="fileSitePlan" accept="application/pdf,image/*" hidden>
+        <p class="hint" id="sitePlanStatus">No site plan loaded. A PDF is converted to PNG automatically — image models ignore PDF attachments.</p>
+        <button id="btnDeleteSitePlan" class="block danger" style="display:none;">Delete this site plan</button>
+        <div class="grid2" id="row_sitePlanPage" style="display:none;">
+          <label><span>Page</span><input id="sp_planPage" type="number" autocomplete="off" step="1" min="1" value="1"></label>
+          <button id="btnSitePlanPage" style="margin-top:auto;">Re-render page</button>
+        </div>
+        <label class="row check"><input id="pk_originalPdf" type="checkbox" autocomplete="off" checked><span>Keep the original PDF in the package</span></label>
+
+        <h3 class="subhead">What only the lot photo can tell you</h3>
+        <div class="grid2">
+          <label><span>Nearest corner</span><input id="bf_nearCorner" type="text" autocomplete="off" placeholder="Auto (from camera)"></label>
+          <label><span>Pad / siting area</span><input id="bf_pad" type="text" autocomplete="off" placeholder="the gravel pad"></label>
+          <label><span>Far-end landmark</span><input id="bf_landmark" type="text" autocomplete="off" placeholder="the utility pole on the left"></label>
+          <label><span>Ridge height ref</span><input id="bf_heightRef" type="text" autocomplete="off" placeholder="the treeline behind it"></label>
+        </div>
+        <label class="row"><span>Keep exactly as photographed</span><input id="bf_keep" type="text" autocomplete="off" placeholder="trees, stone retaining wall, utility pole, sky, ground"></label>
+        <label class="row"><span>Lighting</span><input id="bf_light" type="text" autocomplete="off" placeholder="Auto (from sun &amp; overcast sliders)"></label>
+        <label class="row"><span>Extra instructions</span><input id="bf_notes" type="text" autocomplete="off" placeholder="anything else the model must respect"></label>
+
+        <h3 class="subhead">Measured framing</h3>
+        <p class="hint" id="framingReadout">Frame the view you want the render to match — the brief quotes these numbers.</p>
+
+        <h3 class="subhead">Include in the package</h3>
+        <p class="hint"><b>One lot photo renders one view.</b> The hero plate — whatever is framed on screen right now — is the only plate the image model can site on your lot photo, because it is the only one shot from that camera position. Everything below it is a <i>geometry reference</i>: it tells the model what the home is, not where to stand. To get four finished renders you need four lot photos, each shot from the position that matches its plate, and one pass per pair.</p>
+        <label class="row check"><input id="pk_contactSheet" type="checkbox" autocomplete="off" checked><span>4-view contact sheet <i>(reference only)</i></span></label>
+        <label class="row check"><input id="pk_elevations" type="checkbox" autocomplete="off" checked><span>Individual elevations + roof plan <i>(reference only)</i></span></label>
+        <label class="row check"><input id="pk_cutout" type="checkbox" autocomplete="off" checked><span>Transparent cutout of the current view</span></label>
+        <label class="row check"><input id="pk_allSiteViews" type="checkbox" autocomplete="off" checked><span>One folder per saved site view <i>(a render pass each)</i></span></label>
+        <label class="row check"><input id="pk_lotPhoto" type="checkbox" autocomplete="off" checked><span>Lot photo (unmodified)</span></label>
+        <label class="row check"><input id="pk_homePhotos" type="checkbox" autocomplete="off" checked><span>Photos of the real home, paired to their plates</span></label>
+        <label class="row check"><input id="pk_sitePlan" type="checkbox" autocomplete="off" checked><span>Site plan page (PNG)</span></label>
+        <label class="row check"><input id="pk_projectJson" type="checkbox" autocomplete="off" checked><span>Project JSON, so the package can be rebuilt</span></label>
+
+        <button id="btnCopyBrief" class="block">Copy brief to clipboard</button>
+        <button id="btnSaveBrief" class="block">Save brief as .md</button>
+        <button id="btnPackage" class="primary block">Export render package (.zip)</button>
+        <p class="hint" id="packageStatus"></p>
       </div>
     </section>
 
     <section class="panel collapsible" id="panel_export">
       <div class="panel-header">
-        <h2><span class="icon">⚙️</span> Scene, View &amp; Screenshot Export</h2>
+        <h2><span class="code">OUT</span> Scene, View &amp; Screenshot Export</h2>
         <span class="chevron">▼</span>
       </div>
       <div class="panel-body">
-        <h3 style="margin:0 0 6px;font-size:10px;color:#858d98;text-transform:uppercase;">Lighting &amp; Environment</h3>
+        <h3 class="subhead">Project output folder</h3>
+        <p class="hint" id="outDirStatus">No folder set — exports go to your downloads.</p>
+        <div class="grid2">
+          <button id="btnPickOutDir" class="block">Choose folder…</button>
+          <button id="btnClearOutDir" class="block">Use downloads</button>
+        </div>
+        <p class="hint">Pick the project's folder once and every render, brief, project JSON and package is written straight into it — no Save-As dialog each time. The browser asks permission once per session before the first write.</p>
+
+        <h3 class="subhead">Lighting &amp; Environment</h3>
         <div class="grid2">
           <label><span>Sun azimuth</span><input id="s_sunAz" type="range" autocomplete="off" min="0" max="360" step="1"></label>
           <label><span>Sun elevation</span><input id="s_sunEl" type="range" autocomplete="off" min="5" max="89" step="1"></label>
@@ -367,20 +544,23 @@
           <label><span>Background</span><input id="s_bg" type="color" autocomplete="off"></label>
         </div>
         <label class="row check"><input id="s_grid" type="checkbox" autocomplete="off"><span>Ground grid</span></label>
+        <label><span>Ground extent (ft)</span><input id="s_groundExtent" type="number" autocomplete="off" step="10" min="20" max="2000" title="How far the ground plane/grid reaches before it stops — a bright ring marks the cutoff"></label>
         <label class="row check"><input id="s_shadow" type="checkbox" autocomplete="off"><span>Cast shadow</span></label>
         <label class="row check"><input id="s_wireframe" type="checkbox" autocomplete="off"><span style="color:#6fb2ff;font-weight:600;">📐 Wireframe view mode</span></label>
+        <label class="row check"><input id="s_trueColor" type="checkbox" autocomplete="off"><span style="color:#7fd18a;font-weight:600;">🎨 True colour (flat, unlit)</span></label>
+        <p class="hint">The normal render is photographic — warm sun, cool sky, filmic tone mapping — so a wall does <b>not</b> come back on screen as the hex it was given. Tick this to shade everything flat and unlit, where every surface reads as exactly its colour. It is how you confirm a finish picked off a photograph is one for one; untick it to see how the finish will actually look.</p>
         <label class="row check"><input id="s_labels" type="checkbox" autocomplete="off"><span>Door callout markers</span></label>
         <label class="row check"><input id="s_dims" type="checkbox" autocomplete="off"><span>Dimension outline on ground</span></label>
         <label class="row check" style="margin-top:8px;background:rgba(255,100,100,0.12);padding:5px 8px;border-radius:4px;border:1px solid rgba(255,133,133,0.3);"><input id="s_blockLandscape" type="checkbox" autocomplete="off"><span style="color:#ff8585;font-weight:600;">🚫 Block landscape &amp; ground view</span></label>
 
-        <h3 style="margin:12px 0 6px;font-size:10px;color:#858d98;text-transform:uppercase;">PNG Screenshot &amp; Contact Sheet</h3>
+        <h3 class="subhead">PNG Screenshot &amp; Contact Sheet</h3>
         <div class="grid2">
           <label><span>Width (px)</span><input id="x_w" type="number" autocomplete="off" step="16"></label>
           <label><span>Height (px)</span><input id="x_h" type="number" autocomplete="off" step="16"></label>
         </div>
         <label class="row check"><input id="x_alpha" type="checkbox" autocomplete="off"><span>Transparent background (for compositing)</span></label>
         <label class="row check"><input id="x_burn" type="checkbox" autocomplete="off"><span>Burn in model name + W×L caption</span></label>
-        <button id="btnFitPx" class="block">Fit pixel aspect to current view</button>
+        <button id="btnFitPx" class="block" title="Fill in the height the current viewport implies — a PNG always frames exactly what is on screen">Match height to current view</button>
         <button id="btnShot2" class="primary block">Render PNG</button>
         <button id="btnSheet" class="block">Render 4-view contact sheet</button>
       </div>
@@ -394,6 +574,11 @@
         <button id="btnRotL90" class="btn-rot" title="Rotate camera 90° Left">↺ 90°</button>
         <button id="btnRotR90" class="btn-rot" title="Rotate camera 90° Right">↻ 90°</button>
         <button id="btnWireframe" class="btn-rot" title="Toggle wireframe mode">📐 Wireframe</button>
+      </div>
+      <div class="view-rot-group" id="siteViewBar" style="display:none;">
+        <button id="btnPrevSiteViewBar" class="btn-rot" title="Previous site view ([)">‹</button>
+        <span id="siteViewBadge" class="site-view-badge">No site view</span>
+        <button id="btnNextSiteViewBar" class="btn-rot" title="Next site view (])">›</button>
       </div>
       <div id="viewPresets" class="btn-group view-presets-bar">
         <button data-view="hero-left">¾ L</button>
@@ -411,6 +596,59 @@
     <div id="hud"></div>
   </div>
 </main>
+
+<!-- AI API Keys Modal -->
+<dialog id="dlgAiKeys" class="modal" style="border:1px solid #3b4252;background:#181c24;color:#e8edf4;padding:0;border-radius:8px;max-width:480px;width:90%;">
+  <form method="dialog" style="margin:0;">
+    <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:space-between;">
+      <h3 style="margin:0;font-size:15px;color:#6fb2ff;">🔑 AI API Keys &amp; Vision Provider Settings</h3>
+      <button type="button" id="btnCloseAiKeys" style="background:none;border:none;color:#aaa;font-size:18px;cursor:pointer;">✕</button>
+    </div>
+    <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px;font-size:12px;">
+      <p style="margin:0;color:#9aa;font-size:11px;line-height:1.4;">
+        Configure keys for AI Vision plan reading, finish color extraction (siding, trim, roof, doors), and CLI generation. Keys are stored locally in your browser.
+      </p>
+
+      <label style="display:flex;flex-direction:column;gap:4px;">
+        <span style="font-weight:600;color:#cbd5e1;">Active Vision Provider</span>
+        <select id="selAiProvider" style="padding:6px;background:#0d1117;color:#fff;border:1px solid #333;border-radius:4px;">
+          <option value="anthropic">Anthropic Claude (Claude Opus 5)</option>
+          <option value="openai">OpenAI (GPT-4o Vision)</option>
+          <option value="grok">xAI Grok (Grok-2-Vision)</option>
+          <option value="gemini">Google Gemini (Gemini 2.0 Flash)</option>
+        </select>
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:4px;">
+        <span style="font-weight:600;">Anthropic Claude API Key</span>
+        <input type="password" id="key_anthropic" placeholder="sk-ant-..." autocomplete="off" style="padding:6px;background:#0d1117;color:#fff;border:1px solid #333;border-radius:4px;">
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:4px;">
+        <span style="font-weight:600;">OpenAI API Key</span>
+        <input type="password" id="key_openai" placeholder="sk-proj-..." autocomplete="off" style="padding:6px;background:#0d1117;color:#fff;border:1px solid #333;border-radius:4px;">
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:4px;">
+        <span style="font-weight:600;">xAI Grok API Key</span>
+        <input type="password" id="key_grok" placeholder="xai-..." autocomplete="off" style="padding:6px;background:#0d1117;color:#fff;border:1px solid #333;border-radius:4px;">
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:4px;">
+        <span style="font-weight:600;">Google Gemini API Key</span>
+        <input type="password" id="key_gemini" placeholder="AIza..." autocomplete="off" style="padding:6px;background:#0d1117;color:#fff;border:1px solid #333;border-radius:4px;">
+      </label>
+
+      <label style="display:flex;align-items:center;gap:6px;margin-top:4px;">
+        <input type="checkbox" id="chkPersistKeys">
+        <span>Remember keys in browser storage across restarts</span>
+      </label>
+    </div>
+    <div style="padding:12px 20px;border-top:1px solid rgba(255,255,255,0.1);display:flex;justify-content:end;gap:8px;background:rgba(0,0,0,0.2);">
+      <button type="button" id="btnSaveAiKeys" class="primary" style="padding:6px 14px;">Save Settings</button>
+    </div>
+  </form>
+</dialog>
 
 <script type="module" src="src/main.js"></script>
 </body>
