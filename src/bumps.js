@@ -235,17 +235,68 @@ export function cutsWall(b) {
   return isRecess(b) || b.kind !== 'porch';
 }
 
+function adjacentCornerCuts(bumps, wall, dim, wallHeightFt) {
+  const cuts = [];
+  const wSpan = wallSpan(wall, dim);
+  const isOpen = (val) => val === 'open_railing' || val === 'open_none' || val === 'open';
+
+  for (const b of bumps || []) {
+    if (b.kind !== 'porch' || !isRecess(b)) continue;
+    const depth = Math.abs(b.depthFt);
+    const bSpan = wallSpan(b.wall, dim);
+    const top = bumpHeight(b, wallHeightFt);
+
+    // Corner 1: front (u=span) / left (u=0)
+    if (wall === 'front' && b.wall === 'left' && b.offsetFt <= 0.01 && isOpen(b.endWallLeft)) {
+      cuts.push({ x0: Math.max(0, wSpan - depth), x1: wSpan, top, bump: b, adjacentCorner: true });
+    }
+    if (wall === 'left' && b.wall === 'front' && b.offsetFt + b.lengthFt >= bSpan - 0.01 && isOpen(b.endWallRight)) {
+      cuts.push({ x0: 0, x1: Math.min(wSpan, depth), top, bump: b, adjacentCorner: true });
+    }
+
+    // Corner 2: front (u=0) / right (u=span)
+    if (wall === 'front' && b.wall === 'right' && b.offsetFt + b.lengthFt >= bSpan - 0.01 && isOpen(b.endWallRight)) {
+      cuts.push({ x0: 0, x1: Math.min(wSpan, depth), top, bump: b, adjacentCorner: true });
+    }
+    if (wall === 'right' && b.wall === 'front' && b.offsetFt <= 0.01 && isOpen(b.endWallLeft)) {
+      cuts.push({ x0: Math.max(0, wSpan - depth), x1: wSpan, top, bump: b, adjacentCorner: true });
+    }
+
+    // Corner 3: back (u=0) / left (u=span)
+    if (wall === 'back' && b.wall === 'left' && b.offsetFt + b.lengthFt >= bSpan - 0.01 && isOpen(b.endWallRight)) {
+      cuts.push({ x0: 0, x1: Math.min(wSpan, depth), top, bump: b, adjacentCorner: true });
+    }
+    if (wall === 'left' && b.wall === 'back' && b.offsetFt <= 0.01 && isOpen(b.endWallLeft)) {
+      cuts.push({ x0: Math.max(0, wSpan - depth), x1: wSpan, top, bump: b, adjacentCorner: true });
+    }
+
+    // Corner 4: back (u=span) / right (u=0)
+    if (wall === 'back' && b.wall === 'right' && b.offsetFt <= 0.01 && isOpen(b.endWallLeft)) {
+      cuts.push({ x0: Math.max(0, wSpan - depth), x1: wSpan, top, bump: b, adjacentCorner: true });
+    }
+    if (wall === 'right' && b.wall === 'back' && b.offsetFt + b.lengthFt >= bSpan - 0.01 && isOpen(b.endWallRight)) {
+      cuts.push({ x0: 0, x1: Math.min(wSpan, depth), top, bump: b, adjacentCorner: true });
+    }
+  }
+
+  return cuts;
+}
+
 export function wallBands(bumps, wall, dim, wallHeightFt) {
-  const spans = bumpsOnWall(bumps, wall)
+  const ownSpans = bumpsOnWall(bumps, wall)
     .filter(cutsWall)
     .map((b) => ({
       x0: Math.max(0, b.offsetFt),
       x1: Math.min(wallSpan(wall, dim), b.offsetFt + b.lengthFt),
       top: bumpHeight(b, wallHeightFt),
       bump: b,
+      adjacentCorner: false,
     }))
-    .filter((s) => s.x1 - s.x0 > 0.01)
-    .sort((a, b) => a.x0 - b.x0);
+    .filter((s) => s.x1 - s.x0 > 0.01);
+
+  const cornerSpans = adjacentCornerCuts(bumps, wall, dim, wallHeightFt);
+
+  const spans = [...ownSpans, ...cornerSpans].sort((a, b) => a.x0 - b.x0);
 
   // Overlapping bumps would double-cut the wall; the first one wins the overlap.
   const cut = [];

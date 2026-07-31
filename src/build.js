@@ -580,9 +580,11 @@ function buildWall(name, frame, home, materials) {
   for (const band of bands) {
     eachTop(cursor, band.x0, (a, b, top, d) => addBand(a, b, 0, top, materials.siding, d));
     // A bump's own depth is measured from the wall where it sits, so it stacks
-    // on top of however far that stretch has been set in.
-    const bumpBase = insetAt((band.x0 + band.x1) / 2);
-    addBand(band.x0, band.x1, 0, band.top, materials.siding, bumpBase + bandDepth(band));
+    // on top of however far that stretch has been set in. Skip for adjacent corner open cuts.
+    if (!band.adjacentCorner) {
+      const bumpBase = insetAt((band.x0 + band.x1) / 2);
+      addBand(band.x0, band.x1, 0, band.top, materials.siding, bumpBase + bandDepth(band));
+    }
     eachTop(band.x0, band.x1, (a, b, top, d) => addBand(a, b, band.top, top, materials.siding, d));
     cursor = band.x1;
   }

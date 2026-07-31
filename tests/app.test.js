@@ -2435,5 +2435,23 @@ test('82. Porch end wall options, front railing egress gap, and per-door stair t
   home.bumps[0].endWallLeft = 'open_none';
   const rootOpenNone = buildHome(home, sceneWithSteps);
   assert.ok(rootOpenNone, 'Built model with open_none end wall');
+
+  // 4. Test adjacent corner cut (e.g. porch on left wall at offset 0 cut into front wall)
+  home.bumps = [
+    {
+      id: 'b2',
+      wall: 'left',
+      kind: 'porch',
+      offsetFt: 0,
+      lengthFt: 13.5,
+      depthFt: -6,
+      endWallLeft: 'open_railing',
+      endWallRight: 'wall',
+      posts: 4,
+      railing: true,
+    },
+  ];
+  const rootCornerCut = buildHome(home, sceneWithSteps);
+  assert.ok(rootCornerCut, 'Built model with adjacent corner cut for open porch on left wall');
 });
 
