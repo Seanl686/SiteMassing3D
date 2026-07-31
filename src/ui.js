@@ -557,6 +557,7 @@ function renderGroupCard(list, cb) {
       }));
       subGrid.appendChild(l);
     };
+    addSel('Include Stairs', 'steps', [['true', 'Yes (Build stairs)'], ['false', 'No (No stairs)']], 'true');
     addSel('Stair Material', 'stepMat', MAT_ARR.map((v) => [v, MAT_LABELS[v]]), 'concrete');
     addSel('Egress Direction', 'stepEgress', EGRESS_ARR.map((v) => [v, EGRESS_LABELS[v]]), 'front');
     addSel('Stair Railings', 'stepRailings', RAILINGS_ARR.map((v) => [v, RAILINGS_LABELS[v]]), 'both');
@@ -779,6 +780,24 @@ function row(o, cb) {
 
     const subGrid = document.createElement('div');
     subGrid.className = 'grid2';
+
+    const stepsLabel = document.createElement('label');
+    const stepsSpan = document.createElement('span');
+    stepsSpan.textContent = 'Include Stairs';
+    const stepsSelect = document.createElement('select');
+    stepsSelect.dataset.key = 'steps';
+    stepsSelect.innerHTML = `
+      <option value="true">Yes (Build stairs)</option>
+      <option value="false">No (No stairs)</option>
+    `;
+    stepsSelect.value = o.steps === false ? 'false' : 'true';
+    stepsSelect.addEventListener('focus', () => cb.onSelect(o.id, 'anchor'));
+    stepsSelect.addEventListener('change', () => {
+      o.steps = stepsSelect.value === 'true';
+      cb.onEdit(o, true);
+    });
+    stepsLabel.append(stepsSpan, stepsSelect);
+    subGrid.appendChild(stepsLabel);
 
     const matLabel = document.createElement('label');
     const matSpan = document.createElement('span');

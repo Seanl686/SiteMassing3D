@@ -18,7 +18,7 @@ import {
 } from './outdir.js';
 import { defaultHome, defaultScene, defaultExport, nextId, OPENING_PRESETS, migrate, newRoofSection } from './defaults.js';
 import {
-  defaultBump, clampBump, BUMP_ROOFS, BUMP_ROOF_LABEL, BUMP_KIND_LABEL, isRecess,
+  defaultBump, clampBump, BUMP_ROOFS, BUMP_ROOF_LABEL, BUMP_KIND_LABEL, BUMP_END_WALL_LABEL, BUMP_FRONT_RAILING_LABEL, isRecess,
 } from './bumps.js';
 import { History, describeChange } from './history.js';
 import { buildProject, readProject } from './project.js';
@@ -2172,6 +2172,9 @@ function renderBumpList() {
         <label><span>Height (ft)</span><input type="number" autocomplete="off" step="0.25" min="1" placeholder="Wall height" data-bk="heightFt" value="${b.heightFt ?? ''}"></label>
         ${porch ? `<label><span>Posts</span><input type="number" autocomplete="off" step="1" min="2" max="12" data-bk="posts" value="${b.posts}"></label>` : `<label><span>Accent window</span><input type="checkbox" data-bk="window"${b.window ? ' checked' : ''}></label>`}
         ${porch ? `<label><span>Railing</span><input type="checkbox" data-bk="railing"${b.railing !== false ? ' checked' : ''}></label>` : ''}
+        ${porch ? `<label><span>Left end wall</span><select data-bk="endWallLeft">${opt(BUMP_END_WALL_LABEL, b.endWallLeft || 'wall')}</select></label>` : ''}
+        ${porch ? `<label><span>Right end wall</span><select data-bk="endWallRight">${opt(BUMP_END_WALL_LABEL, b.endWallRight || 'wall')}</select></label>` : ''}
+        ${porch ? `<label><span>Front railing</span><select data-bk="frontRailing">${opt(BUMP_FRONT_RAILING_LABEL, b.frontRailing || 'auto')}</select></label>` : ''}
       </div>
       <p class="hint">${i + 1}. ${isRecess(b) ? 'Recessed into' : 'Projecting out from'} the ${BUMP_WALL_LABEL[b.wall].toLowerCase()} · ${fmtFt(b.lengthFt)} × ${fmtFt(Math.abs(b.depthFt))}</p>
       <div class="btnrow"><button data-bump-del="${b.id}">Delete</button></div>

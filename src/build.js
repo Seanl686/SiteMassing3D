@@ -1429,7 +1429,7 @@ function gableDormer(dim, materials, opts) {
  * and +Z on `w`, so a piece can be described the way it would be paced off on
  * site and dropped into world space unchanged.
  */
-function buildBump(b, frame, home, materials) {
+function buildBump(b, frame, home, materials, sceneOpts = {}) {
   const dim = home.dimensions;
   const F = dim.floorHeightFt;
   const wallH = getWallHeight(b.wall, dim);
@@ -1491,8 +1491,10 @@ function buildBump(b, frame, home, materials) {
     // Recess: the wall steps back into the footprint. The header of siding above
     // it and the wall at the back of it both come from the wall builder; this is
     // the inside of the notch.
-    box(T, h, d, u0 + T / 2, h / 2, d / 2, materials.siding);         // left reveal
-    box(T, h, d, u1 - T / 2, h / 2, d / 2, materials.siding);         // right reveal
+    const showLeftWall = !porch || (b.endWallLeft !== 'open_railing' && b.endWallLeft !== 'open_none');
+    const showRightWall = !porch || (b.endWallRight !== 'open_railing' && b.endWallRight !== 'open_none');
+    if (showLeftWall) box(T, h, d, u0 + T / 2, h / 2, d / 2, materials.siding);         // left reveal
+    if (showRightWall) box(T, h, d, u1 - T / 2, h / 2, d / 2, materials.siding);        // right reveal
     box(len, 0.25, d, uc, h + 0.125, d / 2, materials.trim);          // ceiling
     if (porch) box(len, 0.4, d, uc, -0.2, d / 2, materials.deck);     // porch floor
   } else {
@@ -1521,6 +1523,7 @@ function buildBump(b, frame, home, materials) {
     if (b.railing !== false) {
       const railH = 3.0;
       const rail = (sizeU, sizeW, u, w) => {
+        if (sizeU <= 0.05 || sizeW <= 0.05) return;
         box(sizeU, 0.12, sizeW, u, railH, w, railMat);          // top rail
         box(sizeU, 0.12, sizeW, u, 0.35, w, railMat);           // bottom rail
         // Balusters between them.
@@ -1540,9 +1543,61 @@ function buildBump(b, frame, home, materials) {
       const edgeW = postEdgeW;
       const sideRun = Math.max(0.5, d - postW);
       const sideMid = out ? d - sideRun / 2 : sideRun / 2;
-      rail(len, 0.12, uc, edgeW);
-      rail(0.12, sideRun, u0 + 0.1, sideMid);
-      rail(0.12, sideRun, u1 - 0.1, sideMid);
+
+      // Side railings: show if open_railing OR if side wall is open/default
+      const showLeftRail = b.endWallLeft === 'open_railing' || (b.endWallLeft !== 'wall' && b.endWallLeft !== 'open_none');
+      const showRightRail = b.endWallRight === 'open_railing' || (b.endWallRight !== 'wall' && b.endWallRight !== 'open_none');
+
+      if (showLeftRail) rail(0.12, sideRun, u0 + 0.1, sideMid);
+      if (showRightRail) rail(0.12, sideRun, u1 - 0.1, sideMid);
+
+      // Front railing:
+      const fMode = b.frontRailing || 'auto';
+      if (fMode !== 'none') {
+        const porchDoors = (home.openings || []).filter((o) =>
+          o.wall === b.wall &&
+          (o.type === 'door' || o.type === 'slider') &&
+          o.offsetFt + o.widthFt > u0 &&
+          o.offsetFt < u1 &&
+          o.steps !== false &&
+          sceneOpts.steps !== false
+        );
+
+        const wantGap = fMode === 'gap' || (fMode === 'auto' && porchDoors.length > 0);
+
+        if (!wantGap || !porchDoors.length) {
+          rail(len, 0.12, uc, edgeW);
+        } else {
+          // Split front rail around egress gap(s)
+          const uStart = u0 + postW / 2;
+          const uEnd = u1 - postW / 2;
+          let intervals = [[uStart, uEnd]];
+
+          for (const o of porchDoors) {
+            const doorCenter = o.offsetFt + o.widthFt / 2;
+            const halfGap = Math.max(1.5, (o.widthFt + 0.6) / 2);
+            const gMin = Math.max(uStart, doorCenter - halfGap);
+            const gMax = Math.min(uEnd, doorCenter + halfGap);
+
+            const nextIntervals = [];
+            for (const [a, bRange] of intervals) {
+              if (gMax <= a || gMin >= bRange) {
+                nextIntervals.push([a, bRange]);
+              } else {
+                if (gMin - a > 0.4) nextIntervals.push([a, gMin]);
+                if (bRange - gMax > 0.4) nextIntervals.push([gMax, bRange]);
+              }
+            }
+            intervals = nextIntervals;
+          }
+
+          for (const [a, bRange] of intervals) {
+            const spanLen = bRange - a;
+            const spanMid = (a + bRange) / 2;
+            rail(spanLen, 0.12, spanMid, edgeW);
+          }
+        }
+      }
     }
   }
 
@@ -1599,7 +1654,7 @@ function buildBump(b, frame, home, materials) {
   return g;
 }
 
-function buildBumps(home, materials) {
+function buildBumps(home, materials, sceneOpts = {}) {
   const bumps = home.bumps || [];
   if (!bumps.length) return null;
   const frames = wallFrames(home.dimensions);
@@ -1608,7 +1663,7 @@ function buildBumps(home, materials) {
   for (const b of bumps) {
     const f = frames[b.wall];
     if (!f) continue;
-    g.add(buildBump(b, f, home, materials));
+    g.add(buildBump(b, f, home, materials, sceneOpts));
   }
   return g;
 }
@@ -1643,7 +1698,7 @@ function buildSteps(home, materials, sceneOpts = {}) {
   const g = new THREE.Group();
   g.name = 'steps';
   const frames = wallFrames(dim);
-  const doors = home.openings.filter((o) => (o.type === 'door' || o.type === 'slider') && o.sillFt < 0.75);
+  const doors = home.openings.filter((o) => (o.type === 'door' || o.type === 'slider') && o.sillFt < 0.75 && o.steps !== false);
   if (!doors.length || sceneOpts.steps === false) return g;
 
   const railH = 3.0; // 36" railing height
@@ -2166,7 +2221,7 @@ export function buildHome(home, sceneOpts = {}) {
   }
 
   root.add(buildRoof(dim, materials));
-  const bumps = buildBumps(home, materials);
+  const bumps = buildBumps(home, materials, sceneOpts);
   if (bumps) root.add(bumps);
   const corners = buildCornerTrim(dim, materials);
   if (corners) root.add(corners);

@@ -23,6 +23,8 @@
 export const BUMP_KINDS = ['wall', 'porch'];
 export const BUMP_ROOFS = ['none', 'flat', 'shed', 'gable'];
 export const BUMP_WALLS = ['front', 'back', 'left', 'right'];
+export const BUMP_END_WALL_OPTIONS = ['wall', 'open_railing', 'open_none'];
+export const BUMP_FRONT_RAILING_OPTIONS = ['auto', 'gap', 'continuous', 'none'];
 
 export const BUMP_KIND_LABEL = {
   wall: 'Wall bump (enclosed)',
@@ -34,6 +36,19 @@ export const BUMP_ROOF_LABEL = {
   flat: 'Flat cap',
   shed: 'Shed roof',
   gable: 'Gable roof',
+};
+
+export const BUMP_END_WALL_LABEL = {
+  wall: 'Solid Siding Wall',
+  open_railing: 'Open with Railing',
+  open_none: 'Open (No Railing)',
+};
+
+export const BUMP_FRONT_RAILING_LABEL = {
+  auto: 'Auto (Gap at stairs/door)',
+  gap: 'Open Gap for Stairs',
+  continuous: 'Continuous Railing (No gap)',
+  none: 'No Front Railing',
 };
 
 let bseq = 0;
@@ -54,6 +69,9 @@ export function defaultBump(wall = 'front', kind = 'wall') {
     roofPitchFt: 2,                  // /12, for 'shed' and 'gable' caps
     deck: porch,
     railing: porch,
+    endWallLeft: 'wall',             // 'wall' | 'open_railing' | 'open_none'
+    endWallRight: 'wall',            // 'wall' | 'open_railing' | 'open_none'
+    frontRailing: 'auto',            // 'auto' | 'gap' | 'continuous' | 'none'
     posts: porch ? 3 : 0,
     window: false,
     windowWidthFt: 3,
@@ -86,6 +104,9 @@ export function readBumps(raw) {
       roofPitchFt: Math.max(0, num(b.roofPitchFt, base.roofPitchFt)),
       deck: b.deck === undefined ? base.deck : !!b.deck,
       railing: b.railing === undefined ? base.railing : !!b.railing,
+      endWallLeft: BUMP_END_WALL_OPTIONS.includes(b.endWallLeft) ? b.endWallLeft : base.endWallLeft,
+      endWallRight: BUMP_END_WALL_OPTIONS.includes(b.endWallRight) ? b.endWallRight : base.endWallRight,
+      frontRailing: BUMP_FRONT_RAILING_OPTIONS.includes(b.frontRailing) ? b.frontRailing : base.frontRailing,
       posts: Math.max(0, Math.round(num(b.posts, base.posts))),
       window: !!b.window,
       windowWidthFt: Math.max(0.5, num(b.windowWidthFt, base.windowWidthFt)),

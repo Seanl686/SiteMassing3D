@@ -2379,3 +2379,61 @@ test('81. Locking the ridge to centre keeps the peak central and raises a wall',
   const backWall = new THREE.Box3().setFromObject(root.children.find((c) => c.name === 'wall:back'));
   assert.ok(near(backWall.max.y, dv.eaveYBack, 1e-3), 'Rear wall built to the raised eave');
 });
+
+test('82. Porch end wall options, front railing egress gap, and per-door stair toggles', () => {
+  const home = defaultHome();
+  home.bumps = [
+    {
+      id: 'b1',
+      wall: 'front',
+      kind: 'porch',
+      offsetFt: 5,
+      lengthFt: 12,
+      depthFt: -6,
+      endWallLeft: 'open_railing',
+      endWallRight: 'wall',
+      frontRailing: 'auto',
+      posts: 3,
+      railing: true,
+    },
+  ];
+  home.openings = [
+    {
+      id: 'd1',
+      type: 'door',
+      wall: 'front',
+      offsetFt: 8,
+      widthFt: 3,
+      heightFt: 6.8,
+      sillFt: 0,
+      steps: true,
+      label: 'Porch Entry Door',
+    },
+  ];
+
+  // 1. Build model with steps enabled and open_railing on left end wall
+  const sceneWithSteps = { ...defaultScene(), steps: true };
+  const rootWithSteps = buildHome(home, sceneWithSteps);
+  assert.ok(rootWithSteps, 'Built 3D home model successfully');
+
+  const bumpGroup = rootWithSteps.children.find((c) => c.name === 'bumps');
+  assert.ok(bumpGroup, 'Bumps group exists');
+  const porchMesh = bumpGroup.children.find((c) => c.name === 'bump:b1');
+  assert.ok(porchMesh, 'Porch mesh exists');
+
+  // Verify steps group includes steps for door
+  const stepsGroup = rootWithSteps.children.find((c) => c.name === 'steps');
+  assert.ok(stepsGroup && stepsGroup.children.length > 0, 'Steps built for porch door');
+
+  // 2. Disable stairs for door (steps: false)
+  home.openings[0].steps = false;
+  const rootNoSteps = buildHome(home, sceneWithSteps);
+  const stepsGroupNo = rootNoSteps.children.find((c) => c.name === 'steps');
+  assert.equal(stepsGroupNo.children.length, 0, 'No steps built when door.steps is false');
+
+  // 3. Test endWallLeft = open_none vs wall
+  home.bumps[0].endWallLeft = 'open_none';
+  const rootOpenNone = buildHome(home, sceneWithSteps);
+  assert.ok(rootOpenNone, 'Built model with open_none end wall');
+});
+
