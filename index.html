@@ -65,20 +65,18 @@
           <label><span>Overall Length (ft)</span><input id="f_length" type="number" autocomplete="off" step="0.1" min="8"></label>
         </div>
 
-        <div style="background: rgba(111, 178, 255, 0.08); border: 1px solid rgba(111, 178, 255, 0.3); border-radius: 6px; padding: 10px; margin: 10px 0;">
-          <h3 style="margin: 0 0 8px 0; font-size: 13px; color: #6fb2ff; display: flex; align-items: center; gap: 6px;">
-            <span>🏠 Stepped Half / Sectional Footprint</span>
-          </h3>
+        <div class="feature-card">
+          <h3><span>🏠 Stepped Half / Sectional Footprint</span></h3>
           <div class="grid2">
             <label><span>Front setback / step (ft)</span><input id="f_frontSetback" type="number" autocomplete="off" step="0.25" placeholder="0 (e.g. 1.33 / 2.67)"></label>
             <label><span>Front half length (ft)</span><input id="f_frontLength" type="number" autocomplete="off" step="0.25" placeholder="Auto (Length)"></label>
             <label><span>Back setback / step (ft)</span><input id="f_backSetback" type="number" autocomplete="off" step="0.25" placeholder="0 (No step)"></label>
             <label><span>Back half length (ft)</span><input id="f_backLength" type="number" autocomplete="off" step="0.25" placeholder="Auto (Length)"></label>
           </div>
-          <div class="btnrow" style="margin-top: 8px;">
-            <button id="btnStepFront133" type="button" class="btn" style="flex: 1; font-size: 11px;">✂️ Step Front 1'-4" (1.33')</button>
-            <button id="btnStepFront267" type="button" class="btn" style="flex: 1; font-size: 11px;">✂️ Step Front 2'-8" (2.67' - Redman)</button>
-            <button id="btnResetHalves" type="button" class="btn" style="flex: 1; font-size: 11px;">🔄 Reset Equal</button>
+          <div class="btnrow">
+            <button id="btnStepFront133" type="button" class="btn">✂️ Step Front 1'-4" (1.33')</button>
+            <button id="btnStepFront267" type="button" class="btn">✂️ Step Front 2'-8" (2.67' - Redman)</button>
+            <button id="btnResetHalves" type="button" class="btn">🔄 Reset Equal</button>
           </div>
         </div>
 
