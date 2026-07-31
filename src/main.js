@@ -3224,14 +3224,34 @@ function onPick(ev) {
     const bumpId = findBumpId(wallHitObj.object);
     if (wallName || bumpId) {
       const hitPoint = wallHitObj.point.clone();
+      const dim = state.home.dimensions;
+
+      // Automatically initialize roofSections into two halves if empty so
+      // dragging a wall steps that half of the house out-of-the-box.
+      if ((wallName === 'front' || wallName === 'back') && (!Array.isArray(dim.roofSections) || !dim.roofSections.length)) {
+        const mid = Math.round((dim.lengthFt / 2) * 4) / 4;
+        dim.roofSections = [
+          newRoofSection(0, 'Left half'),
+          newRoofSection(mid, 'Right half'),
+        ];
+        refreshRoofSections();
+      }
+
+      const resolvedSecs = resolveRoofSections(dim);
+      const hitSec = sectionAtX(resolvedSecs, hitPoint.x);
+      const secList = dim.roofSections || [];
+      const targetSec = secList.find((s) => s.id === hitSec.id) || secList[hitSec.index] || secList[0];
+
       wallDrag = {
         wall: wallName,
         bumpId: bumpId,
-        startClientX: ev.clientX,
-        startClientY: ev.clientY,
-        startDim: { ...state.home.dimensions },
-        startBumps: JSON.parse(JSON.stringify(state.home.bumps || [])),
+        sectionId: targetSec ? targetSec.id : null,
+        sectionIndex: hitSec ? hitSec.index : 0,
+        startFrontInsetFt: targetSec ? (targetSec.frontInsetFt || 0) : 0,
+        startBackInsetFt: targetSec ? (targetSec.backInsetFt || 0) : 0,
         startPoint: hitPoint,
+        startDim: { ...dim },
+        startBumps: JSON.parse(JSON.stringify(state.home.bumps || [])),
       };
       stage.controls.enabled = false;
       stage.orthoControls.enabled = false;
@@ -3300,17 +3320,32 @@ function onMove(ev) {
       }
     } else if (wallDrag.wall) {
       const w = wallDrag.wall;
-      if (w === 'front') {
-        dim.widthFt = Math.max(12, roundQuarter(wallDrag.startDim.widthFt - dz * 2));
-      } else if (w === 'back') {
-        dim.widthFt = Math.max(12, roundQuarter(wallDrag.startDim.widthFt + dz * 2));
+      if (w === 'front' || w === 'back') {
+        if (ev.shiftKey) {
+          // Shift + drag resizes whole house width
+          if (w === 'front') dim.widthFt = Math.max(12, roundQuarter(wallDrag.startDim.widthFt - dz * 2));
+          else dim.widthFt = Math.max(12, roundQuarter(wallDrag.startDim.widthFt + dz * 2));
+          if ($('f_width')) $('f_width').value = dim.widthFt;
+        } else {
+          // Dragging wall steps THAT HALF / SECTION of the house
+          const secList = dim.roofSections || [];
+          const sec = secList.find((s) => s.id === wallDrag.sectionId) || secList[wallDrag.sectionIndex];
+          if (sec) {
+            if (w === 'front') {
+              sec.frontInsetFt = roundQuarter((wallDrag.startFrontInsetFt || 0) + dz);
+            } else {
+              sec.backInsetFt = roundQuarter((wallDrag.startBackInsetFt || 0) - dz);
+            }
+            refreshRoofSections();
+          }
+        }
       } else if (w === 'left') {
         dim.lengthFt = Math.max(16, roundQuarter(wallDrag.startDim.lengthFt - dx * 2));
+        if ($('f_length')) $('f_length').value = dim.lengthFt;
       } else if (w === 'right') {
         dim.lengthFt = Math.max(16, roundQuarter(wallDrag.startDim.lengthFt + dx * 2));
+        if ($('f_length')) $('f_length').value = dim.lengthFt;
       }
-      if ($('f_length')) $('f_length').value = dim.lengthFt;
-      if ($('f_width')) $('f_width').value = dim.widthFt;
       queueRebuild();
       return;
     }
