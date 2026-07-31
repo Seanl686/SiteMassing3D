@@ -81,7 +81,7 @@ export function defaultHome() {
       windowHeadDropFt: 1.0,   // top of wall -> top of window
       doorHeadDropFt: 1.33,    // top of wall -> top of door (6'-8" head in an 8' wall)
       dormerCount: 0,         // 0 (none), 1 (single), 2 (double)
-      dormerStyle: 'gable',   // 'gable', 'shed', 'hip'
+      dormerStyle: 'gable',   // 'gable', 'shed' — nested and connected-cap dormers stay gable/shed as those modes define
       dormerWidthFt: 10.0,
       dormerHeightFt: 4.5,
       dormerFalseEave: true,
@@ -100,6 +100,9 @@ export function defaultHome() {
       gableSidingTexture: 'horizontal_lap',
       cornerTrim: true,
       cornerTrimWidthFt: 0.5,       // 6-inch vertical corner trim boards
+      gutters: false,               // K-style gutter + corner downspouts along every eave
+      skirtingMaterial: 'vinyl_panel', // 'vinyl_panel', 'concrete_block', 'brick', 'stacked_stone', 'lattice'
+      skirtingHeightFt: null,       // null = follow the floor height (grade to underside of floor)
     },
     colors: {
       siding: '#8d9299',
@@ -109,6 +112,7 @@ export function defaultHome() {
       trim: '#f2f2f0',
       fascia: '#f2f2f0',   // fascia, rake and ridge boards
       corner: '#f2f2f0',   // corner boards
+      gutter: '#f2f2f0',   // gutters and downspouts
       roof: '#3a3d42',
       skirting: '#e6e6e1',
       door: '#f2f2f0',
@@ -266,6 +270,9 @@ export function migrate(home) {
   dimensions.roofPitchBack = Number.isFinite(+dimensions.roofPitchBack) && +dimensions.roofPitchBack > 0
     ? +dimensions.roofPitchBack
     : null;
+  dimensions.skirtingHeightFt = Number.isFinite(+dimensions.skirtingHeightFt) && +dimensions.skirtingHeightFt > 0
+    ? +dimensions.skirtingHeightFt
+    : null;
   dimensions.dormerPositions = Array.isArray(dimensions.dormerPositions)
     ? dimensions.dormerPositions.map((v) => +v).filter((v) => Number.isFinite(v))
     : [];
@@ -279,6 +286,7 @@ export function migrate(home) {
   // meant "same as the trim"; inheriting the app default would repaint it.
   if (!home.colors?.fascia) colors.fascia = colors.trim;
   if (!home.colors?.corner) colors.corner = colors.trim;
+  if (!home.colors?.gutter) colors.gutter = colors.fascia;
   // Plate modes were renamed when the plate was locked to the camera:
   // 'contain' scaled off whichever axis bound first, which is what made the
   // photo drift against the model on a resize.
@@ -300,6 +308,9 @@ export function migrate(home) {
       sillFt: +o.sillFt || 0,
       label: o.label || '',
       headFree: !!o.headFree,   // opt this opening out of the global head alignment
+      shutters: !!o.shutters,
+      shutterStyle: o.shutterStyle === 'paneled' ? 'paneled' : 'louvered',
+      shutterColor: o.shutterColor || '#2f3a30',
       stepMat: o.stepMat,
       stepEgress: o.stepEgress,
       stepRailings: o.stepRailings,

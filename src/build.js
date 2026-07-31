@@ -5,7 +5,7 @@
 // Ground is y = 0, floor deck sits at y = floorHeightFt.
 
 import * as THREE from 'three';
-import { createSidingMaterial } from './textures.js';
+import { createSidingMaterial, createSkirtingMaterial } from './textures.js';
 import {
   wallBands, bumpHeight, bumpFootprint, isRecess, isProjecting, clampBump,
 } from './bumps.js';
@@ -304,8 +304,10 @@ export function resolveRoofSections(dim) {
     const backInsetFt = num(spec.backInsetFt, 0);
     const zFront = Math.min(halfW - 1, -halfW + frontInsetFt);
     const zBack = Math.max(zFront + 1, halfW - backInsetFt);
+    const effectiveStyle = spec.roofStyle || dim.roofStyle;
     const solved = solveRoof({
-      flat: (spec.roofStyle || dim.roofStyle) === 'flat',
+      flat: effectiveStyle === 'flat',
+      roofStyle: effectiveStyle === 'shed' || effectiveStyle === 'none' ? effectiveStyle : undefined,
       zFront,
       zBack,
       eaveYFront: F + num(spec.frontWallHeightFt, getWallHeight('front', dim)),
@@ -373,6 +375,37 @@ export function derived(dim) {
     sectioned: sections.length > 1,
     ridgeY: sections.reduce((m, s) => Math.max(m, s.topY), -Infinity),
   };
+}
+
+/**
+ * Living (conditioned) floor area and covered-porch area, in square feet.
+ *
+ * The main body's area is summed section by section rather than read off
+ * `widthFt x lengthFt`, because a stepped half or a set-in section already
+ * changes the footprint away from that simple rectangle. A projecting 'wall'
+ * bump is conditioned space and adds to living area; a recessed one cuts a
+ * notch out of it and subtracts. Porches are never heated space, so they are
+ * kept in their own total rather than folded into "square footage".
+ */
+export function footprintAreas(dim, bumps = []) {
+  const sections = resolveRoofSections(dim);
+  let living = 0;
+  for (const sec of sections) {
+    living += Math.max(0, sec.x1 - sec.x0) * Math.max(0, sec.zBack - sec.zFront);
+  }
+  let porch = 0;
+  for (const b of bumps || []) {
+    const area = Math.max(0, b.lengthFt) * Math.abs(b.depthFt);
+    if (b.kind === 'porch') {
+      if (isProjecting(b)) porch += area;
+    } else if (isProjecting(b)) {
+      living += area;
+    } else if (isRecess(b)) {
+      living -= area;
+    }
+  }
+  living = Math.max(0, living);
+  return { livingSqFt: living, porchSqFt: porch, totalSqFt: living + porch };
 }
 
 /** Read a numeric field, falling back when it is absent, blank or unparseable. */
@@ -755,6 +788,63 @@ function buildOpening(o, materials) {
     g.add(inset);
   }
 
+  // Shutters: a photograph is the only thing that used to answer "does this
+  // window wear them", which meant every unphotographed wall left the image
+  // model guessing. A pair flanking the opening makes the plate authoritative.
+  if (o.shutters && o.type !== 'slider') {
+    g.add(buildShutters(o, materials));
+  }
+
+  return g;
+}
+
+const SHUTTER_GAP = 0.08;   // ft, clear of the casing
+const SHUTTER_THICK = 0.1;  // ft
+
+function buildShutters(o, materials) {
+  const g = new THREE.Group();
+  g.name = 'shutters';
+  const shutterMat = mat(o.shutterColor || '#2f3a30', { roughness: 0.85 });
+  const shutterW = Math.max(0.4, o.widthFt * 0.42);
+  const halfCasing = TRIM_W + SHUTTER_GAP;
+
+  for (const side of [-1, 1]) {
+    const centerU = side < 0
+      ? o.offsetFt - halfCasing - shutterW / 2
+      : o.offsetFt + o.widthFt + halfCasing + shutterW / 2;
+    const panel = new THREE.Mesh(
+      extrude(rectShape(shutterW, o.heightFt, centerU - shutterW / 2, o.sillFt), SHUTTER_THICK),
+      shutterMat,
+    );
+    panel.position.z = -TRIM_PROUD - SHUTTER_THICK / 2;
+    panel.castShadow = true;
+    g.add(panel);
+
+    if (o.shutterStyle === 'paneled') {
+      // Two stacked raised panels, the same read as the door slab above.
+      const panelH = (o.heightFt - 0.45) / 2;
+      for (let i = 0; i < 2; i++) {
+        const inset = new THREE.Mesh(
+          extrude(rectShape(shutterW - 0.14, panelH - 0.1, centerU - (shutterW - 0.14) / 2, o.sillFt + 0.15 + i * (panelH + 0.15)), 0.025),
+          materials.trim,
+        );
+        inset.position.z = -TRIM_PROUD - SHUTTER_THICK - 0.02;
+        g.add(inset);
+      }
+    } else {
+      // Louvered: a handful of thin horizontal slats standing proud of the panel.
+      const slats = 6;
+      for (let i = 0; i < slats; i++) {
+        const y = o.sillFt + o.heightFt * ((i + 0.5) / slats);
+        const slat = new THREE.Mesh(
+          new THREE.BoxGeometry(shutterW - 0.1, 0.05, SHUTTER_THICK * 0.6),
+          shutterMat,
+        );
+        slat.position.set(centerU, y, -TRIM_PROUD - SHUTTER_THICK - SHUTTER_THICK * 0.3);
+        g.add(slat);
+      }
+    }
+  }
   return g;
 }
 
@@ -1354,15 +1444,116 @@ function buildDormers(dim, materials) {
   }
 
   // ── Individual (separate) dormers ────────────────────────────────────
+  const dormerBuilder = dim.dormerStyle === 'shed' ? shedDormer : gableDormer;
   for (let i = 0; i < xPositions.length; i++) {
     const { dW, dH } = dormerSize(dim, i);
-    g.add(gableDormer(dim, materials, {
+    g.add(dormerBuilder(dim, materials, {
       index: i, posX: xPositions[i], dW, dH, frontZ: dormerFrontZ,
       ...footing(xPositions[i]), ov,
     }));
   }
 
   return g;
+}
+
+/** One shed-style dormer: a flat-topped front wall and a single roof slope
+ *  back to the main roof, rather than a gable peak. Built the same way the
+ *  connected double-wide cap is, just sized for one dormer instead of a pair
+ *  spanning both. */
+function shedDormer(dim, materials, opts) {
+  const { index: i, posX, dW, dH, frontZ: dormerFrontZ, eaveY, slope, ov } = opts;
+  const isContinuous = dim.dormerContinuousWall === true;
+  const isDripEdgeOn = dim.dormerDripEdge !== false && !isContinuous;
+  const dormerMat = isContinuous ? materials.siding : (materials.dormerSiding || materials.siding);
+  const dormerGroup = new THREE.Group();
+  dormerGroup.name = `dormer:${i}`;
+  dormerGroup.userData.dormerIndex = i;
+
+  const dormerDepth = opts.depth ?? ((dH / (slope || 0.33)) + ov * 0.5);
+
+  // 1. Front wall — flat-topped rectangle, not a gable triangle.
+  const wallShape = new THREE.Shape();
+  wallShape.moveTo(-dW / 2, 0);
+  wallShape.lineTo(dW / 2, 0);
+  wallShape.lineTo(dW / 2, dH);
+  wallShape.lineTo(-dW / 2, dH);
+  wallShape.closePath();
+  const wallMesh = new THREE.Mesh(new THREE.ExtrudeGeometry(wallShape, { depth: 0.2, bevelEnabled: false }), dormerMat);
+  wallMesh.position.set(posX, eaveY, dormerFrontZ);
+  wallMesh.castShadow = true;
+  wallMesh.userData.dormerIndex = i;
+  dormerGroup.add(wallMesh);
+
+  // 2. Roof — one slope climbing back toward the main ridge.
+  const shedAngle = Math.atan2(dH, dormerDepth);
+  const shedLen = Math.sqrt(dH * dH + dormerDepth * dormerDepth);
+  const shedRoof = new THREE.Mesh(new THREE.BoxGeometry(dW + 1.0, 0.35, shedLen), materials.roof);
+  shedRoof.position.set(posX, eaveY + dH / 2, dormerFrontZ + dormerDepth / 2);
+  shedRoof.rotation.x = shedAngle;
+  shedRoof.castShadow = true;
+  shedRoof.userData.dormerIndex = i;
+  dormerGroup.add(shedRoof);
+
+  // 3. Side cheek walls — right triangles, low at the eave, tall at the wall.
+  for (const side of [-1, 1]) {
+    const sideShape = new THREE.Shape();
+    sideShape.moveTo(0, 0);
+    sideShape.lineTo(dormerDepth, 0);
+    sideShape.lineTo(0, dH);
+    sideShape.closePath();
+    const sideMesh = new THREE.Mesh(new THREE.ExtrudeGeometry(sideShape, { depth: 0.15, bevelEnabled: false }), dormerMat);
+    const sideX = posX + side * dW / 2;
+    sideMesh.position.set(sideX + side * 0.08, eaveY, dormerFrontZ);
+    sideMesh.rotation.y = side === -1 ? -Math.PI / 2 : Math.PI / 2;
+    if (side === 1) sideMesh.position.z = dormerFrontZ + dormerDepth;
+    sideMesh.castShadow = true;
+    sideMesh.userData.dormerIndex = i;
+    dormerGroup.add(sideMesh);
+  }
+
+  // 4. False eave / fascia trim, same as the gable dormer.
+  const fw = fasciaWidth(dim);
+  const fs = fw / FASCIA_H;
+  if (dim.dormerFalseEave !== false && isDripEdgeOn) {
+    const falseEaveW = dW + 1.2;
+    const falseEave = new THREE.Mesh(new THREE.BoxGeometry(falseEaveW, fw, 0.45), materials.fascia);
+    falseEave.position.set(posX, eaveY - fw / 2 - 0.005, dormerFrontZ + 0.1);
+    falseEave.castShadow = true;
+    falseEave.userData.dormerIndex = i;
+    dormerGroup.add(falseEave);
+
+    if (dim.dormerInnerFalseEave !== false) {
+      const innerW = falseEaveW - 1.6;
+      const innerEave = new THREE.Mesh(new THREE.BoxGeometry(innerW, 0.45 * fs, 0.35), materials.fascia);
+      innerEave.position.set(posX, eaveY + 0.18 * fs, dormerFrontZ + 0.25);
+      innerEave.castShadow = true;
+      innerEave.userData.dormerIndex = i;
+      innerEave.name = 'innerFalseEave';
+      dormerGroup.add(innerEave);
+    }
+
+    const topFascia = new THREE.Mesh(new THREE.BoxGeometry(dW + 0.4, 0.5 * fs, 0.2), materials.fascia);
+    topFascia.position.set(posX, eaveY + dH + 0.1 * fs, dormerFrontZ - 0.05);
+    topFascia.castShadow = true;
+    topFascia.userData.dormerIndex = i;
+    dormerGroup.add(topFascia);
+  }
+
+  // 5. Accent window.
+  if (dim.dormerWindow !== false) {
+    const winW = Math.min(3.2, dW * 0.4);
+    const winH = Math.min(2.5, dH * 0.5);
+    const glass = new THREE.Mesh(new THREE.BoxGeometry(winW, winH, 0.1), materials.glass);
+    glass.position.set(posX, eaveY + dH * 0.35, dormerFrontZ - 0.05);
+    glass.userData.dormerIndex = i;
+    dormerGroup.add(glass);
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(winW + 0.4, winH + 0.4, 0.08), materials.trim);
+    frame.position.set(posX, eaveY + dH * 0.35, dormerFrontZ - 0.03);
+    frame.userData.dormerIndex = i;
+    dormerGroup.add(frame);
+  }
+
+  return dormerGroup;
 }
 
 /** One gable dormer assembly: front gable, false eave returns, roof slopes and
@@ -1751,6 +1942,10 @@ function buildBumps(home, materials, sceneOpts = {}) {
 function buildSkirting(dim, materials) {
   if (dim.floorHeightFt <= 0.01) return null;
   const inset = 0.06;
+  // The skirting's top always meets the underside of the floor deck; a
+  // shorter override leaves a gap below the deck rather than floating the
+  // skirting above grade.
+  const skirtH = Math.min(dim.floorHeightFt, Math.max(0.1, num(dim.skirtingHeightFt, dim.floorHeightFt)));
   const g = new THREE.Group();
   g.name = 'skirting';
   // One block per section, each as wide as that section's own footprint, so a
@@ -1760,17 +1955,76 @@ function buildSkirting(dim, materials) {
     const m = new THREE.Mesh(
       new THREE.BoxGeometry(
         Math.max(0.05, sec.x1 - sec.x0 - inset),
-        dim.floorHeightFt,
+        skirtH,
         Math.max(0.05, sec.widthFt - inset),
       ),
       materials.skirting,
     );
-    m.position.set((sec.x0 + sec.x1) / 2, dim.floorHeightFt / 2, (sec.zFront + sec.zBack) / 2);
+    m.position.set((sec.x0 + sec.x1) / 2, dim.floorHeightFt - skirtH / 2, (sec.zFront + sec.zBack) / 2);
     m.castShadow = true;
     m.receiveShadow = true;
     g.add(m);
   }
   return g;
+}
+
+const GUTTER_H = 0.35;  // ft, trough face height
+const GUTTER_W = 0.45;  // ft, trough depth
+const DOWNSPOUT_W = 0.22; // ft
+
+/**
+ * K-style gutters along every true eave, plus a downspout at each outer end
+ * of a run. A shed roof only has one real eave (the low side); flat and
+ * open ('none') roofs have no eave to hang one off, so they are skipped.
+ */
+function buildGutters(dim, materials) {
+  if (!dim.gutters) return null;
+  const ov = num(dim.eaveOverhangFt, 1);
+  const sections = resolveRoofSections(dim);
+  const g = new THREE.Group();
+  g.name = 'gutters';
+
+  const runs = { front: [], back: [] };
+  for (const sec of sections) {
+    if (sec.flat || sec.none) continue;
+    runs.front.push({
+      x0: sec.x0, x1: sec.x1, z: sec.zFront - ov, y: sec.eaveYFront - ov * sec.slopeFront,
+    });
+    if (!sec.shed) {
+      runs.back.push({
+        x0: sec.x0, x1: sec.x1, z: sec.zBack + ov, y: sec.eaveYBack - ov * sec.slopeBack,
+      });
+    }
+  }
+
+  for (const side of ['front', 'back']) {
+    const list = runs[side];
+    if (!list.length) continue;
+    for (const r of list) {
+      const len = r.x1 - r.x0;
+      if (len < 0.5) continue;
+      const trough = new THREE.Mesh(new THREE.BoxGeometry(len, GUTTER_H, GUTTER_W), materials.gutter);
+      trough.position.set((r.x0 + r.x1) / 2, r.y - GUTTER_H / 2, r.z);
+      trough.castShadow = true;
+      trough.name = `gutter:${side}`;
+      g.add(trough);
+    }
+    // A downspout at each outer end of the run drops straight to grade.
+    for (const r of [list[0], list[list.length - 1]]) {
+      const x = r === list[0] ? r.x0 + DOWNSPOUT_W : r.x1 - DOWNSPOUT_W;
+      const topY = r.y - GUTTER_H;
+      if (topY <= 0.05) continue;
+      const spout = new THREE.Mesh(
+        new THREE.BoxGeometry(DOWNSPOUT_W, topY, DOWNSPOUT_W),
+        materials.gutter,
+      );
+      spout.position.set(x, topY / 2, r.z);
+      spout.castShadow = true;
+      spout.name = `downspout:${side}`;
+      g.add(spout);
+    }
+  }
+  return g.children.length ? g : null;
 }
 
 function buildSteps(home, materials, sceneOpts = {}) {
@@ -2277,8 +2531,9 @@ export function buildHome(home, sceneOpts = {}) {
     trim: mat(home.colors.trim, { roughness: 0.75 }),
     fascia: mat(home.colors.fascia ?? home.colors.trim, { roughness: 0.75 }),
     corner: mat(home.colors.corner ?? home.colors.trim, { roughness: 0.78 }),
+    gutter: mat(home.colors.gutter ?? home.colors.fascia ?? home.colors.trim, { roughness: 0.4, metalness: 0.3 }),
     roof: mat(home.colors.roof, { roughness: 0.85 }),
-    skirting: mat(home.colors.skirting, { roughness: 0.95 }),
+    skirting: createSkirtingMaterial(home.colors.skirting, dim.skirtingMaterial || 'vinyl_panel'),
     concrete: mat('#b4bcc6', { roughness: 0.95 }),
     pressure_treated: mat('#a87442', { roughness: 0.78 }),
     dark_composite: mat('#383c42', { roughness: 0.70 }),
@@ -2307,6 +2562,8 @@ export function buildHome(home, sceneOpts = {}) {
   if (corners) root.add(corners);
   const skirt = buildSkirting(dim, materials);
   if (skirt) root.add(skirt);
+  const gutters = buildGutters(dim, materials);
+  if (gutters) root.add(gutters);
   if (sceneOpts.steps) root.add(buildSteps(home, materials, sceneOpts));
   if (sceneOpts.labels) root.add(buildCallouts(home));
   if (sceneOpts.dims) root.add(buildFootprintOutline(dim, home.bumps || []));
