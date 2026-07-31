@@ -68,6 +68,13 @@ presets stop re-fitting your framing on export.
 Every value is also typeable in the sidebar row. `Offset` is measured left→right
 as you face that wall from outside.
 
+**Ridge position** — a split pitch has to give somewhere. Left at *where the
+pitches meet*, the ridge slides off centre and both wall heights stand. Set to
+*locked to home centre* and the peak stays dead centre down the whole length
+instead, with the shallower side's wall raised to meet it — which is how you
+change the pitch on each side of a centred peak. Both typed pitches are kept
+exactly either way; the readout says which wall moved and by how much.
+
 **Sections** — a spec sheet is not always one roof, or one rectangle. **+ Split
 section** cuts the home into sections measured from the left end, and each
 one carries its own pitches, ridge offset, ridge step, front and rear eave
@@ -237,7 +244,7 @@ Drop a file in `homes/`, add a line to `homes/index.json`, and it shows up in th
     "widthFt": 27, "lengthFt": 56,
     "wallHeightFt": 8, "floorHeightFt": 2.5,
     "roofPitch": 4, "roofPitchBack": null,
-    "ridgeOffsetFt": 0, "ridgeStepFt": 0,
+    "ridgeLock": "solved", "ridgeOffsetFt": 0, "ridgeStepFt": 0,
     "ridgeOverhang": "raised", "ridgeOverhangFt": null,
     "roofSections": [],
     "stepOverhang": "raised", "stepOverhangFt": null,
@@ -268,6 +275,12 @@ Drop a file in `homes/`, add a line to `homes/index.json`, and it shows up in th
 - All lengths are feet; `6.67` is a 6'-8" door.
 - `roofPitchBack` — the rear slope's pitch when the sheet says **split pitch**.
   `null` means both slopes match and the ridge sits over the centreline.
+- `ridgeLock` — what gives when the two pitches disagree. `"solved"` (default)
+  lets the ridge slide off centre so the planes meet at the wall heights you
+  gave. `"center"` pins the ridge to the middle of the home for the whole
+  length and raises the shallower side's wall instead, so the peak stays dead
+  centre and both typed pitches are kept exactly. The steeper side keeps its
+  wall; only the side with further to climb moves.
 - `ridgeOffsetFt` — nudges the ridge off wherever the split-pitch solve put it.
   The two planes still land on their own eaves; the longer run just runs
   shallower.

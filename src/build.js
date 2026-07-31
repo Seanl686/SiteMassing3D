@@ -77,7 +77,9 @@ function solveRoof(v, dim) {
   const zFront = v.zFront;
   const zBack = v.zBack;
   const W = zBack - zFront;
-  const { eaveYFront, eaveYBack } = v;
+  // Not const: locking the ridge to the centre resolves the disagreement by
+  // raising an eave, so these move.
+  let { eaveYFront, eaveYBack } = v;
   const pitchF = v.flat ? 0 : Math.max(0, v.pitchF || 0);
   const pitchB = v.flat ? 0 : Math.max(0, v.pitchB || 0);
   let slopeF = pitchF / 12;
@@ -94,6 +96,7 @@ function solveRoof(v, dim) {
       ridgeStepFt: 0, ridgeSail: 0, ridgeCutZ: mid,
       angle: 0, angleFront: 0, angleBack: 0, split: false, flat: true,
       zFront, zBack, widthFt: W,
+      ridgeLocked: false, liftedFront: 0, liftedBack: 0,
     };
   }
 
@@ -104,6 +107,13 @@ function solveRoof(v, dim) {
   // form; written against the actual wall lines it also holds for a section
   // that has been set in.
   let ridgeZ = (eaveYBack - eaveYFront + slopeB * zBack + slopeF * zFront) / (slopeF + slopeB);
+  // Locking the ridge to the centre asks the opposite question: the peak is
+  // given, so what has to give is an eave. Two planes of different pitch cannot
+  // both climb from the same height to a centred peak — the shallower one has
+  // further to climb per foot of run, so its wall rises to meet the other.
+  let liftedFront = 0;
+  let liftedBack = 0;
+  if (v.ridgeLock === 'center') ridgeZ = (zFront + zBack) / 2;
   // A typed ridge offset nudges the solved ridge rather than replacing it, so
   // the split-pitch solve above still sets where it starts from.
   ridgeZ += v.ridgeOffsetFt || 0;
@@ -112,6 +122,21 @@ function solveRoof(v, dim) {
     eaveYFront + slopeF * (ridgeZ - zFront),
     eaveYBack + slopeB * (zBack - ridgeZ),
   );
+
+  if (v.ridgeLock === 'center') {
+    // Raise whichever eave falls short so both planes still meet at one peak,
+    // and keep the typed pitches exactly as typed — that is the whole point of
+    // locking the ridge rather than letting it slide.
+    const runF = ridgeZ - zFront;
+    const runB = zBack - ridgeZ;
+    const wantF = ridgeY - slopeF * runF;
+    const wantB = ridgeY - slopeB * runB;
+    liftedFront = Math.max(0, wantF - eaveYFront);
+    liftedBack = Math.max(0, wantB - eaveYBack);
+    eaveYFront = wantF;
+    eaveYBack = wantB;
+  }
+
   // Re-read the slopes off the solved ridge so both planes land on their eave.
   slopeF = (ridgeY - eaveYFront) / (ridgeZ - zFront);
   slopeB = (ridgeY - eaveYBack) / (zBack - ridgeZ);
@@ -173,6 +198,9 @@ function solveRoof(v, dim) {
     split: Math.abs(ridgeZ - (zFront + zBack) / 2) > 0.01 || Math.abs(slopeF - slopeB) > 1e-4,
     flat: false,
     zFront, zBack, widthFt: W,
+    ridgeLocked: v.ridgeLock === 'center',
+    liftedFront,
+    liftedBack,
   };
 }
 
@@ -232,6 +260,7 @@ export function resolveRoofSections(dim) {
       eaveYBack: F + num(spec.backWallHeightFt, getWallHeight('back', dim)),
       pitchF,
       pitchB: Number.isFinite(rawBack) && rawBack > 0 ? rawBack : pitchF,
+      ridgeLock: spec.ridgeLock || dim.ridgeLock || 'solved',
       ridgeOffsetFt: num(spec.ridgeOffsetFt, num(dim.ridgeOffsetFt, 0)),
       ridgeStepFt: num(spec.ridgeStepFt, num(dim.ridgeStepFt, 0)),
     }, dim);
@@ -470,7 +499,7 @@ function buildWall(name, frame, home, materials) {
    * its own top, on top of whatever the bumps already did to it.
    */
   const eaveCuts = [];
-  if (!frame.gable && dv.sections && (dv.sections.length > 1 || dv.sections[0].inset)) {
+  if (!frame.gable && dv.sections) {
     const key = name === 'front' ? 'eaveYFront' : 'eaveYBack';
     const insetKey = name === 'front' ? 'frontInsetFt' : 'backInsetFt';
     for (const sec of dv.sections) {

@@ -79,6 +79,12 @@
             <select id="f_roofStyle"><option value="gable">Gable (ridge along length)</option><option value="flat">Flat / low slope</option></select>
           </label>
           <label><span>Rear pitch (/12)</span><input id="f_pitchBack" type="number" autocomplete="off" step="0.5" min="0" max="12" placeholder="Same as front"></label>
+          <label><span>Ridge position</span>
+            <select id="f_ridgeLock">
+              <option value="solved">Where the pitches meet</option>
+              <option value="center">Locked to home centre</option>
+            </select>
+          </label>
           <label><span>Ridge offset (ft)</span><input id="f_ridgeOffset" type="number" autocomplete="off" step="0.25" placeholder="0"></label>
           <label><span>Ridge step (ft)</span><input id="f_ridgeStep" type="number" autocomplete="off" step="0.25" placeholder="0"></label>
           <label><span>Ridge overhang</span>
@@ -91,6 +97,7 @@
         </div>
         <p style="font-size:11px;color:#9aa;margin:4px 0 2px;line-height:1.3;"><b>Ridge offset</b> nudges the solved ridge off where the two pitches put it. <b>Ridge step</b> lifts the rear peak clear of the front one, opening a clerestory wall between them &mdash; negative lifts the front instead. Once the peaks differ there is no ridge to meet at, so the taller plane sails past it and hangs over the low roof.</p>
         <p style="font-size:11px;color:#9aa;margin:4px 0 2px;line-height:1.3;">A <b>split-pitch</b> roof runs a different pitch on the rear slope, so the ridge sits off the centreline and one side of the peak is higher and shorter than the other. Leave the rear pitch blank for a symmetrical gable.</p>
+        <p style="font-size:11px;color:#9aa;margin:4px 0 2px;line-height:1.3;"><b>Ridge position</b> decides what gives when the two pitches disagree. <i>Where the pitches meet</i> slides the ridge off centre and keeps both wall heights. <i>Locked to home centre</i> keeps the peak dead centre for the whole length and raises the shallower side's wall instead, so the two planes still meet at one peak.</p>
         <p class="hint" id="ridgeHint"></p>
 
         <h3 class="subhead">Sections Along The Length</h3>

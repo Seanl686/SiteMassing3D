@@ -2326,3 +2326,56 @@ test('80. Rake boards sit outside the deck, and dormer eave trim is fascia', () 
   const fat = { ...home, dimensions: { ...home.dimensions, fasciaWidthFt: 1.1 } };
   assert.ok(near(bandDepth(fat), 1.1), 'A deeper fascia deepens the dormer band with it');
 });
+
+test('81. Locking the ridge to centre keeps the peak central and raises a wall', () => {
+  const base = defaultHome().dimensions; // 27 wide, 8 ft walls on a 2.5 ft floor
+  const pitches = { roofPitch: 9, roofPitchBack: 3 };
+
+  // Solved (the default): the planes must meet, so the ridge slides off centre
+  // and both wall heights are kept.
+  const solved = derived({ ...base, ...pitches });
+  assert.ok(Math.abs(solved.ridgeZ) > 1, 'Different pitches push the solved ridge off centre');
+  assert.ok(near(solved.eaveYFront, 10.5) && near(solved.eaveYBack, 10.5), 'Both walls untouched');
+
+  // Locked: the peak is given, so an eave is what gives.
+  const dv = derived({ ...base, ...pitches, ridgeLock: 'center' });
+  assert.ok(near(dv.ridgeZ, 0), 'Ridge pinned to the middle of the home');
+  assert.ok(near(dv.slopeFront, 9 / 12), 'Front pitch is exactly what was typed');
+  assert.ok(near(dv.slopeBack, 3 / 12), 'And so is the rear — locking changes neither');
+  assert.ok(near(dv.frontPeakY, dv.backPeakY), 'The two planes still meet at one peak');
+  assert.ok(near(dv.ridgePeakY, 10.5 + (9 / 12) * 13.5), 'Set by the steeper plane off its own eave');
+
+  // The shallower side is the one that has further to climb per foot, so its
+  // wall rises; the steeper side keeps the height it was given.
+  assert.ok(near(dv.eaveYFront, 10.5), 'Steep side keeps its 8 ft wall');
+  assert.ok(near(dv.eaveYBack, dv.ridgePeakY - (3 / 12) * 13.5), 'Shallow side rises to meet the peak');
+  assert.ok(near(dv.liftedBack, dv.eaveYBack - 10.5), 'And reports how far it was raised');
+  assert.equal(dv.liftedFront, 0, 'The steep side was not moved');
+  assert.ok(dv.ridgeLocked, 'The lock is reported');
+
+  // Reversing the pitches raises the other wall.
+  const flipped = derived({ ...base, roofPitch: 3, roofPitchBack: 9, ridgeLock: 'center' });
+  assert.ok(flipped.liftedFront > 1 && near(flipped.liftedBack, 0), 'Front wall rises instead');
+
+  // Matching pitches need no lift at all, locked or not.
+  const even = derived({ ...base, ridgeLock: 'center' });
+  assert.ok(near(even.ridgeZ, 0) && near(even.eaveYFront, 10.5) && near(even.eaveYBack, 10.5));
+  assert.ok(near(even.liftedFront, 0) && near(even.liftedBack, 0), 'Nothing to resolve');
+
+  // The lock holds for the entire length: every section inherits it.
+  const sectioned = {
+    ...base, ...pitches, ridgeLock: 'center',
+    roofSections: [newRoofSection(0), { ...newRoofSection(28), pitch: 6 }],
+  };
+  for (const sec of resolveRoofSections(sectioned)) {
+    assert.ok(near(sec.ridgeZ, 0), `section ${sec.index} keeps its ridge on centre`);
+    assert.ok(near(sec.frontPeakY, sec.backPeakY), `section ${sec.index} meets at one peak`);
+  }
+
+  // And the long wall follows the raised eave rather than leaving a gap.
+  const root = buildHome({ ...defaultHome(), dimensions: { ...base, ...pitches, ridgeLock: 'center' } },
+    defaultScene());
+  root.updateMatrixWorld(true);
+  const backWall = new THREE.Box3().setFromObject(root.children.find((c) => c.name === 'wall:back'));
+  assert.ok(near(backWall.max.y, dv.eaveYBack, 1e-3), 'Rear wall built to the raised eave');
+});

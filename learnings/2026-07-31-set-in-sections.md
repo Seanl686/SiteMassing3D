@@ -104,3 +104,34 @@ and something was misaligned at the gable.
 
 Test 80 covers all three and was checked against the old code, where it fails on
 the buried board.
+
+---
+
+## Follow-up: locking the ridge to the centre of the home
+
+Asked for: keep the peak in the exact centre and just change the pitch on each
+side, for the whole length.
+
+The split-pitch solve answers "given two pitches and two eave heights, where do
+the planes meet?" — and with different pitches off equal walls the answer is
+never the centre. Locking the ridge asks the opposite question: the peak is
+given, so what gives is an **eave**. `ridgeLock: 'center'` pins `ridgeZ` to the
+middle of the section's span, takes the peak from whichever plane climbs highest
+off its own eave, then raises the other wall to `peak - slope * run` so both
+planes still meet at one apex.
+
+- Both typed pitches survive exactly. Re-reading the slopes after the lift is a
+  no-op by construction (`eaveY` was set from that slope), which is the property
+  worth having: locking the ridge must not silently re-pitch the roof.
+- Only the shallower side moves — it has further to climb per foot of run. The
+  steeper side keeps the wall height it was given.
+- `wallTopEdge()` for the long walls returned `custom ?? dim.wallHeightFt`, so a
+  lifted eave would have left the wall short and the roof floating. The section
+  eave cuts in `buildWall()` are now applied unconditionally, not just when the
+  home is sectioned or set in, so the wall always follows the solved eave. For an
+  unlocked, unsectioned home the two are equal by definition, so nothing moved.
+- `solveRoof()` destructured `eaveYFront`/`eaveYBack` as `const`. Raising them
+  throws "Assignment to constant variable" — which surfaced only in the browser,
+  not in the unit tests, because the tests read `derived()` while the page also
+  builds geometry. Worth remembering that a solver-level throw can pass a numeric
+  test suite and still break the app.

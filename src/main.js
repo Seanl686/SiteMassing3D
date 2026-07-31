@@ -430,10 +430,20 @@ function updateHud() {
   if ($('ridgeHint')) {
     const parts = [];
     if (dv.split) {
-      parts.push(`Split pitch: ridge sits ${fmtFt(Math.abs(dv.ridgeZ))} ${dv.ridgeZ > 0 ? 'behind' : 'in front of'} the centreline, peak ${fmtFt(dv.ridgePeakY)} above grade.`);
+      // A locked ridge is on the centreline by definition, so saying it sits
+      // 0 ft off it reads as a bug rather than a fact.
+      const where = Math.abs(dv.ridgeZ) > 0.01
+        ? `ridge sits ${fmtFt(Math.abs(dv.ridgeZ))} ${dv.ridgeZ > 0 ? 'behind' : 'in front of'} the centreline`
+        : 'ridge on the centreline';
+      parts.push(`Split pitch: ${where}, peak ${fmtFt(dv.ridgePeakY)} above grade.`);
     }
     if (Math.abs(dv.ridgeStepFt) > 0.02) {
       parts.push(`${dv.ridgeStepFt > 0 ? 'Rear' : 'Front'} peak stands ${fmtFt(Math.abs(dv.ridgeStepFt))} above the other — that gap is clerestory wall.`);
+    }
+    if (dv.ridgeLocked && (dv.liftedFront > 0.02 || dv.liftedBack > 0.02)) {
+      const side = dv.liftedFront > dv.liftedBack ? 'Front' : 'Rear';
+      const by = Math.max(dv.liftedFront, dv.liftedBack);
+      parts.push(`Ridge locked to centre: ${side.toLowerCase()} wall raised ${fmtFt(by)} to ${fmtFt(side === 'Front' ? dv.eaveYFront : dv.eaveYBack)} so both planes meet there.`);
     }
     if (dv.ridgeSail) {
       // Once a plane sails past the ridge the roof's high point is that free
@@ -2252,6 +2262,7 @@ function syncForm() {
   if ($('f_stepOverhangFt')) $('f_stepOverhangFt').value = state.home.dimensions.stepOverhangFt ?? '';
   if ($('f_stepRakeFascia')) $('f_stepRakeFascia').checked = state.home.dimensions.stepRakeFascia !== false;
   if ($('f_endRakeFascia')) $('f_endRakeFascia').checked = !!state.home.dimensions.endRakeFascia;
+  if ($('f_ridgeLock')) $('f_ridgeLock').value = state.home.dimensions.ridgeLock || 'solved';
   if ($('f_ridgeOverhang')) $('f_ridgeOverhang').value = state.home.dimensions.ridgeOverhang || 'raised';
   if ($('f_ridgeOverhangFt')) $('f_ridgeOverhangFt').value = state.home.dimensions.ridgeOverhangFt ?? '';
   syncHeadAlignRows();
@@ -2600,6 +2611,12 @@ function bind() {
       const inch = parseFloat(e.target.value);
       if (Number.isNaN(inch) || inch <= 0) return;
       state.home.dimensions.fasciaWidthFt = inch / 12;
+      rebuild(); save();
+    });
+  }
+  if ($('f_ridgeLock')) {
+    $('f_ridgeLock').addEventListener('change', (e) => {
+      state.home.dimensions.ridgeLock = e.target.value;
       rebuild(); save();
     });
   }

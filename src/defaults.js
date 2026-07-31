@@ -43,6 +43,12 @@ export function defaultHome() {
       // one plane's peak clear of the other (opening a clerestory between
       // them), and let the taller plane carry on past the ridge instead of
       // dying into that wall.
+      // 'solved' lets the ridge fall wherever the two pitches make the planes
+      // meet — different pitches push it off centre. 'center' pins it to the
+      // middle of the home instead and raises the shallower side's wall so the
+      // planes still meet at one peak, which is how you keep a centred peak
+      // while changing the pitch on each side.
+      ridgeLock: 'solved',
       ridgeOffsetFt: 0,
       ridgeStepFt: 0,
       ridgeOverhang: 'raised',  // 'raised' (taller plane sails past) or 'none'
