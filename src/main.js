@@ -2396,16 +2396,21 @@ function bind() {
       const v = parseFloat(e.target.value);
       if (Number.isNaN(v)) return; // let the field be empty mid-edit
       state.home.dimensions[key] = v;
+      const L = state.home.dimensions.lengthFt || 56;
       if (key === 'frontSetbackFt') {
-        const L = state.home.dimensions.lengthFt || 56;
         state.home.dimensions.frontLengthFt = Math.round((L - v) * 100) / 100;
         if ($('f_frontLength')) $('f_frontLength').value = state.home.dimensions.frontLengthFt;
       } else if (key === 'frontLengthFt') {
-        const L = state.home.dimensions.lengthFt || 56;
         state.home.dimensions.frontSetbackFt = Math.round((L - v) * 100) / 100;
         if ($('f_frontSetback')) $('f_frontSetback').value = state.home.dimensions.frontSetbackFt;
+      } else if (key === 'backSetbackFt') {
+        state.home.dimensions.backLengthFt = Math.round((L - v) * 100) / 100;
+        if ($('f_backLength')) $('f_backLength').value = state.home.dimensions.backLengthFt;
+      } else if (key === 'backLengthFt') {
+        state.home.dimensions.backSetbackFt = Math.round((L - v) * 100) / 100;
+        if ($('f_backSetback')) $('f_backSetback').value = state.home.dimensions.backSetbackFt;
       }
-      rebuild(); syncList(); save();
+      rebuild(); syncList(); save(); refreshRoofSections();
     });
   }
   $('f_roofStyle').addEventListener('change', (e) => {
@@ -2575,7 +2580,7 @@ function bind() {
       dim.frontLengthFt = Math.round((dim.lengthFt - 1.33) * 100) / 100;
       if ($('f_frontSetback')) $('f_frontSetback').value = 1.33;
       if ($('f_frontLength')) $('f_frontLength').value = dim.frontLengthFt;
-      rebuild(); save();
+      rebuild(); save(); refreshRoofSections();
     });
   }
   if ($('btnStepFront267')) {
@@ -2585,7 +2590,7 @@ function bind() {
       dim.frontLengthFt = Math.round((dim.lengthFt - 2.67) * 100) / 100;
       if ($('f_frontSetback')) $('f_frontSetback').value = 2.67;
       if ($('f_frontLength')) $('f_frontLength').value = dim.frontLengthFt;
-      rebuild(); save();
+      rebuild(); save(); refreshRoofSections();
     });
   }
   if ($('btnResetHalves')) {
@@ -2600,7 +2605,7 @@ function bind() {
       if ($('f_backSetback')) $('f_backSetback').value = '';
       if ($('f_frontLength')) $('f_frontLength').value = '';
       if ($('f_backLength')) $('f_backLength').value = '';
-      rebuild(); save();
+      rebuild(); save(); refreshRoofSections();
     });
   }
   if ($('btnAddRoofSection')) {

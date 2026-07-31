@@ -229,21 +229,25 @@ export function resolveRoofSections(dim) {
   const lenB = num(dim.backLengthFt, sbB > 0 ? L - sbB : L);
   const F = num(dim.floorHeightFt, 0);
 
-  const raw = (Array.isArray(dim.roofSections) ? dim.roofSections : [])
+  let raw = (Array.isArray(dim.roofSections) ? dim.roofSections : [])
     .filter((s) => s && typeof s === 'object')
     .map((s) => ({ ...s, startFt: Math.max(0, Math.min(L, num(s.startFt, 0))) }))
     .sort((a, b) => a.startFt - b.startFt);
 
-  if (!raw.length && (Math.abs(lenF - L) > 1e-4 || Math.abs(lenB - L) > 1e-4)) {
+  const hasLengthStep = Math.abs(lenF - L) > 1e-4 || Math.abs(lenB - L) > 1e-4;
+  if (hasLengthStep) {
     const minLen = Math.min(lenF, lenB);
-    raw.push({ id: 'sec1', label: 'Main body', startFt: 0 });
-    raw.push({
-      id: 'sec2',
-      label: 'End step',
-      startFt: minLen,
-      frontInsetFt: lenF < lenB ? num(dim.widthFt, 27) / 2 : 0,
-      backInsetFt: lenB < lenF ? num(dim.widthFt, 27) / 2 : 0,
-    });
+    const halfW = num(dim.widthFt, 27) / 2;
+    raw = [
+      { id: 'sec1', label: 'Main body', startFt: 0 },
+      {
+        id: 'sec2',
+        label: 'End step',
+        startFt: minLen,
+        frontInsetFt: lenF < lenB ? halfW : 0,
+        backInsetFt: lenB < lenF ? halfW : 0,
+      },
+    ];
   }
 
   const kept = [];
