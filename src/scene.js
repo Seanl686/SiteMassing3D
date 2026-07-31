@@ -659,6 +659,7 @@ export class Stage {
       case 'left':  ortho(new THREE.Vector3(-1, 0, 0), W, d.ridgeY); break;
       case 'right': ortho(new THREE.Vector3( 1, 0, 0), W, d.ridgeY); break;
       case 'plan':
+      case 'foundation':
         this.useOrtho(true);
         this._orthoFit = { w: L, h: W, pad: 1.15 };
         this._orthoHalfH = null;
@@ -667,6 +668,17 @@ export class Stage {
         this.ortho.position.set(0, 500, 0);
         this.orthoControls.target.set(0, 0, 0);
         this.ortho.lookAt(0, 0, 0);
+        this.orthoControls.update();
+        break;
+      case 'section':
+        this.useOrtho(true);
+        this._orthoFit = { w: W, h: d.ridgeY || 20, pad: 1.25 };
+        this._orthoHalfH = null;
+        this.reframeOrtho({ refit: true });
+        this.ortho.up.set(0, 1, 0);
+        this.ortho.position.set(L * 2, d.ridgeY * 0.5, 0);
+        this.orthoControls.target.set(0, d.ridgeY * 0.5, 0);
+        this.ortho.lookAt(0, d.ridgeY * 0.5, 0);
         this.orthoControls.update();
         break;
       // Azimuth 0 puts the camera on +Z (the rear). The front wall faces -Z, so

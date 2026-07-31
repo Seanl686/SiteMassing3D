@@ -2896,11 +2896,24 @@ function bind() {
     });
   }
 
+  if ($('btnLockCamera')) {
+    $('btnLockCamera').addEventListener('click', () => {
+      cameraLocked = !cameraLocked;
+      const btn = $('btnLockCamera');
+      if (btn) {
+        btn.textContent = cameraLocked ? '🔒 Camera Locked' : '🔓 Camera Unlocked';
+        btn.classList.toggle('active', cameraLocked);
+      }
+      resetCameraControls();
+    });
+  }
+
   for (const b of document.querySelectorAll('#viewPresets button')) {
     b.addEventListener('click', () => {
       stage.setView(b.dataset.view, state.home.dimensions, state.scene);
       currentViewName = b.textContent.trim();
       updateFramingReadout();
+      resetCameraControls();
     });
   }
 
@@ -3095,6 +3108,12 @@ const ndc = new THREE.Vector2();
 let drag = null;
 let dormerDrag = null;  // { index, startX, startPosX }
 let wallDrag = null;    // { wall, bumpId, startPoint, startDim, startBumps }
+let cameraLocked = false;
+
+function resetCameraControls() {
+  stage.controls.enabled = !cameraLocked && (stage.camera !== stage.ortho);
+  stage.orthoControls.enabled = !cameraLocked && (stage.camera === stage.ortho);
+}
 
 function setRay(ev) {
   const r = canvas.getBoundingClientRect();
@@ -3446,8 +3465,7 @@ function onMove(ev) {
 function onUp() {
   if (wallDrag) {
     wallDrag = null;
-    stage.controls.enabled = stage.camera !== stage.ortho;
-    stage.orthoControls.enabled = stage.camera === stage.ortho;
+    resetCameraControls();
     canvas.style.cursor = '';
     syncForm();
     rebuild();
@@ -3457,8 +3475,7 @@ function onUp() {
 
   if (dormerDrag) {
     dormerDrag = null;
-    stage.controls.enabled = stage.camera !== stage.ortho;
-    stage.orthoControls.enabled = stage.camera === stage.ortho;
+    resetCameraControls();
     canvas.style.cursor = '';
     rebuild();
     save();
@@ -3470,8 +3487,7 @@ function onUp() {
     if ($('sp_dragMode')?.checked) {
       canvas.style.cursor = 'grab';
     } else {
-      stage.controls.enabled = stage.camera !== stage.ortho;
-      stage.orthoControls.enabled = stage.camera === stage.ortho;
+      resetCameraControls();
       canvas.style.cursor = '';
     }
     save();
@@ -3480,8 +3496,7 @@ function onUp() {
 
   if (!drag) return;
   drag = null;
-  stage.controls.enabled = stage.camera !== stage.ortho;
-  stage.orthoControls.enabled = stage.camera === stage.ortho;
+  resetCameraControls();
   canvas.style.cursor = '';
   syncList();
   save();
