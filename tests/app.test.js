@@ -18,6 +18,9 @@ import {
   readBumps, clampBump, footprintExtents, bumpFootprint, wallBands, isRecess, defaultBump,
 } from '../src/bumps.js';
 import { createSidingMaterial } from '../src/textures.js';
+import * as THREE from 'three';
+
+const near = (a, b, tol = 1e-6) => Math.abs(a - b) <= tol;
 import { History, describeChange } from '../src/history.js';
 import { buildProject, readProject, PROJECT_VERSION } from '../src/project.js';
 import { validateHomeSpec, applySpecToHome, parseHexColor } from '../src/homespec.js';
@@ -1846,4 +1849,173 @@ test('67. A Plan Read Off A Sheet Carries Its Porch And Its Split Pitch', () => 
   const migrated = migrate({ ...home, bumps: applied.bumps });
   assert.equal(migrated.bumps.length, 3);
   assert.equal(migrate({ name: 'legacy', dimensions: {}, openings: [] }).bumps.length, 0);
+});
+
+test('69. Ridge offset nudges the solved ridge without breaking the solve', () => {
+  const dim = { ...defaultHome().dimensions };
+  const base = derived(dim);
+  assert.ok(near(base.ridgeZ, 0), 'A symmetric roof still solves to the centreline');
+  assert.ok(near(base.ridgeStepFt, 0), 'And its two planes peak together');
+  assert.equal(base.ridgeSail, 0, 'So nothing sails past the ridge');
+
+  const moved = derived({ ...dim, ridgeOffsetFt: 5 });
+  assert.ok(near(moved.ridgeZ, 5), 'A typed offset moves the ridge back');
+  // Both planes must still land on their own eave after the move, which is the
+  // invariant the split-pitch solve exists to hold.
+  const W = dim.widthFt;
+  assert.ok(near(moved.eaveYFront + moved.slopeFront * (moved.ridgeZ + W / 2), moved.ridgePeakY),
+    'Front plane still reaches the peak from its eave');
+  assert.ok(near(moved.eaveYBack + moved.slopeBack * (W / 2 - moved.ridgeZ), moved.ridgePeakY),
+    'Back plane too');
+  // Both planes reach the same peak, so the one with the longer run to get
+  // there is the shallower of the two.
+  assert.ok(moved.slopeFront < moved.slopeBack, 'The longer front run runs shallower');
+
+  // It stacks on a split pitch rather than replacing it.
+  const split = derived({ ...dim, roofPitchBack: 2 });
+  const both = derived({ ...dim, roofPitchBack: 2, ridgeOffsetFt: 2 });
+  assert.ok(near(both.ridgeZ, split.ridgeZ + 2), 'Offset is measured from the solved ridge');
+  assert.ok(Math.abs(derived({ ...dim, ridgeOffsetFt: 99 }).ridgeZ) < W / 2,
+    'And is clamped inside the footprint');
+});
+
+test('70. Ridge step opens a clerestory between the two peaks', () => {
+  const home = defaultHome();
+  home.dimensions.ridgeStepFt = 2.5;
+  const dv = derived(home.dimensions);
+
+  assert.ok(near(dv.backPeakY - dv.frontPeakY, 2.5), 'Rear peak stands 2.5 ft above the front one');
+  assert.ok(near(dv.ridgeStepFt, 2.5), 'Which is reported as the step');
+  assert.ok(dv.slopeBack > dv.slopeFront, 'The rear plane steepens to reach its raised peak');
+  assert.ok(near(dv.eaveYBack + dv.slopeBack * (home.dimensions.widthFt / 2 - dv.ridgeZ), dv.backPeakY),
+    'And still lands on its own eave');
+
+  const roof = buildHome(home, defaultScene()).children.find((c) => c.name === 'roof');
+  assert.ok(roof.children.some((c) => c.name === 'ridgeStep'), 'Clerestory wall built between the peaks');
+
+  // A negative step lifts the front instead.
+  const front = derived({ ...home.dimensions, ridgeStepFt: -2.5 });
+  assert.ok(near(front.frontPeakY - front.backPeakY, 2.5), 'Negative step raises the front peak');
+
+  // Level peaks meet at a real ridge and need no wall.
+  const level = buildHome(defaultHome(), defaultScene()).children.find((c) => c.name === 'roof');
+  assert.ok(!level.children.some((c) => c.name === 'ridgeStep'), 'No clerestory on a plain gable');
+});
+
+test('71. The taller plane sails past the ridge and tops out above the peak', () => {
+  const home = defaultHome();
+  home.dimensions.ridgeStepFt = 2.5; // rear peak is the tall one
+  const dv = derived(home.dimensions);
+
+  assert.ok(near(dv.ridgeSail, -1), 'Rear plane sails past by the eave overhang, toward the front');
+  assert.ok(near(dv.ridgeCutZ, dv.ridgeZ - 1), 'The planes hand over a foot in front of the ridge');
+  assert.ok(dv.ridgeY > dv.ridgePeakY, 'So the roof tops out above the peak');
+  assert.ok(near(dv.ridgeY, dv.ridgePeakY + dv.slopeBack), 'By one foot of run at the rear pitch');
+
+  const roof = buildHome(home, defaultScene()).children.find((c) => c.name === 'roof');
+  assert.ok(roof.children.some((c) => c.name === 'ridgeFascia'), 'The free sailing edge gets a fascia');
+
+  // Off switch, and the distance is settable.
+  const none = derived({ ...home.dimensions, ridgeOverhang: 'none' });
+  assert.equal(none.ridgeSail, 0, 'No sail when switched off');
+  assert.ok(near(none.ridgeY, none.ridgePeakY), 'And the peak is the top of the roof again');
+  const off = buildHome({ ...home, dimensions: { ...home.dimensions, ridgeOverhang: 'none' } }, defaultScene())
+    .children.find((c) => c.name === 'roof');
+  assert.ok(!off.children.some((c) => c.name === 'ridgeFascia'), 'And no free edge to board');
+  assert.ok(near(derived({ ...home.dimensions, ridgeOverhangFt: 2.5 }).ridgeSail, -2.5),
+    'Custom sail distance honoured');
+
+  // A sail can never overshoot the plane it hangs over.
+  const clamped = derived({ ...home.dimensions, ridgeOverhangFt: 500 });
+  assert.ok(near(Math.abs(clamped.ridgeSail), clamped.ridgeZ + home.dimensions.widthFt / 2),
+    'Sail clamped to the far plane run');
+});
+
+test('72. Corner boards lie on their walls instead of hanging off the corner', () => {
+  const home = defaultHome();
+  const dim = home.dimensions;
+  const root = buildHome(home, defaultScene());
+  root.updateMatrixWorld(true);
+  const g = root.children.find((c) => c.name === 'cornerTrim');
+  assert.ok(g, 'Corner trim group built');
+  assert.equal(g.children.length, 8, 'Two boards at each of the four corners');
+
+  const halfL = dim.lengthFt / 2;
+  const halfW = dim.widthFt / 2;
+  const boxes = g.children.map((b) => new THREE.Box3().setFromObject(b));
+
+  // The regression: a board measured OUTWARD from the corner floats past the
+  // end of the wall in mid air. Every board must lie within the footprint on
+  // the axis it runs along, and stand proud of its wall only on the other.
+  for (const bb of boxes) {
+    const runsAlongX = bb.max.x - bb.min.x > bb.max.z - bb.min.z;
+    if (runsAlongX) {
+      assert.ok(bb.min.x >= -halfL - 0.2 && bb.max.x <= halfL + 0.2,
+        'A long-wall board stays within the length of the wall it is on');
+      assert.ok(Math.abs(bb.getCenter(new THREE.Vector3()).z) > halfW,
+        'And stands proud of that wall');
+    } else {
+      assert.ok(bb.min.z >= -halfW - 0.2 && bb.max.z <= halfW + 0.2,
+        'An end-wall board stays within the width of the wall it is on');
+      assert.ok(Math.abs(bb.getCenter(new THREE.Vector3()).x) > halfL,
+        'And stands proud of that wall');
+    }
+    assert.ok(near(bb.min.y, dim.floorHeightFt, 1e-3), 'Boards start at the floor deck');
+  }
+
+  // Every corner is covered by exactly two boards.
+  for (const [cx, cz] of [[-halfL, -halfW], [halfL, -halfW], [halfL, halfW], [-halfL, halfW]]) {
+    const near2 = boxes.filter((bb) => {
+      const c = bb.getCenter(new THREE.Vector3());
+      return Math.abs(c.x - cx) < 1.5 && Math.abs(c.z - cz) < 1.5;
+    });
+    assert.equal(near2.length, 2, `corner ${cx},${cz} carries a board on each wall`);
+  }
+
+  // A board dies into the eave of the wall it is on, so a split pitch gives the
+  // front and back pairs different lengths.
+  const split = buildHome({ ...home, dimensions: { ...dim, roofPitchBack: 2, frontWallHeightFt: 10 } }, defaultScene());
+  split.updateMatrixWorld(true);
+  const dv = derived({ ...dim, roofPitchBack: 2, frontWallHeightFt: 10 });
+  const sg = split.children.find((c) => c.name === 'cornerTrim');
+  for (const b of sg.children) {
+    const bb = new THREE.Box3().setFromObject(b);
+    const onFront = bb.getCenter(new THREE.Vector3()).z < 0;
+    assert.ok(near(bb.max.y, onFront ? dv.eaveYFront : dv.eaveYBack, 1e-3),
+      'Board stops at the eave of its own wall, not a single shared wall height');
+  }
+
+  assert.ok(!buildHome({ ...home, dimensions: { ...dim, cornerTrim: false } }, defaultScene())
+    .children.some((c) => c.name === 'cornerTrim'), 'Switched off, no corner trim');
+});
+
+test('73. Fascia and corner boards take their own colour and width', () => {
+  const home = defaultHome();
+  home.colors.trim = '#ffffff';
+  home.colors.fascia = '#101010';
+  home.colors.corner = '#804020';
+  home.dimensions.fasciaWidthFt = 1.2;
+
+  const root = buildHome(home, defaultScene());
+  const hex = (m) => `#${m.color.getHexString()}`;
+  assert.equal(hex(root.userData.materials.fascia), '#101010');
+  assert.equal(hex(root.userData.materials.corner), '#804020');
+  assert.equal(hex(root.userData.materials.trim), '#ffffff', 'Casing trim untouched');
+
+  const roof = root.children.find((c) => c.name === 'roof');
+  const fascia = roof.children.filter((c) => c.name === 'eaveFascia');
+  assert.ok(fascia.length >= 2, 'Both eaves boarded');
+  for (const f of fascia) {
+    assert.equal(hex(f.material), '#101010', 'Eave fascia takes the fascia colour');
+    assert.ok(near(f.geometry.parameters.height, 1.2), 'And the typed width');
+  }
+  const corner = root.children.find((c) => c.name === 'cornerTrim');
+  assert.equal(hex(corner.children[0].material), '#804020', 'Corner boards take the corner colour');
+
+  // A file written before these colours existed reads them off its own trim.
+  const legacy = migrate({ colors: { trim: '#123456', siding: '#abcdef' } });
+  assert.equal(legacy.colors.fascia, '#123456', 'Fascia inherits the loaded trim');
+  assert.equal(legacy.colors.corner, '#123456', 'Corner boards inherit it too');
+  assert.equal(migrate({ colors: { trim: '#123456', fascia: '#000000' } }).colors.fascia, '#000000',
+    'An explicit fascia colour survives the load');
 });

@@ -38,6 +38,19 @@ export function defaultHome() {
       // centreline and makes one side of the peak higher and shorter than the
       // other. null = both slopes match and the ridge sits over the middle.
       roofPitchBack: null,
+      // The split-pitch solve above puts the ridge where the two planes meet.
+      // These three take it further: nudge that ridge off its solved spot, lift
+      // one plane's peak clear of the other (opening a clerestory between
+      // them), and let the taller plane carry on past the ridge instead of
+      // dying into that wall.
+      ridgeOffsetFt: 0,
+      ridgeStepFt: 0,
+      ridgeOverhang: 'raised',  // 'raised' (taller plane sails past) or 'none'
+      ridgeOverhangFt: null,    // ft past the ridge; null = eaveOverhangFt
+      // Face width of the fascia, rake and ridge boards — the dimension you
+      // would read off the board. Corner boards have their own width already,
+      // in `cornerTrimWidthFt` below.
+      fasciaWidthFt: 0.55,
       eaveOverhangFt: 1.0,   // horizontal overhang past the long walls
       rakeOverhangFt: 0.75,  // horizontal overhang past the gable ends
       roofStyle: 'gable',
@@ -71,6 +84,8 @@ export function defaultHome() {
       dormerSiding: '#8d9299',
       gableSiding: '#8d9299',
       trim: '#f2f2f0',
+      fascia: '#f2f2f0',   // fascia, rake and ridge boards
+      corner: '#f2f2f0',   // corner boards
       roof: '#3a3d42',
       skirting: '#e6e6e1',
       door: '#f2f2f0',
@@ -199,6 +214,10 @@ export function migrate(home) {
   if (!home.colors?.belowDormerSiding) colors.belowDormerSiding = colors.siding;
   if (!home.colors?.dormerSiding) colors.dormerSiding = colors.siding;
   if (!home.colors?.gableSiding) colors.gableSiding = colors.siding;
+  // A file written before the fascia and corner boards had their own colours
+  // meant "same as the trim"; inheriting the app default would repaint it.
+  if (!home.colors?.fascia) colors.fascia = colors.trim;
+  if (!home.colors?.corner) colors.corner = colors.trim;
   // Plate modes were renamed when the plate was locked to the camera:
   // 'contain' scaled off whichever axis bound first, which is what made the
   // photo drift against the model on a resize.

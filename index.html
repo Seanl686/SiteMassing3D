@@ -79,7 +79,17 @@
             <select id="f_roofStyle"><option value="gable">Gable (ridge along length)</option><option value="flat">Flat / low slope</option></select>
           </label>
           <label><span>Rear pitch (/12)</span><input id="f_pitchBack" type="number" autocomplete="off" step="0.5" min="0" max="12" placeholder="Same as front"></label>
+          <label><span>Ridge offset (ft)</span><input id="f_ridgeOffset" type="number" autocomplete="off" step="0.25" placeholder="0"></label>
+          <label><span>Ridge step (ft)</span><input id="f_ridgeStep" type="number" autocomplete="off" step="0.25" placeholder="0"></label>
+          <label><span>Ridge overhang</span>
+            <select id="f_ridgeOverhang">
+              <option value="raised">Taller plane sails past</option>
+              <option value="none">None (stops at ridge)</option>
+            </select>
+          </label>
+          <label><span>Ridge ovh (ft)</span><input id="f_ridgeOverhangFt" type="number" autocomplete="off" step="0.25" min="0" placeholder="Auto (eave)"></label>
         </div>
+        <p style="font-size:11px;color:#9aa;margin:4px 0 2px;line-height:1.3;"><b>Ridge offset</b> nudges the solved ridge off where the two pitches put it. <b>Ridge step</b> lifts the rear peak clear of the front one, opening a clerestory wall between them &mdash; negative lifts the front instead. Once the peaks differ there is no ridge to meet at, so the taller plane sails past it and hangs over the low roof.</p>
         <p style="font-size:11px;color:#9aa;margin:4px 0 2px;line-height:1.3;">A <b>split-pitch</b> roof runs a different pitch on the rear slope, so the ridge sits off the centreline and one side of the peak is higher and shorter than the other. Leave the rear pitch blank for a symmetrical gable.</p>
         <p class="hint" id="ridgeHint"></p>
 
@@ -188,13 +198,18 @@
           <label><span>Corner trim width (in)</span>
             <input id="f_cornerTrimWidth" type="number" autocomplete="off" step="1" min="2" max="12">
           </label>
+          <label><span>Fascia width (in)</span>
+            <input id="f_fasciaWidth" type="number" autocomplete="off" step="1" min="2" max="16">
+          </label>
         </div>
         <div class="grid2 colors" style="margin-top:8px;">
           <label><span>Main Siding</span><input id="c_siding" type="color" autocomplete="off"></label>
           <label><span>Below-Dormer Siding</span><input id="c_belowDormerSiding" type="color" autocomplete="off"></label>
           <label><span>Dormer Siding</span><input id="c_dormerSiding" type="color" autocomplete="off"></label>
           <label><span>Gable Siding</span><input id="c_gableSiding" type="color" autocomplete="off"></label>
-          <label><span>Trim</span><input id="c_trim" type="color" autocomplete="off"></label>
+          <label><span>Trim (casing)</span><input id="c_trim" type="color" autocomplete="off"></label>
+          <label><span>Fascia &amp; rake</span><input id="c_fascia" type="color" autocomplete="off"></label>
+          <label><span>Corner boards</span><input id="c_corner" type="color" autocomplete="off"></label>
           <label><span>Roof</span><input id="c_roof" type="color" autocomplete="off"></label>
           <label><span>Skirting</span><input id="c_skirting" type="color" autocomplete="off"></label>
           <label><span>Door</span><input id="c_door" type="color" autocomplete="off"></label>

@@ -15,7 +15,11 @@ const TRIM_W = 0.28;      // ft, casing width around openings
 const TRIM_PROUD = 0.06;  // ft, how far casing stands off the siding
 const GLASS_INSET = 0.16; // ft, how far glass/door slab sits back from the face
 const ROOF_THICK = 0.45;  // ft
-const FASCIA_H = 0.55;    // ft
+const FASCIA_H = 0.55;    // ft, default face width of a fascia / rake board
+const CORNER_PROUD = 0.08; // ft, how far a corner board stands off the siding
+
+/** Face width of the fascia, rake and ridge boards. */
+const fasciaWidth = (dim) => Math.max(0.1, num(dim?.fasciaWidthFt, FASCIA_H));
 
 /**
  * Wall frames, each expressed as an origin at the wall's bottom-left corner as
@@ -78,20 +82,57 @@ export function derived(dim) {
     return {
       slope: 0, slopeFront: 0, slopeBack: 0,
       eaveY, eaveYFront, eaveYBack, ridgeY: eaveY, ridgeZ: 0,
+      ridgePeakY: eaveY, frontPeakY: eaveY, backPeakY: eaveY,
+      ridgeStepFt: 0, ridgeSail: 0, ridgeCutZ: 0,
       angle: 0, angleFront: 0, angleBack: 0, split: false,
     };
   }
 
   const limit = Math.max(0.25, W / 2 - 0.25);
   let ridgeZ = (eaveYBack - eaveYFront + (slopeB - slopeF) * (W / 2)) / (slopeF + slopeB);
+  // A typed ridge offset nudges the solved ridge rather than replacing it, so
+  // the split-pitch solve above still sets where it starts from.
+  ridgeZ += num(dim.ridgeOffsetFt, 0);
   ridgeZ = Math.min(limit, Math.max(-limit, ridgeZ));
-  const ridgeY = Math.max(
+  let ridgeY = Math.max(
     eaveYFront + slopeF * (ridgeZ + W / 2),
     eaveYBack + slopeB * (W / 2 - ridgeZ),
   );
   // Re-read the slopes off the solved ridge so both planes land on their eave.
   slopeF = (ridgeY - eaveYFront) / (ridgeZ + W / 2);
   slopeB = (ridgeY - eaveYBack) / (W / 2 - ridgeZ);
+
+  // Ridge step: the two planes no longer have to meet. Lifting the rear peak
+  // opens a clerestory wall between them, and the rear plane steepens to reach
+  // it — the one case the solve above cannot express, since it assumes a
+  // single ridge line.
+  let frontPeakY = ridgeY;
+  let backPeakY = ridgeY;
+  const stepFt = num(dim.ridgeStepFt, 0);
+  if (Math.abs(stepFt) > 1e-6) {
+    if (stepFt > 0) backPeakY = ridgeY + stepFt;
+    else frontPeakY = ridgeY - stepFt;
+    frontPeakY = Math.max(eaveYFront, frontPeakY);
+    backPeakY = Math.max(eaveYBack, backPeakY);
+    slopeF = (frontPeakY - eaveYFront) / (ridgeZ + W / 2);
+    slopeB = (backPeakY - eaveYBack) / (W / 2 - ridgeZ);
+    ridgeY = Math.max(frontPeakY, backPeakY);
+  }
+
+  // Ridge overhang: with the peaks at different heights there is no ridge for
+  // the planes to meet at, so the taller one can carry on past it at its own
+  // pitch and hang over the low roof instead of dying into the clerestory.
+  let ridgeSail = 0;
+  const sailAmt = Math.max(0, num(dim.ridgeOverhangFt, num(dim.eaveOverhangFt, 1)));
+  if ((dim.ridgeOverhang ?? 'raised') !== 'none' && sailAmt > 0) {
+    const diff = frontPeakY - backPeakY;
+    // Only once the taller plane clears the shorter by more than the deck is
+    // thick; below that the overhang would sit inside the roof it covers.
+    if (diff > ROOF_THICK + 0.05) ridgeSail = Math.min(sailAmt, W / 2 - ridgeZ);
+    else if (-diff > ROOF_THICK + 0.05) ridgeSail = -Math.min(sailAmt, ridgeZ + W / 2);
+  }
+  const topY = Math.max(frontPeakY, backPeakY)
+    + Math.abs(ridgeSail) * (ridgeSail > 0 ? slopeF : slopeB);
 
   return {
     slope: slopeF,            // legacy key: the front slope
@@ -100,13 +141,29 @@ export function derived(dim) {
     eaveY: Math.min(eaveYFront, eaveYBack),
     eaveYFront,
     eaveYBack,
-    ridgeY,
+    // The highest point of the roof, which is the sailing edge once one plane
+    // reaches past the ridge. Framing and the camera read this.
+    ridgeY: topY,
+    // Where the planes actually peak, and where they hand over.
+    ridgePeakY: Math.max(frontPeakY, backPeakY),
+    frontPeakY,
+    backPeakY,
+    ridgeStepFt: backPeakY - frontPeakY,
+    ridgeSail,
+    ridgeCutZ: ridgeZ + ridgeSail,
     ridgeZ,
     angle: Math.atan(slopeF),
     angleFront: Math.atan(slopeF),
     angleBack: Math.atan(slopeB),
     split: Math.abs(ridgeZ) > 0.01 || Math.abs(slopeF - slopeB) > 1e-4,
   };
+}
+
+/** Read a numeric field, falling back when it is absent, blank or unparseable. */
+export function num(v, fallback) {
+  if (v === null || v === undefined || v === '') return fallback;
+  const n = +v;
+  return Number.isFinite(n) ? n : fallback;
 }
 
 function rectShape(w, h, x = 0, y = 0) {
@@ -218,7 +275,7 @@ function wallTopEdge(name, frame, dim, dv) {
   const custom = customWallHeight(name, dim);
   if (!frame.gable || dim.roofStyle === 'flat') {
     const H = custom ?? (dim.wallHeightFt || 8);
-    return { h0: H, h1: H, bodyTop: H, peakU: frame.span / 2, peakV: H };
+    return { h0: H, h1: H, bodyTop: H, peakU: frame.span / 2, peakV: H, peakV0: H, peakV1: H };
   }
   // 'left' runs front->back along +Z; 'right' runs back->front along -Z.
   const frontH = custom ?? (dv.eaveYFront - F);
@@ -226,7 +283,17 @@ function wallTopEdge(name, frame, dim, dv) {
   const h0 = name === 'left' ? frontH : backH;
   const h1 = name === 'left' ? backH : frontH;
   const peakU = name === 'left' ? dv.ridgeZ + dim.widthFt / 2 : dim.widthFt / 2 - dv.ridgeZ;
-  return { h0, h1, bodyTop: Math.min(h0, h1), peakU, peakV: dv.ridgeY - F };
+  // The two planes can peak at different heights, so the gable end carries a
+  // vertical step at the ridge rather than a single apex. `peakV0` belongs to
+  // the h0 corner's plane, `peakV1` to h1's.
+  const frontPeak = dv.frontPeakY - F;
+  const backPeak = dv.backPeakY - F;
+  return {
+    h0, h1, bodyTop: Math.min(h0, h1), peakU,
+    peakV: dv.ridgePeakY - F,
+    peakV0: name === 'left' ? frontPeak : backPeak,
+    peakV1: name === 'left' ? backPeak : frontPeak,
+  };
 }
 
 function buildWall(name, frame, home, materials) {
@@ -234,7 +301,7 @@ function buildWall(name, frame, home, materials) {
   const dv = derived(dim);
   const span = frame.span;
   const openings = home.openings.filter((o) => o.wall === name);
-  const { h0, h1, bodyTop, peakU, peakV } = wallTopEdge(name, frame, dim, dv);
+  const { h0, h1, bodyTop, peakU, peakV0, peakV1 } = wallTopEdge(name, frame, dim, dv);
   const H = getWallHeight(name, dim);
 
   const group = new THREE.Group();
@@ -298,7 +365,11 @@ function buildWall(name, frame, home, materials) {
     peakShape.moveTo(0, bodyTop);
     peakShape.lineTo(span, bodyTop);
     peakShape.lineTo(span, h1);
-    peakShape.lineTo(peakU, peakV);
+    // Walking span -> peak -> 0, so the h1 side's peak comes first. When the
+    // two planes peak at different heights these are two points at the same u
+    // and the edge between them is the clerestory.
+    peakShape.lineTo(peakU, peakV1);
+    if (Math.abs(peakV1 - peakV0) > 1e-6) peakShape.lineTo(peakU, peakV0);
     peakShape.lineTo(0, h0);
     peakShape.closePath();
     for (const o of openings) {
@@ -416,7 +487,8 @@ function buildFascia(dim, materials, sign, run, eaveY, slope) {
   const totalSpan = L + 2 * rake;
   const minX = -totalSpan / 2;
   const maxX = totalSpan / 2;
-  const posY = eaveY - ov * slope - FASCIA_H / 2 + 0.05;
+  const FW = fasciaWidth(dim);
+  const posY = eaveY - ov * slope - FW / 2 + 0.05;
   const posZ = sign * run;
 
   // Cut out the front fascia board (sign === -1) under dormers when dormerContinuousWall is active
@@ -431,8 +503,8 @@ function buildFascia(dim, materials, sign, run, eaveY, slope) {
         const segW = span.left - curX;
         const segCenterX = curX + segW / 2;
         const seg = new THREE.Mesh(
-          new THREE.BoxGeometry(segW, FASCIA_H, 0.16),
-          materials.trim
+          new THREE.BoxGeometry(segW, FW, 0.16),
+          materials.fascia
         );
         seg.position.set(segCenterX, posY, posZ);
         seg.castShadow = true;
@@ -445,8 +517,8 @@ function buildFascia(dim, materials, sign, run, eaveY, slope) {
       const segW = maxX - curX;
       const segCenterX = curX + segW / 2;
       const seg = new THREE.Mesh(
-        new THREE.BoxGeometry(segW, FASCIA_H, 0.16),
-        materials.trim
+        new THREE.BoxGeometry(segW, FW, 0.16),
+        materials.fascia
       );
       seg.position.set(segCenterX, posY, posZ);
       seg.castShadow = true;
@@ -458,9 +530,10 @@ function buildFascia(dim, materials, sign, run, eaveY, slope) {
 
   // Uninterrupted full-length fascia
   const fascia = new THREE.Mesh(
-    new THREE.BoxGeometry(totalSpan, FASCIA_H, 0.16),
-    materials.trim
+    new THREE.BoxGeometry(totalSpan, FW, 0.16),
+    materials.fascia
   );
+  fascia.name = 'eaveFascia';
   fascia.position.set(0, posY, posZ);
   fascia.castShadow = true;
   return fascia;
@@ -487,17 +560,29 @@ function buildRoof(dim, materials) {
   // Each side runs from the solved ridge out to its own drip edge, at its own
   // pitch — so a split-pitch roof gets a long shallow plane on one side and a
   // short steep one on the other, meeting at an off-centre peak.
+  // Each plane ends at its own peak, which is the ridge unless a ridge step has
+  // pushed them apart — and the taller one may reach past the ridge entirely.
   const sides = [
-    { sign: -1, edgeZ: -W / 2 - ov, eave: eaveYFront, angle: angleFront, slope: slopeFront },
-    { sign:  1, edgeZ:  W / 2 + ov, eave: eaveYBack,  angle: angleBack,  slope: slopeBack  },
+    {
+      sign: -1, edgeZ: -W / 2 - ov, eave: eaveYFront, angle: angleFront, slope: slopeFront,
+      peakY: dv.frontPeakY, peakZ: ridgeZ + Math.max(0, dv.ridgeSail), sail: dv.ridgeSail > 0,
+    },
+    {
+      sign: 1, edgeZ: W / 2 + ov, eave: eaveYBack, angle: angleBack, slope: slopeBack,
+      peakY: dv.backPeakY, peakZ: ridgeZ + Math.min(0, dv.ridgeSail), sail: dv.ridgeSail < 0,
+    },
   ];
 
   for (const s of sides) {
-    const run = Math.abs(s.edgeZ - ridgeZ);
+    // A sailing plane keeps climbing past the ridge, so its top corner is
+    // higher than its peak by however far it reached.
+    const topY = s.peakY + Math.abs(s.peakZ - ridgeZ) * s.slope;
+    const run = Math.abs(s.edgeZ - s.peakZ);
+    if (run < 0.02) continue;
     const slopeLen = run / Math.cos(s.angle);
     const dripY = s.eave - ov * s.slope;
-    const midZ = (ridgeZ + s.edgeZ) / 2;
-    const midY = (ridgeY + dripY) / 2;
+    const midZ = (s.peakZ + s.edgeZ) / 2;
+    const midY = (topY + dripY) / 2;
     const n = new THREE.Vector3(0, Math.cos(s.angle), s.sign * Math.sin(s.angle)); // plane up-normal
     const half = new THREE.Mesh(
       new THREE.BoxGeometry(L + 2 * rake, ROOF_THICK, slopeLen),
@@ -511,6 +596,40 @@ function buildRoof(dim, materials) {
 
     const fascia = buildFascia(dim, materials, s.sign, W / 2 + ov, s.eave, s.slope);
     if (fascia) g.add(fascia);
+
+    // The sailing edge is a free drip edge, so it gets boarded like an eave.
+    if (s.sail) {
+      const board = new THREE.Mesh(
+        new THREE.BoxGeometry(L + 2 * rake, fasciaWidth(dim), 0.16),
+        materials.fascia,
+      );
+      board.position.set(0, topY - fasciaWidth(dim) / 2 + 0.05, s.peakZ);
+      board.castShadow = true;
+      board.name = 'ridgeFascia';
+      g.add(board);
+    }
+  }
+
+  // Where the peaks disagree, the gap between the two planes is a clerestory
+  // wall standing on the lower one.
+  const lowY = Math.min(dv.frontPeakY, dv.backPeakY);
+  const highY = Math.max(dv.frontPeakY, dv.backPeakY);
+  if (highY - lowY > 0.02) {
+    const bottom = lowY - ROOF_THICK - 0.1;
+    const wall = new THREE.Mesh(
+      new THREE.BoxGeometry(L + 2 * rake, highY - bottom, 0.36),
+      materials.siding,
+    );
+    wall.position.set(0, (highY + bottom) / 2, ridgeZ);
+    wall.castShadow = true;
+    wall.receiveShadow = true;
+    wall.name = 'ridgeStep';
+    g.add(wall);
+
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(L + 2 * rake, 0.42, 0.6), materials.fascia);
+    cap.position.set(0, highY - 0.16, ridgeZ);
+    cap.castShadow = true;
+    g.add(cap);
   }
 
   const dormers = buildDormers(dim, materials);
@@ -1009,7 +1128,7 @@ function buildBump(b, frame, home, materials) {
     m.castShadow = true;
     m.userData.bump = b.id;
     g.add(m);
-    box(len + 0.8, FASCIA_H, 0.16, uc, h - drop - FASCIA_H / 2, d + 0.4, materials.trim);
+    box(len + 0.8, fasciaWidth(dim), 0.16, uc, h - drop - fasciaWidth(dim) / 2, d + 0.4, materials.fascia);
   } else if (out && b.roof === 'gable') {
     // Ridge parallel to the wall at mid-depth, gable faces on the two ends —
     // the porch profile on the dealer-lot photo.
@@ -1039,7 +1158,7 @@ function buildBump(b, frame, home, materials) {
       m.userData.bump = b.id;
       g.add(m);
     }
-    box(len + 0.8, FASCIA_H, 0.16, uc, h - drop - FASCIA_H / 2, d + 0.35, materials.trim);
+    box(len + 0.8, fasciaWidth(dim), 0.16, uc, h - drop - fasciaWidth(dim) / 2, d + 0.35, materials.fascia);
   }
 
   return g;
@@ -1500,15 +1619,14 @@ function buildCornerTrim(dim, materials) {
   const g = new THREE.Group();
   g.name = 'cornerTrim';
 
-  const w = dim.cornerTrimWidthFt || 0.5;
+  const w = Math.max(0.05, num(dim.cornerTrimWidthFt, 0.5));
   const t = 0.12;
-  const L = dim.lengthFt;
-  const W = dim.widthFt;
-  const H = dim.wallHeightFt;
+  const dv = derived(dim);
   const minY = dim.floorHeightFt;
 
-  const halfL = L / 2;
-  const halfW = W / 2;
+  const halfL = dim.lengthFt / 2;
+  const halfW = dim.widthFt / 2;
+  if (w * 2 >= dim.lengthFt || w * 2 >= dim.widthFt) return g;
 
   const corners = [
     { x: -halfL, z: -halfW, signX: -1, signZ: -1 },
@@ -1518,15 +1636,45 @@ function buildCornerTrim(dim, materials) {
   ];
 
   for (const c of corners) {
-    const boardX = new THREE.Mesh(new THREE.BoxGeometry(w, H, t), materials.trim);
-    boardX.position.set(c.x + c.signX * (w / 2), minY + H / 2, c.z + c.signZ * (t / 2));
-    boardX.castShadow = true;
-    g.add(boardX);
+    // Each board lies flat ON its own wall, running INWARD from the corner —
+    // measuring outward from it hangs the board off the end of the wall in mid
+    // air, which is what the pair used to do. `signX`/`signZ` point out of the
+    // footprint, so the face a board is proud of is the +sign direction and the
+    // wall it covers runs back the -sign way.
+    const onFront = c.signZ < 0;
+    // A board dies into the eave of the wall it is on. On a split pitch the
+    // front and back eaves sit at different heights, so the pair at one corner
+    // is not the same length as the pair at the far one.
+    const eaveY = onFront ? dv.eaveYFront : dv.eaveYBack;
+    const longH = eaveY - minY;
+    // The gable end takes its corner height from the long wall it meets, unless
+    // someone typed a height for that end, in which case they meant it.
+    const endName = c.signX < 0 ? 'left' : 'right';
+    const endH = customWallHeight(endName, dim) ?? longH;
+    if (longH <= 0.1 || endH <= 0.1) continue;
 
-    const boardZ = new THREE.Mesh(new THREE.BoxGeometry(t, H, w), materials.trim);
-    boardZ.position.set(c.x + c.signX * (t / 2), minY + H / 2, c.z + c.signZ * (w / 2));
-    boardZ.castShadow = true;
-    g.add(boardZ);
+    // Long wall: `w` across the wall, thin in Z, standing proud of its face.
+    // It laps `t` past the corner to cover the end board's edge.
+    const boardLong = new THREE.Mesh(new THREE.BoxGeometry(w + t, longH, t), materials.corner);
+    boardLong.position.set(
+      c.x + c.signX * (t - w) / 2,
+      minY + longH / 2,
+      c.z + c.signZ * (t / 2),
+    );
+    boardLong.castShadow = true;
+    boardLong.name = 'cornerBoard';
+    g.add(boardLong);
+
+    // Gable end: thin in X, `w` across the wall, proud of the end face.
+    const boardEnd = new THREE.Mesh(new THREE.BoxGeometry(t, endH, w), materials.corner);
+    boardEnd.position.set(
+      c.x + c.signX * (t / 2),
+      minY + endH / 2,
+      c.z - c.signZ * (w / 2),
+    );
+    boardEnd.castShadow = true;
+    boardEnd.name = 'cornerBoard';
+    g.add(boardEnd);
   }
 
   return g;
@@ -1542,6 +1690,8 @@ export function buildHome(home, sceneOpts = {}) {
     dormerSiding: createSidingMaterial(home.colors.dormerSiding || home.colors.siding, dim.dormerSidingTexture || dim.sidingTexture || 'horizontal_lap'),
     gableSiding: createSidingMaterial(home.colors.gableSiding || home.colors.siding, dim.gableSidingTexture || dim.sidingTexture || 'horizontal_lap'),
     trim: mat(home.colors.trim, { roughness: 0.75 }),
+    fascia: mat(home.colors.fascia ?? home.colors.trim, { roughness: 0.75 }),
+    corner: mat(home.colors.corner ?? home.colors.trim, { roughness: 0.78 }),
     roof: mat(home.colors.roof, { roughness: 0.85 }),
     skirting: mat(home.colors.skirting, { roughness: 0.95 }),
     concrete: mat('#b4bcc6', { roughness: 0.95 }),

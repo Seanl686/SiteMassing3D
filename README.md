@@ -219,10 +219,14 @@ Drop a file in `homes/`, add a line to `homes/index.json`, and it shows up in th
     "widthFt": 27, "lengthFt": 56,
     "wallHeightFt": 8, "floorHeightFt": 2.5,
     "roofPitch": 4, "roofPitchBack": null,
+    "ridgeOffsetFt": 0, "ridgeStepFt": 0,
+    "ridgeOverhang": "raised", "ridgeOverhangFt": null,
     "eaveOverhangFt": 1, "rakeOverhangFt": 0.75,
+    "fasciaWidthFt": 0.55, "cornerTrim": true, "cornerTrimWidthFt": 0.5,
     "roofStyle": "gable"
   },
   "colors": { "siding": "#8d9299", "trim": "#f2f2f0", "roof": "#3a3d42",
+              "fascia": "#f2f2f0", "corner": "#f2f2f0",
               "skirting": "#e6e6e1", "door": "#f2f2f0", "glass": "#4d6070" },
   "openings": [
     { "id": "d1", "type": "door", "wall": "front",
@@ -244,6 +248,23 @@ Drop a file in `homes/`, add a line to `homes/index.json`, and it shows up in th
 - All lengths are feet; `6.67` is a 6'-8" door.
 - `roofPitchBack` — the rear slope's pitch when the sheet says **split pitch**.
   `null` means both slopes match and the ridge sits over the centreline.
+- `ridgeOffsetFt` — nudges the ridge off wherever the split-pitch solve put it.
+  The two planes still land on their own eaves; the longer run just runs
+  shallower.
+- `ridgeStepFt` — lifts the rear peak clear of the front one instead of making
+  them meet, so the gap between the planes becomes a clerestory wall. Negative
+  lifts the front. This is the one case the ridge solve cannot express, since it
+  assumes a single ridge line.
+- `ridgeOverhang` / `ridgeOverhangFt` — with the peaks apart there is no ridge
+  to meet at, so the taller plane carries on past it at its own pitch and hangs
+  over the low roof, with a fascia on that free edge. `"none"` stops it at the
+  ridge; the distance defaults to `eaveOverhangFt`. Note the roof's highest
+  point is then that sailing edge, not the peak.
+- `fascia` / `corner` colours paint the fascia, rake and ridge boards, and the
+  corner boards, separately from the casing `trim`. Leave either out and it
+  follows `trim`, which is what a file written before them meant.
+- `fasciaWidthFt` / `cornerTrimWidthFt` — the face dimension you would read off
+  the board.
 - `bumps` — every place the footprint is not the rectangle. `depthFt` is signed:
   positive projects **out** past the wall, negative cuts a recess **in**.
   `kind` is `porch` (open, posts and railing) or `wall` (enclosed space).

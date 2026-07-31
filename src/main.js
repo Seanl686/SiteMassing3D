@@ -421,9 +421,19 @@ function updateHud() {
   $('ratioHint').textContent =
     `Front wall must read ${ratio}× as long as the gable end is wide. Roof ridge ${fmtFt(dv.ridgeY)} above grade.`;
   if ($('ridgeHint')) {
-    $('ridgeHint').textContent = dv.split
-      ? `Split pitch: ridge sits ${fmtFt(Math.abs(dv.ridgeZ))} ${dv.ridgeZ > 0 ? 'behind' : 'in front of'} the centreline, peak ${fmtFt(dv.ridgeY)} above grade.`
-      : '';
+    const parts = [];
+    if (dv.split) {
+      parts.push(`Split pitch: ridge sits ${fmtFt(Math.abs(dv.ridgeZ))} ${dv.ridgeZ > 0 ? 'behind' : 'in front of'} the centreline, peak ${fmtFt(dv.ridgePeakY)} above grade.`);
+    }
+    if (Math.abs(dv.ridgeStepFt) > 0.02) {
+      parts.push(`${dv.ridgeStepFt > 0 ? 'Rear' : 'Front'} peak stands ${fmtFt(Math.abs(dv.ridgeStepFt))} above the other — that gap is clerestory wall.`);
+    }
+    if (dv.ridgeSail) {
+      // Once a plane sails past the ridge the roof's high point is that free
+      // edge, not the peak, so both numbers are worth printing.
+      parts.push(`${dv.ridgeSail > 0 ? 'Front' : 'Rear'} plane sails ${fmtFt(Math.abs(dv.ridgeSail))} past the ridge, topping out at ${fmtFt(dv.ridgeY)}.`);
+    }
+    $('ridgeHint').textContent = parts.join(' ');
   }
 }
 
@@ -2009,12 +2019,14 @@ const dimFields = [
   ['f_eaveOverhang', 'eaveOverhangFt'], ['f_rakeOverhang', 'rakeOverhangFt'],
   ['f_dormerWidth', 'dormerWidthFt'], ['f_dormerHeight', 'dormerHeightFt'],
   ['f_windowHeadDrop', 'windowHeadDropFt'], ['f_doorHeadDrop', 'doorHeadDropFt'],
+  ['f_ridgeOffset', 'ridgeOffsetFt'], ['f_ridgeStep', 'ridgeStepFt'],
   ['f_frontWallHeight', 'frontWallHeightFt'], ['f_backWallHeight', 'backWallHeightFt'],
   ['f_leftWallHeight', 'leftWallHeightFt'], ['f_rightWallHeight', 'rightWallHeightFt'],
 ];
 const colorFields = [
   ['c_siding', 'siding'], ['c_belowDormerSiding', 'belowDormerSiding'], ['c_dormerSiding', 'dormerSiding'], ['c_gableSiding', 'gableSiding'],
-  ['c_trim', 'trim'], ['c_roof', 'roof'], ['c_skirting', 'skirting'], ['c_door', 'door'], ['c_glass', 'glass'],
+  ['c_trim', 'trim'], ['c_fascia', 'fascia'], ['c_corner', 'corner'],
+  ['c_roof', 'roof'], ['c_skirting', 'skirting'], ['c_door', 'door'], ['c_glass', 'glass'],
 ];
 const planFields = [['p_width', 'widthFt'], ['p_rot', 'rotation'], ['p_x', 'offsetX'], ['p_z', 'offsetZ']];
 const photoFields = [
@@ -2200,6 +2212,9 @@ function syncForm() {
   if ($('f_gableSidingTexture')) $('f_gableSidingTexture').value = state.home.dimensions.gableSidingTexture || state.home.dimensions.sidingTexture || 'horizontal_lap';
   if ($('f_cornerTrim')) $('f_cornerTrim').checked = state.home.dimensions.cornerTrim !== false;
   if ($('f_cornerTrimWidth')) $('f_cornerTrimWidth').value = Math.round((state.home.dimensions.cornerTrimWidthFt ?? 0.5) * 12);
+  if ($('f_fasciaWidth')) $('f_fasciaWidth').value = Math.round((state.home.dimensions.fasciaWidthFt ?? 0.55) * 12);
+  if ($('f_ridgeOverhang')) $('f_ridgeOverhang').value = state.home.dimensions.ridgeOverhang || 'raised';
+  if ($('f_ridgeOverhangFt')) $('f_ridgeOverhangFt').value = state.home.dimensions.ridgeOverhangFt ?? '';
   syncHeadAlignRows();
   renderDormerSizeRows();
   renderBumpList();
@@ -2482,6 +2497,33 @@ function bind() {
       const inch = parseFloat(e.target.value);
       if (Number.isNaN(inch) || inch <= 0) return;
       state.home.dimensions.cornerTrimWidthFt = inch / 12;
+      rebuild(); save();
+    });
+  }
+  if ($('f_fasciaWidth')) {
+    $('f_fasciaWidth').addEventListener('input', (e) => {
+      const inch = parseFloat(e.target.value);
+      if (Number.isNaN(inch) || inch <= 0) return;
+      state.home.dimensions.fasciaWidthFt = inch / 12;
+      rebuild(); save();
+    });
+  }
+  if ($('f_ridgeOverhang')) {
+    $('f_ridgeOverhang').addEventListener('change', (e) => {
+      state.home.dimensions.ridgeOverhang = e.target.value;
+      rebuild(); save();
+    });
+  }
+  if ($('f_ridgeOverhangFt')) {
+    $('f_ridgeOverhangFt').addEventListener('input', (e) => {
+      const raw = e.target.value.trim();
+      // Blank falls back to the eave overhang, which is not the same as 0.
+      if (raw === '') state.home.dimensions.ridgeOverhangFt = null;
+      else {
+        const v = parseFloat(raw);
+        if (Number.isNaN(v)) return;
+        state.home.dimensions.ridgeOverhangFt = v;
+      }
       rebuild(); save();
     });
   }
