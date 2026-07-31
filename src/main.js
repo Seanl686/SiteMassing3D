@@ -2178,6 +2178,7 @@ function renderBumpList() {
         ${porch ? `<label><span>Left end wall</span><select data-bk="endWallLeft">${opt(BUMP_END_WALL_LABEL, b.endWallLeft || 'wall')}</select></label>` : ''}
         ${porch ? `<label><span>Right end wall</span><select data-bk="endWallRight">${opt(BUMP_END_WALL_LABEL, b.endWallRight || 'wall')}</select></label>` : ''}
         ${porch ? `<label><span>Front railing</span><select data-bk="frontRailing">${opt(BUMP_FRONT_RAILING_LABEL, b.frontRailing || 'auto')}</select></label>` : ''}
+        ${porch ? `<label><span>Interior side window</span><input type="checkbox" data-bk="interiorWindow"${b.interiorWindow ? ' checked' : ''}></label>` : ''}
       </div>
       <p class="hint">${i + 1}. ${isRecess(b) ? 'Recessed into' : 'Projecting out from'} the ${BUMP_WALL_LABEL[b.wall].toLowerCase()} · ${fmtFt(b.lengthFt)} × ${fmtFt(Math.abs(b.depthFt))}</p>
       <div class="btnrow"><button data-bump-del="${b.id}">Delete</button></div>

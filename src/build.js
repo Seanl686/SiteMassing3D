@@ -1508,12 +1508,34 @@ function buildBump(b, frame, home, materials, sceneOpts = {}) {
     // Recess: the wall steps back into the footprint. The header of siding above
     // it and the wall at the back of it both come from the wall builder; this is
     // the inside of the notch.
-    const showLeftWall = !porch || (b.endWallLeft !== 'open_railing' && b.endWallLeft !== 'open_none');
-    const showRightWall = !porch || (b.endWallRight !== 'open_railing' && b.endWallRight !== 'open_none');
-    if (showLeftWall) box(T, h, d, u0 + T / 2, h / 2, d / 2, materials.siding);         // left reveal
-    if (showRightWall) box(T, h, d, u1 - T / 2, h / 2, d / 2, materials.siding);        // right reveal
-    box(len, 0.25, d, uc, h + 0.125, d / 2, materials.trim);          // ceiling
-    if (porch) box(len, 0.4, d, uc, -0.2, d / 2, materials.deck);     // porch floor
+    const wSpan = (b.wall === 'front' || b.wall === 'back') ? dim.lengthFt : dim.widthFt;
+    const isLeftCorner = u0 < 0.05;
+    const isRightCorner = u1 > wSpan - 0.05;
+    const showLeftWall = !porch || !isLeftCorner || (b.endWallLeft !== 'open_railing' && b.endWallLeft !== 'open_none');
+    const showRightWall = !porch || !isRightCorner || (b.endWallRight !== 'open_railing' && b.endWallRight !== 'open_none');
+
+    if (showLeftWall) {
+      box(T, h, d, u0 + T / 2, h / 2, d / 2, materials.siding); // left reveal
+      if (b.interiorWindow && !isLeftCorner) {
+        const ww = Math.min(b.interiorWindowWidthFt || 3, d - 0.5);
+        const wh = Math.min(b.interiorWindowHeightFt || 3.5, h - 1);
+        const sill = b.interiorWindowSillFt ?? 3.5;
+        box(0.1, wh + 0.4, ww + 0.4, u0 + T / 2, sill + wh / 2, d / 2, materials.trim);
+        box(0.1, wh, ww, u0 + T / 2, sill + wh / 2, d / 2, materials.glass);
+      }
+    }
+    if (showRightWall) {
+      box(T, h, d, u1 - T / 2, h / 2, d / 2, materials.siding); // right reveal
+      if (b.interiorWindow && !isRightCorner) {
+        const ww = Math.min(b.interiorWindowWidthFt || 3, d - 0.5);
+        const wh = Math.min(b.interiorWindowHeightFt || 3.5, h - 1);
+        const sill = b.interiorWindowSillFt ?? 3.5;
+        box(0.1, wh + 0.4, ww + 0.4, u1 - T / 2, sill + wh / 2, d / 2, materials.trim);
+        box(0.1, wh, ww, u1 - T / 2, sill + wh / 2, d / 2, materials.glass);
+      }
+    }
+    box(len, 0.25, d, uc, h + 0.125, d / 2, materials.trim); // ceiling
+    if (porch) box(len, 0.4, d, uc, -0.2, d / 2, materials.deck); // porch floor
   } else {
     // Projecting porch: a deck standing in front of a wall that is still there.
     if (b.deck !== false) {
