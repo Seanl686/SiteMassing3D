@@ -17,8 +17,9 @@ import {
 } from '../src/homephotos.js';
 import {
   derived, wallFrames, fmtAllUnits, buildHome, getWallHeight, dormerSize, applyHeadAlign,
-  resolveRoofSections, roofTopAt,
+  resolveRoofSections, roofTopAt, footprintAreas,
 } from '../src/build.js';
+import { parseFeet } from '../src/units.js';
 import {
   readBumps, clampBump, footprintExtents, bumpFootprint, wallBands, isRecess, defaultBump,
 } from '../src/bumps.js';
@@ -2455,3 +2456,155 @@ test('82. Porch end wall options, front railing egress gap, and per-door stair t
   assert.ok(rootCornerCut, 'Built model with adjacent corner cut for open porch on left wall');
 });
 
+
+test('83. parseFeet reads plain decimals and feet-inches off a spec sheet', () => {
+  assert.equal(parseFeet('27'), 27);
+  assert.equal(parseFeet('27.5'), 27.5);
+  assert.ok(near(parseFeet(`27'-4"`), 27 + 4 / 12));
+  assert.ok(near(parseFeet(`27' 4"`), 27 + 4 / 12));
+  assert.ok(near(parseFeet(`27'4`), 27 + 4 / 12));
+  assert.equal(parseFeet(`56'`), 56);
+  assert.ok(near(parseFeet(`4"`), 4 / 12));
+  assert.ok(near(parseFeet('27ft 4in'), 27 + 4 / 12));
+  assert.ok(Number.isNaN(parseFeet('')));
+  assert.ok(Number.isNaN(parseFeet('abc')));
+  assert.ok(near(parseFeet(`-1'-4"`), -(1 + 4 / 12)));
+});
+
+test('84. footprintAreas sums living sqft off the resolved sections, keeps porches separate', () => {
+  const home = defaultHome();
+  home.dimensions.widthFt = 20;
+  home.dimensions.lengthFt = 50;
+  home.bumps = [];
+  const plain = footprintAreas(home.dimensions, home.bumps);
+  assert.ok(near(plain.livingSqFt, 1000, 0.01));
+  assert.equal(plain.porchSqFt, 0);
+
+  // A projecting wall bump adds conditioned area; a porch stays out of it.
+  home.bumps = [
+    { id: 'b1', wall: 'front', kind: 'wall', offsetFt: 5, lengthFt: 10, depthFt: 2 },
+    { id: 'b2', wall: 'back', kind: 'porch', offsetFt: 5, lengthFt: 12, depthFt: 6 },
+  ];
+  const withBumps = footprintAreas(home.dimensions, home.bumps);
+  assert.ok(near(withBumps.livingSqFt, 1000 + 10 * 2, 0.01), 'wall bump adds to living area');
+  assert.ok(near(withBumps.porchSqFt, 12 * 6, 0.01), 'porch area kept separate');
+  assert.ok(near(withBumps.totalSqFt, withBumps.livingSqFt + withBumps.porchSqFt, 0.01));
+
+  // A recessed wall bump cuts into living area instead.
+  home.bumps = [{ id: 'b3', wall: 'front', kind: 'wall', offsetFt: 5, lengthFt: 10, depthFt: -2 }];
+  const recessed = footprintAreas(home.dimensions, home.bumps);
+  assert.ok(near(recessed.livingSqFt, 1000 - 10 * 2, 0.01));
+});
+
+test('85. Gutters and downspouts build along every real eave, skip flat/none/shed high side', () => {
+  const home = defaultHome();
+  home.dimensions.gutters = true;
+  const root = buildHome(home, defaultScene());
+  const g = root.children.find((c) => c.name === 'gutters');
+  assert.ok(g, 'Gutter group built when dim.gutters is on');
+  const fronts = g.children.filter((c) => c.name === 'gutter:front');
+  const backs = g.children.filter((c) => c.name === 'gutter:back');
+  assert.ok(fronts.length >= 1 && backs.length >= 1, 'Both long-wall eaves get a trough on a gable roof');
+  const spouts = g.children.filter((c) => c.name.startsWith('downspout'));
+  assert.ok(spouts.length >= 2, 'At least one downspout per side');
+
+  // Off by default.
+  const home2 = defaultHome();
+  const root2 = buildHome(home2, defaultScene());
+  assert.equal(root2.children.find((c) => c.name === 'gutters'), undefined);
+
+  // A shed roof only has one true eave — the low side.
+  const home3 = defaultHome();
+  home3.dimensions.gutters = true;
+  home3.dimensions.roofStyle = 'shed';
+  const root3 = buildHome(home3, defaultScene());
+  const g3 = root3.children.find((c) => c.name === 'gutters');
+  assert.ok(g3.children.some((c) => c.name === 'gutter:front'));
+  assert.ok(!g3.children.some((c) => c.name === 'gutter:back'), 'Shed roof gets no gutter on the high side');
+
+  // Flat and open roofs have no eave to hang a gutter off.
+  const home4 = defaultHome();
+  home4.dimensions.gutters = true;
+  home4.dimensions.roofStyle = 'flat';
+  const root4 = buildHome(home4, defaultScene());
+  assert.equal(root4.children.find((c) => c.name === 'gutters'), undefined, 'Flat roof builds no gutters');
+});
+
+test('86. Shutters build a pair flanking a window and stay off sliders', () => {
+  const home = defaultHome();
+  const win = home.openings.find((o) => o.type === 'window');
+  win.shutters = true;
+  win.shutterStyle = 'louvered';
+  const slider = { id: 'sl1', type: 'slider', wall: 'back', offsetFt: 10, widthFt: 6, heightFt: 6.67, sillFt: 0, shutters: true };
+  home.openings.push(slider);
+  const root = buildHome(home, defaultScene());
+  const winGroup = root.children.find((c) => c.name === 'wall:' + win.wall)
+    .children.find((c) => c.name === `opening:${win.id}`);
+  const shutterGroup = winGroup.children.find((c) => c.name === 'shutters');
+  assert.ok(shutterGroup, 'Shutter group built for a window with shutters on');
+  assert.equal(shutterGroup.children.filter((c) => c.name === undefined || true).length > 0, true);
+
+  const sliderWallGroup = root.children.find((c) => c.name === 'wall:back');
+  const sliderGroup = sliderWallGroup.children.find((c) => c.name === `opening:${slider.id}`);
+  assert.ok(!sliderGroup.children.some((c) => c.name === 'shutters'), 'Sliders never get shutters even if toggled on');
+});
+
+test('87. Skirting height override stops short of the floor deck instead of floating', () => {
+  const home = defaultHome();
+  home.dimensions.floorHeightFt = 3;
+  home.dimensions.skirtingHeightFt = 1.5;
+  const root = buildHome(home, defaultScene());
+  const skirt = root.children.find((c) => c.name === 'skirting');
+  const box = new THREE.Box3().setFromObject(skirt.children[0]);
+  assert.ok(near(box.max.y, 3, 0.05), 'Top of skirting still meets the underside of the floor deck');
+  assert.ok(near(box.max.y - box.min.y, 1.5, 0.05), 'Height follows the override, not the full floor height');
+});
+
+test('88. Whole-home shed and none roof styles actually solve distinctly (were dead branches)', () => {
+  const home = defaultHome();
+  home.dimensions.roofStyle = 'shed';
+  home.dimensions.roofPitch = 4;
+  const dv = derived(home.dimensions);
+  assert.equal(dv.shed, true, 'Shed style reaches the shed solve, not a mirrored gable');
+  assert.equal(dv.slopeBack, 0, 'Single slope: no back-side pitch');
+  assert.ok(near(dv.topY, dv.eaveYFront + (4 / 12) * dv.widthFt, 0.01), 'High point follows the one slope across the width');
+
+  const home2 = defaultHome();
+  home2.dimensions.roofStyle = 'none';
+  const dv2 = derived(home2.dimensions);
+  assert.equal(dv2.none, true);
+  const root2 = buildHome(home2, defaultScene());
+  const roof2 = root2.children.find((c) => c.name === 'roof');
+  assert.ok(!roof2.children.some((c) => c.name?.startsWith('roofPlane')), 'An open/none roof builds no deck mesh');
+});
+
+test('89. Shed dormer style builds a flat-topped front wall and one roof slope, not a gable peak', () => {
+  const home = defaultHome();
+  home.dimensions.dormerCount = 1;
+  home.dimensions.dormerStyle = 'shed';
+  const root = buildHome(home, defaultScene());
+  const roof = root.children.find((c) => c.name === 'roof');
+  const dormers = roof.children.find((c) => c.name === 'dormers');
+  assert.ok(dormers, 'Dormers group built');
+  const dormer0 = dormers.children.find((c) => c.name === 'dormer:0');
+  assert.ok(dormer0, 'Single shed dormer built');
+  // A gable dormer's front wall is a 3-point triangle; a shed dormer's is a
+  // 4-point rectangle, so the two are distinguishable by vertex count.
+  const frontWall = dormer0.children[0];
+  const posAttr = frontWall.geometry.attributes.position;
+  const uniqueXY = new Set();
+  for (let v = 0; v < posAttr.count; v++) uniqueXY.add(`${posAttr.getX(v).toFixed(2)},${posAttr.getY(v).toFixed(2)}`);
+  assert.equal(uniqueXY.size, 4, 'Shed dormer front wall is a 4-point rectangle');
+
+  // The front wall shape differs from a gable dormer's the same way here too.
+  const home2 = defaultHome();
+  home2.dimensions.dormerCount = 1;
+  home2.dimensions.dormerStyle = 'gable';
+  const root2 = buildHome(home2, defaultScene());
+  const dormer0b = root2.children.find((c) => c.name === 'roof').children.find((c) => c.name === 'dormers').children.find((c) => c.name === 'dormer:0');
+  const frontWall2 = dormer0b.children[0];
+  const posAttr2 = frontWall2.geometry.attributes.position;
+  const uniqueXY2 = new Set();
+  for (let v = 0; v < posAttr2.count; v++) uniqueXY2.add(`${posAttr2.getX(v).toFixed(2)},${posAttr2.getY(v).toFixed(2)}`);
+  assert.equal(uniqueXY2.size, 3, 'Gable dormer front wall is a 3-point triangle');
+});

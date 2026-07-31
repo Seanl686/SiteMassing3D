@@ -61,17 +61,18 @@
       <div class="panel-body">
         <label class="row"><span>Model name</span><input id="f_name" type="text" autocomplete="off"></label>
         <div class="grid2">
-          <label><span>Width (ft)</span><input id="f_width" type="number" autocomplete="off" step="0.1" min="8"></label>
-          <label><span>Overall Length (ft)</span><input id="f_length" type="number" autocomplete="off" step="0.1" min="8"></label>
+          <label><span>Width (ft)</span><input id="f_width" type="text" inputmode="decimal" autocomplete="off" placeholder="e.g. 27 or 27'-0&quot;"></label>
+          <label><span>Overall Length (ft)</span><input id="f_length" type="text" inputmode="decimal" autocomplete="off" placeholder="e.g. 56 or 56'-0&quot;"></label>
         </div>
+        <p class="hint">Dimensions take either a plain number or feet-inches straight off the spec sheet &mdash; type <code>27'-4"</code> and it reads back as <code>27'-4"</code>.</p>
 
         <div class="feature-card">
           <h3><span>🏠 Stepped Half / Sectional Footprint</span></h3>
           <div class="grid2">
-            <label><span>Front setback / step (ft)</span><input id="f_frontSetback" type="number" autocomplete="off" step="0.25" placeholder="0 (e.g. 1.33 / 2.67)"></label>
-            <label><span>Front half length (ft)</span><input id="f_frontLength" type="number" autocomplete="off" step="0.25" placeholder="Auto (Length)"></label>
-            <label><span>Back setback / step (ft)</span><input id="f_backSetback" type="number" autocomplete="off" step="0.25" placeholder="0 (No step)"></label>
-            <label><span>Back half length (ft)</span><input id="f_backLength" type="number" autocomplete="off" step="0.25" placeholder="Auto (Length)"></label>
+            <label><span>Front setback / step (ft)</span><input id="f_frontSetback" type="text" inputmode="decimal" autocomplete="off" placeholder="0 (e.g. 1'-4&quot;)"></label>
+            <label><span>Front half length (ft)</span><input id="f_frontLength" type="text" inputmode="decimal" autocomplete="off" placeholder="Auto (Length)"></label>
+            <label><span>Back setback / step (ft)</span><input id="f_backSetback" type="text" inputmode="decimal" autocomplete="off" placeholder="0 (No step)"></label>
+            <label><span>Back half length (ft)</span><input id="f_backLength" type="text" inputmode="decimal" autocomplete="off" placeholder="Auto (Length)"></label>
           </div>
           <div class="btnrow">
             <button id="btnStepFront133" type="button" class="btn">✂️ Step Front 1'-4" (1.33')</button>
@@ -81,7 +82,7 @@
         </div>
 
         <div class="grid2">
-          <label><span>Wall height (ft)</span><input id="f_wallHeight" type="number" autocomplete="off" step="0.1" min="6" list="wallHeightPresets"></label>
+          <label><span>Wall height (ft)</span><input id="f_wallHeight" type="text" inputmode="decimal" autocomplete="off" list="wallHeightPresets"></label>
           <datalist id="wallHeightPresets">
             <option value="8.0" label="8'-0&quot; (Standard 8ft Wall)"></option>
             <option value="8.5" label="8'-6&quot; (8.5ft Wall)"></option>
@@ -89,10 +90,10 @@
             <option value="10.0" label="10'-0&quot; (10ft Vaulted Wall)"></option>
             <option value="12.0" label="12'-0&quot; (12ft High Wall)"></option>
           </datalist>
-          <label><span>Floor height (ft)</span><input id="f_floorHeight" type="number" autocomplete="off" step="0.05" min="0"></label>
-          <label><span>Roof pitch (/12)</span><input id="f_pitch" type="number" autocomplete="off" step="0.5" min="0" max="12"></label>
-          <label><span>Eave overhang (ft)</span><input id="f_eaveOverhang" type="number" autocomplete="off" step="0.1" min="0"></label>
-          <label><span>Rake overhang (ft)</span><input id="f_rakeOverhang" type="number" autocomplete="off" step="0.1" min="0"></label>
+          <label><span>Floor height (ft)</span><input id="f_floorHeight" type="text" inputmode="decimal" autocomplete="off"></label>
+          <label><span>Roof pitch (/12)</span><input id="f_pitch" type="number" autocomplete="off" step="0.5" min="0" max="24"></label>
+          <label><span>Eave overhang (ft)</span><input id="f_eaveOverhang" type="text" inputmode="decimal" autocomplete="off"></label>
+          <label><span>Rake overhang (ft)</span><input id="f_rakeOverhang" type="text" inputmode="decimal" autocomplete="off"></label>
           <label><span>Roof style</span>
             <select id="f_roofStyle">
               <option value="gable">Gable (dual slope)</option>
@@ -101,7 +102,7 @@
               <option value="none">None (Open / no roof)</option>
             </select>
           </label>
-          <label><span>Rear pitch (/12)</span><input id="f_pitchBack" type="number" autocomplete="off" step="0.5" min="0" max="12" placeholder="Same as front"></label>
+          <label><span>Rear pitch (/12)</span><input id="f_pitchBack" type="number" autocomplete="off" step="0.5" min="0" max="24" placeholder="Same as front"></label>
           <label><span>Ridge position</span>
             <select id="f_ridgeLock">
               <option value="solved">Where the pitches meet</option>
@@ -181,6 +182,7 @@
           <label><span>Dormer style</span>
             <select id="f_dormerStyle">
               <option value="gable">Gable Dormer</option>
+              <option value="shed">Shed Dormer</option>
             </select>
           </label>
           <label id="row_dormerWidth"><span>Dormer width (ft)</span><input id="f_dormerWidth" type="number" autocomplete="off" step="0.25" min="0.25" max="40"></label>
@@ -254,6 +256,18 @@
           <label><span>Fascia width (in)</span>
             <input id="f_fasciaWidth" type="number" autocomplete="off" step="1" min="2" max="16">
           </label>
+          <label><span>Skirting material</span>
+            <select id="f_skirtingMaterial">
+              <option value="vinyl_panel">Ribbed Vinyl Panel</option>
+              <option value="concrete_block">Concrete Block</option>
+              <option value="brick">Brick</option>
+              <option value="stacked_stone">Stacked Stone</option>
+              <option value="lattice">Lattice</option>
+            </select>
+          </label>
+          <label><span>Skirting height (ft)</span>
+            <input id="f_skirtingHeight" type="text" inputmode="decimal" autocomplete="off" placeholder="Auto (to floor deck)">
+          </label>
         </div>
         <div class="grid2 colors" style="margin-top:8px;">
           <label><span>Main Siding</span><input id="c_siding" type="color" autocomplete="off"></label>
@@ -263,12 +277,14 @@
           <label><span>Trim (casing)</span><input id="c_trim" type="color" autocomplete="off"></label>
           <label><span>Fascia &amp; rake</span><input id="c_fascia" type="color" autocomplete="off"></label>
           <label><span>Corner boards</span><input id="c_corner" type="color" autocomplete="off"></label>
+          <label><span>Gutters &amp; downspouts</span><input id="c_gutter" type="color" autocomplete="off"></label>
           <label><span>Roof</span><input id="c_roof" type="color" autocomplete="off"></label>
           <label><span>Skirting</span><input id="c_skirting" type="color" autocomplete="off"></label>
           <label><span>Door</span><input id="c_door" type="color" autocomplete="off"></label>
           <label><span>Glass</span><input id="c_glass" type="color" autocomplete="off"></label>
         </div>
         <label class="row check" style="margin-top:6px;"><input id="f_cornerTrim" type="checkbox" autocomplete="off"><span>Corner trim boards</span></label>
+        <label class="row check"><input id="f_gutters" type="checkbox" autocomplete="off"><span>Gutters &amp; downspouts along every eave</span></label>
 
         <h3 class="subhead">Match The Real Home</h3>
         <p class="hint">A typed hex is a guess, and the guess always comes out too clean — real siding photographs greyer and cooler than its swatch name, and a roof read by eye lands a couple of shades light. Pick the colours straight off the photograph instead and the render is one for one with the unit.</p>

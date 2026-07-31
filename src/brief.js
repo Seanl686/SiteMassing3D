@@ -10,7 +10,7 @@
 // DOM-free and three.js-free so it can be unit-tested. Everything the brief
 // cannot know — what is on the lot, what to preserve — arrives as `site`.
 
-import { derived, fmtFt } from './build.js';
+import { derived, fmtFt, footprintAreas } from './build.js';
 import { WALL_LABEL } from './defaults.js';
 import { describeBump, bumpsOnWall, isRecess, isProjecting } from './bumps.js';
 import { filledHomePhotos, unphotographedWalls } from './homephotos.js';
@@ -65,9 +65,8 @@ const TYPE_LABEL = { door: 'Door', slider: 'Sliding door', window: 'Window' };
  * drop or restyle at will.
  */
 export const ACCESSORIES = [
-  'window shutters — present or absent, and if present their exact style, width, colour and which windows wear them',
   'exterior light fixtures — porch lights, wall sconces, flood lights: their exact style, count and position',
-  'gutters, downspouts and fascia/soffit treatment',
+  'fascia/soffit treatment beyond what the plates already model',
   'roof and gable vents, ridge vents, louvres',
   'porch, deck, stoop and step railings, posts, columns and balusters',
   'shrubs, flower beds, planters, address numbers, mailboxes, meters and any other mounted hardware',
@@ -97,6 +96,7 @@ export function openingSchedule(home) {
         widthFt: o.widthFt,
         heightFt: o.heightFt,
         sillFt: o.sillFt,
+        shutters: o.shutters ? `${o.shutterStyle === 'paneled' ? 'paneled' : 'louvered'}, ${colorName(o.shutterColor)}` : 'none',
       });
     }
   }
@@ -177,12 +177,20 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
     ? `its roof ridge reaches about ${pct(framing.ridgeTop)} of the way up the frame from the bottom edge`
     : `its roof ridge reaches about the height of ${heightRef}`;
 
-  const skirtLine = `white ribbed vinyl skirting continuous around the visible perimeter, meeting the ground with a soft contact shadow`;
+  const skirtMatLabel = {
+    vinyl_panel: 'ribbed vinyl panel', concrete_block: 'concrete block', brick: 'brick',
+    stacked_stone: 'stacked stone', lattice: 'lattice',
+  }[d.skirtingMaterial] || 'ribbed vinyl panel';
+  const skirtLine = `${colorName(c.skirting)} ${skirtMatLabel} skirting continuous around the visible perimeter, meeting the ground with a soft contact shadow`;
+  const guttersLine = d.gutters
+    ? ` ${colorName(c.gutter)} gutters and downspouts run along every eave.`
+    : ' No gutters — bare fascia at every eave.';
   const stepsLine = scene?.steps
     ? 'Steps at each exterior door' + (scene.stepLanding ? ' with a top landing platform' : '') + '.'
     : 'No steps or landings at the doors.';
 
   const bumps = home.bumps || [];
+  const areas = footprintAreas(d, bumps);
   const roofLine = d.roofStyle === 'flat'
     ? 'flat / low slope'
     : (dv.split
@@ -317,11 +325,12 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   w(accessoryList());
   w();
   w(`Reproduce each of them **exactly as photographed** — same style, same colour,`);
-  w(`same count, same position on the same wall. If the photographs show shutters,`);
-  w(`the render has those shutters on those windows. **If the photographs show no`);
-  w(`shutters, the render has no shutters** — do not add them because the home would`);
-  w(`"look better" with them. The same rule runs both ways for lights, railings,`);
-  w(`vents and gutters: photographed means present, unphotographed means absent.`);
+  w(`same count, same position on the same wall. The same rule runs both ways:`);
+  w(`photographed means present, unphotographed means absent — do not add a`);
+  w(`decorative accessory because the home would "look better" with it. Shutters`);
+  w(`and gutters are the exception: the plates now carry them directly (see`);
+  w(`sections 3 and 4) — where the plates show one, treat it as measured`);
+  w(`geometry like any opening, not a photo-only accessory.`);
   w();
   w(`Adding a decorative accessory nobody asked for is a redesign, not a`);
   w(`flourish — it makes the picture a home the buyer is not being sold.`);
@@ -415,6 +424,7 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   w(`|---|---|`);
   w(`| Model | ${home.name || 'Untitled'} |`);
   w(`| Footprint | ${fmtFt(d.widthFt)} wide × ${fmtFt(d.lengthFt)} long |`);
+  w(`| Floor area | ${Math.round(areas.livingSqFt)} sq ft living${areas.porchSqFt > 0.5 ? ` + ${Math.round(areas.porchSqFt)} sq ft covered porch` : ''} |`);
   w(`| Front-wall to gable-end ratio | **${ratio} : 1** — the front wall must read ${ratio}× as long as the end wall is wide |`);
   w(`| Wall height | ${fmtFt(d.wallHeightFt)} |`);
   w(`| Floor deck above grade | ${fmtFt(d.floorHeightFt)} |`);
@@ -485,10 +495,10 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   w(`Offsets run left→right as you face each wall from outside; sills are measured`);
   w(`above the floor deck, not above grade.`);
   w();
-  w(`| Wall | Type | Label | Offset | Width | Height | Sill |`);
-  w(`|---|---|---|---|---|---|---|`);
+  w(`| Wall | Type | Label | Offset | Width | Height | Sill | Shutters |`);
+  w(`|---|---|---|---|---|---|---|---|`);
   for (const r of openingSchedule(home)) {
-    w(`| ${r.wallLabel} | ${r.type} | ${r.label} | ${fmtFt(r.offsetFt)} | ${fmtFt(r.widthFt)} | ${fmtFt(r.heightFt)} | ${fmtFt(r.sillFt)} |`);
+    w(`| ${r.wallLabel} | ${r.type} | ${r.label} | ${fmtFt(r.offsetFt)} | ${fmtFt(r.widthFt)} | ${fmtFt(r.heightFt)} | ${fmtFt(r.sillFt)} | ${r.shutters} |`);
   }
   w();
   w(`Per wall: **front** — ${wallSummary(home, 'front')}. **rear** — ${wallSummary(home, 'back')}.`);
@@ -579,7 +589,7 @@ export function buildBrief({ home, scene, framing, site, manifest, savedAt, pass
   w(`>`);
   w(`> Scale: the home spans roughly ${x1} to ${x2} of the image width, and ${ridgeLine}.`);
   w(`>`);
-  w(`> Finish: ${skirtLine}. ${stepsLine}`);
+  w(`> Finish: ${skirtLine}.${guttersLine} ${stepsLine}`);
   w(`>`);
   w(`> Lighting: relight the home to match the lot's ${light}. Neutralize any`);
   w(`> sunlight direction, blue sky reflection, or colour cast carried over from`);

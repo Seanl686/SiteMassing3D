@@ -294,6 +294,11 @@ const RAIL_MAT_ARR = ['pressure_treated', 'white_trim', 'black_metal', 'matching
 const BALUSTER_ARR = ['balusters', 'horizontal_cables', 'open'];
 const RAILINGS_ARR = ['both', 'outer', 'all', 'left', 'right', 'none'];
 
+const SHUTTER_STYLE_LABELS = { louvered: '▤ Louvered', paneled: '▥ Paneled' };
+const SHUTTER_STYLE_ARR = ['louvered', 'paneled'];
+const SHUTTER_COLOR_LABELS = { '#2f3a30': '🟢 Forest', '#1c1c1c': '⬛ Black', '#f2f2f0': '⚪ White', '#5c3a21': '🟤 Brown' };
+const SHUTTER_COLOR_ARR = ['#2f3a30', '#1c1c1c', '#f2f2f0', '#5c3a21'];
+
 function cycleNext(arr, current) {
   const idx = arr.indexOf(current || arr[0]);
   return arr[(idx + 1) % arr.length];
@@ -369,6 +374,25 @@ function buildSummaryPills(summaryEl, o, cb) {
       o.balusterStyle = cycleNext(BALUSTER_ARR, bal);
       cb.onEdit(o, true);
     }));
+  }
+
+  if (o.type !== 'slider') {
+    summaryEl.appendChild(createPill('Shutters', o.shutters ? 'On' : 'Off', () => {
+      o.shutters = !o.shutters;
+      cb.onEdit(o, true);
+    }));
+    if (o.shutters) {
+      const style = o.shutterStyle === 'paneled' ? 'paneled' : 'louvered';
+      summaryEl.appendChild(createPill('Shutter style', SHUTTER_STYLE_LABELS[style], () => {
+        o.shutterStyle = cycleNext(SHUTTER_STYLE_ARR, style);
+        cb.onEdit(o, true);
+      }));
+      const color = o.shutterColor || SHUTTER_COLOR_ARR[0];
+      summaryEl.appendChild(createPill('Shutter colour', SHUTTER_COLOR_LABELS[color] || color, () => {
+        o.shutterColor = cycleNext(SHUTTER_COLOR_ARR, color);
+        cb.onEdit(o, true);
+      }));
+    }
   }
 }
 

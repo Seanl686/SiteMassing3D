@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { Stage } from './scene.js';
 import {
   buildHome, disposeTree, wallFrames, clampOpening, fmtFt, derived, dormerSize,
-  resolveRoofSections,
+  resolveRoofSections, footprintAreas,
 } from './build.js';
 import {
   renderOpeningList, syncOpeningValues, initAccordions,
@@ -25,6 +25,7 @@ import { buildProject, readProject } from './project.js';
 import { exportRenderPackage, buildRenderPackage } from './package.js';
 import { buildBrief } from './brief.js';
 import { measureFraming } from './framing.js';
+import { parseFeet } from './units.js';
 import { loadSitePlan, isPdf } from './siteplan.js';
 import { HOME_PHOTO_SLOTS, homeSlotByKey } from './homephotos.js';
 import {
@@ -421,10 +422,15 @@ function updateHud() {
   const d = state.home.dimensions;
   const dv = derived(d);
   const ratio = (d.lengthFt / d.widthFt).toFixed(2);
+  const areas = footprintAreas(d, state.home.bumps);
+  const areaLine = areas.porchSqFt > 0.5
+    ? `${Math.round(areas.livingSqFt)} sq ft living + ${Math.round(areas.porchSqFt)} sq ft covered porch`
+    : `${Math.round(areas.livingSqFt)} sq ft`;
   $('hud').textContent =
     `${state.home.name}\n` +
     `${fmtFt(d.widthFt)} W × ${fmtFt(d.lengthFt)} L   (front wall reads ${ratio}× the gable end)\n` +
-    `eave ${fmtFt(dv.eaveY)}   ridge ${fmtFt(dv.ridgeY)}   pitch ${d.roofPitch}/12   floor ${fmtFt(d.floorHeightFt)}`;
+    `eave ${fmtFt(dv.eaveY)}   ridge ${fmtFt(dv.ridgeY)}   pitch ${d.roofPitch}/12   floor ${fmtFt(d.floorHeightFt)}\n` +
+    `${areaLine}`;
   $('ratioHint').textContent =
     `Front wall must read ${ratio}× as long as the gable end is wide. Roof ridge ${fmtFt(dv.ridgeY)} above grade.`;
   syncRoofSectionReadouts($('roofSectionList'), resolveRoofSections(d), d);
@@ -2074,7 +2080,7 @@ const dimFields = [
 ];
 const colorFields = [
   ['c_siding', 'siding'], ['c_belowDormerSiding', 'belowDormerSiding'], ['c_dormerSiding', 'dormerSiding'], ['c_gableSiding', 'gableSiding'],
-  ['c_trim', 'trim'], ['c_fascia', 'fascia'], ['c_corner', 'corner'],
+  ['c_trim', 'trim'], ['c_fascia', 'fascia'], ['c_corner', 'corner'], ['c_gutter', 'gutter'],
   ['c_roof', 'roof'], ['c_skirting', 'skirting'], ['c_door', 'door'], ['c_glass', 'glass'],
 ];
 const planFields = [['p_width', 'widthFt'], ['p_rot', 'rotation'], ['p_x', 'offsetX'], ['p_z', 'offsetZ']];
@@ -2246,7 +2252,9 @@ function seedDormerSizes() {
 function syncForm() {
   $('f_name').value = state.home.name;
   for (const [id, key] of dimFields) {
-    if ($(id)) $(id).value = state.home.dimensions[key] ?? '';
+    if (!$(id)) continue;
+    const v = state.home.dimensions[key];
+    $(id).value = $(id).type === 'text' && Number.isFinite(v) ? fmtFt(v) : (v ?? '');
   }
   $('f_roofStyle').value = state.home.dimensions.roofStyle;
   if ($('f_dormerCount')) $('f_dormerCount').value = state.home.dimensions.dormerCount ?? 0;
@@ -2265,6 +2273,12 @@ function syncForm() {
   if ($('f_gableSidingTexture')) $('f_gableSidingTexture').value = state.home.dimensions.gableSidingTexture || state.home.dimensions.sidingTexture || 'horizontal_lap';
   if ($('f_cornerTrim')) $('f_cornerTrim').checked = state.home.dimensions.cornerTrim !== false;
   if ($('f_cornerTrimWidth')) $('f_cornerTrimWidth').value = Math.round((state.home.dimensions.cornerTrimWidthFt ?? 0.5) * 12);
+  if ($('f_gutters')) $('f_gutters').checked = !!state.home.dimensions.gutters;
+  if ($('f_skirtingMaterial')) $('f_skirtingMaterial').value = state.home.dimensions.skirtingMaterial || 'vinyl_panel';
+  if ($('f_skirtingHeight')) {
+    const v = state.home.dimensions.skirtingHeightFt;
+    $('f_skirtingHeight').value = Number.isFinite(v) ? fmtFt(v) : '';
+  }
   if ($('f_fasciaWidth')) $('f_fasciaWidth').value = Math.round((state.home.dimensions.fasciaWidthFt ?? 0.55) * 12);
   if ($('f_stepOverhang')) $('f_stepOverhang').value = state.home.dimensions.stepOverhang || 'raised';
   if ($('f_stepOverhangFt')) $('f_stepOverhangFt').value = state.home.dimensions.stepOverhangFt ?? '';
@@ -2393,7 +2407,7 @@ function bind() {
   for (const [id, key] of dimFields) {
     if (!$(id)) continue;
     $(id).addEventListener('input', (e) => {
-      const v = parseFloat(e.target.value);
+      const v = parseFeet(e.target.value);
       if (Number.isNaN(v)) return; // let the field be empty mid-edit
       state.home.dimensions[key] = v;
       const L = state.home.dimensions.lengthFt || 56;
@@ -2412,6 +2426,15 @@ function bind() {
       }
       rebuild(); syncList(); save(); refreshRoofSections();
     });
+    // Reformat to canonical ft-in once the person is done typing, so `27'4`
+    // comes back as `27'-4"` and confirms the parse rather than leaving the
+    // field showing whatever shorthand was typed.
+    if ($(id).type === 'text') {
+      $(id).addEventListener('blur', (e) => {
+        const v = state.home.dimensions[key];
+        if (Number.isFinite(v)) e.target.value = fmtFt(v);
+      });
+    }
   }
   $('f_roofStyle').addEventListener('change', (e) => {
     state.home.dimensions.roofStyle = e.target.value;
@@ -2571,6 +2594,30 @@ function bind() {
       if (Number.isNaN(inch) || inch <= 0) return;
       state.home.dimensions.cornerTrimWidthFt = inch / 12;
       rebuild(); save();
+    });
+  }
+  if ($('f_gutters')) {
+    $('f_gutters').addEventListener('change', (e) => {
+      state.home.dimensions.gutters = e.target.checked;
+      rebuild(); save();
+    });
+  }
+  if ($('f_skirtingMaterial')) {
+    $('f_skirtingMaterial').addEventListener('change', (e) => {
+      state.home.dimensions.skirtingMaterial = e.target.value;
+      rebuild(); save();
+    });
+  }
+  if ($('f_skirtingHeight')) {
+    $('f_skirtingHeight').addEventListener('input', (e) => {
+      const v = e.target.value.trim();
+      state.home.dimensions.skirtingHeightFt = v === '' ? null : parseFeet(v);
+      if (Number.isNaN(state.home.dimensions.skirtingHeightFt)) return;
+      rebuild(); save();
+    });
+    $('f_skirtingHeight').addEventListener('blur', (e) => {
+      const v = state.home.dimensions.skirtingHeightFt;
+      e.target.value = Number.isFinite(v) ? fmtFt(v) : '';
     });
   }
   if ($('btnStepFront133')) {

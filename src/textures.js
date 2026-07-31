@@ -174,6 +174,133 @@ export function createSidingMaterial(colorHex, style = 'horizontal_lap', opts = 
   return material;
 }
 
+/**
+ * Procedural relief for a skirting style, same colour-independent-multiplier
+ * approach as the siding textures above.
+ * @param {string} style - 'vinyl_panel', 'concrete_block', 'brick', 'stacked_stone', 'lattice'
+ */
+export function generateSkirtingTexture(style) {
+  if (!style || typeof document === 'undefined') return null;
+  const cacheKey = `skirt_${style}`;
+  if (textureCache.has(cacheKey)) return textureCache.get(cacheKey);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, 512, 512);
+
+  const shade = (a) => `rgba(0, 0, 0, ${(a * SHADOW_STRENGTH).toFixed(3)})`;
+  const lite = (a) => `rgba(255, 255, 255, ${(a * HIGHLIGHT_STRENGTH).toFixed(3)})`;
+  let repeatX = 1 / 8;
+  let repeatY = 1 / 4;
+
+  if (style === 'vinyl_panel') {
+    // Narrow vertical ribs, like a ribbed vinyl skirting panel.
+    const ribSpacing = 32;
+    for (let x = 0; x < 512; x += ribSpacing) {
+      ctx.fillStyle = shade(0.35);
+      ctx.fillRect(x, 0, 3, 512);
+      ctx.fillStyle = lite(0.4);
+      ctx.fillRect(x + 3, 0, 2, 512);
+    }
+    repeatX = 1 / 6; repeatY = 1 / 2;
+  } else if (style === 'concrete_block') {
+    const courseH = 64;
+    const blockW = 128;
+    let row = 0;
+    for (let y = 0; y < 512; y += courseH) {
+      const offset = (row % 2 === 0) ? 0 : blockW / 2;
+      for (let x = -offset; x < 512; x += blockW) {
+        ctx.fillStyle = shade(0.6);
+        ctx.strokeStyle = shade(0.6);
+        ctx.lineWidth = 3;
+        ctx.strokeRect(x, y, blockW, courseH);
+      }
+      row++;
+    }
+    repeatX = 1 / 4; repeatY = 1 / 3;
+  } else if (style === 'brick') {
+    const courseH = 32;
+    const brickW = 96;
+    let row = 0;
+    for (let y = 0; y < 512; y += courseH) {
+      const offset = (row % 2 === 0) ? 0 : brickW / 2;
+      for (let x = -offset; x < 512; x += brickW) {
+        ctx.fillStyle = shade(0.55);
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, brickW, courseH);
+      }
+      ctx.fillStyle = lite(0.15);
+      ctx.fillRect(0, y, 512, 1);
+      row++;
+    }
+    repeatX = 1 / 3; repeatY = 1 / 3;
+  } else if (style === 'stacked_stone') {
+    // Irregular coursing built from a pseudo-random but repeatable pattern.
+    let seed = 7;
+    const rand = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+    let y = 0;
+    while (y < 512) {
+      const rowH = 40 + Math.floor(rand() * 40);
+      let x = 0;
+      while (x < 512) {
+        const w = 50 + Math.floor(rand() * 90);
+        ctx.fillStyle = shade(0.3 + rand() * 0.3);
+        ctx.fillRect(x, y, Math.min(w, 512 - x) - 4, rowH - 4);
+        ctx.fillStyle = lite(0.2);
+        ctx.fillRect(x, y, Math.min(w, 512 - x) - 4, 2);
+        x += w;
+      }
+      y += rowH;
+    }
+    repeatX = 1 / 4; repeatY = 1 / 2;
+  } else if (style === 'lattice') {
+    // Diagonal crosshatch — the visual read of a lattice panel; the mesh
+    // stays solid, this is a stand-in until real pierced geometry exists.
+    ctx.fillStyle = shade(0.5);
+    const step = 24;
+    for (let i = -512; i < 512 * 2; i += step) {
+      ctx.fillRect(i, 0, 4, 512 * 1.5);
+    }
+    ctx.save();
+    ctx.translate(256, 256);
+    ctx.rotate(Math.PI / 4);
+    ctx.translate(-256, -256);
+    ctx.fillStyle = shade(0.5);
+    for (let i = -512; i < 512 * 2; i += step) {
+      ctx.fillRect(i, -256, 4, 1024);
+    }
+    ctx.restore();
+    repeatX = 1 / 3; repeatY = 1 / 3;
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.repeat.set(repeatX, repeatY);
+  textureCache.set(cacheKey, texture);
+  return texture;
+}
+
+export function createSkirtingMaterial(colorHex, style = 'vinyl_panel', opts = {}) {
+  const cacheKey = `skirt_${style}_${colorHex}_${opts.roughness || 0.9}`;
+  if (materialCache.has(cacheKey)) return materialCache.get(cacheKey);
+
+  const texture = generateSkirtingTexture(style);
+  const matConfig = {
+    color: new THREE.Color(colorHex || '#e6e6e1'),
+    roughness: opts.roughness ?? (style === 'vinyl_panel' ? 0.7 : 0.92),
+    metalness: 0,
+  };
+  if (texture) matConfig.map = texture;
+  const material = new THREE.MeshStandardMaterial(matConfig);
+  materialCache.set(cacheKey, material);
+  return material;
+}
+
 export function clearMaterialCache() {
   // Textures are shared between materials now, so they are disposed from their
   // own cache rather than through whichever material happened to hold one.

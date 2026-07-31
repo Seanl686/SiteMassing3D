@@ -1,7 +1,7 @@
 // Offscreen-size rendering and PNG export.
 
 import * as THREE from 'three';
-import { fmtFt } from './build.js';
+import { fmtFt, footprintAreas } from './build.js';
 import { writeToOutputFolder } from './outdir.js';
 
 export function slug(s) {
@@ -211,7 +211,8 @@ export function caption(home, viewName, filename) {
   const d = home.dimensions;
   const modelName = home?.name || 'Untitled Model';
   const fname = filename || getExportFilename(home, viewName);
-  return `${modelName}  ·  File: ${fname}  ·  ${fmtFt(d.widthFt)} × ${fmtFt(d.lengthFt)}  ·  1:1 EXACT POSITION REF  ·  ${viewName}`;
+  const sqft = Math.round(footprintAreas(d, home.bumps).livingSqFt);
+  return `${modelName}  ·  File: ${fname}  ·  ${fmtFt(d.widthFt)} × ${fmtFt(d.lengthFt)} (${sqft} sq ft)  ·  1:1 EXACT POSITION REF  ·  ${viewName}`;
 }
 
 export function burnCaption(canvas, text, position = 'bottom-left') {
