@@ -2062,6 +2062,7 @@ function bindPackage() {
 const dimFields = [
   ['f_width', 'widthFt'], ['f_length', 'lengthFt'],
   ['f_frontLength', 'frontLengthFt'], ['f_backLength', 'backLengthFt'],
+  ['f_frontSetback', 'frontSetbackFt'], ['f_backSetback', 'backSetbackFt'],
   ['f_wallHeight', 'wallHeightFt'],
   ['f_floorHeight', 'floorHeightFt'], ['f_pitch', 'roofPitch'],
   ['f_eaveOverhang', 'eaveOverhangFt'], ['f_rakeOverhang', 'rakeOverhangFt'],
@@ -2390,11 +2391,21 @@ function bind() {
   $('f_name').addEventListener('input', (e) => { state.home.name = e.target.value; updateHud(); save(); });
 
   for (const [id, key] of dimFields) {
+    if (!$(id)) continue;
     $(id).addEventListener('input', (e) => {
       const v = parseFloat(e.target.value);
       if (Number.isNaN(v)) return; // let the field be empty mid-edit
       state.home.dimensions[key] = v;
-      rebuild(); syncList();
+      if (key === 'frontSetbackFt') {
+        const L = state.home.dimensions.lengthFt || 56;
+        state.home.dimensions.frontLengthFt = Math.round((L - v) * 100) / 100;
+        if ($('f_frontLength')) $('f_frontLength').value = state.home.dimensions.frontLengthFt;
+      } else if (key === 'frontLengthFt') {
+        const L = state.home.dimensions.lengthFt || 56;
+        state.home.dimensions.frontSetbackFt = Math.round((L - v) * 100) / 100;
+        if ($('f_frontSetback')) $('f_frontSetback').value = state.home.dimensions.frontSetbackFt;
+      }
+      rebuild(); syncList(); save();
     });
   }
   $('f_roofStyle').addEventListener('change', (e) => {
@@ -2557,19 +2568,38 @@ function bind() {
       rebuild(); save();
     });
   }
-  if ($('btnStepHalf267')) {
-    $('btnStepHalf267').addEventListener('click', () => {
+  if ($('btnStepFront133')) {
+    $('btnStepFront133').addEventListener('click', () => {
       const dim = state.home.dimensions;
-      dim.frontLengthFt = 56.0;
-      if ($('f_frontLength')) $('f_frontLength').value = 56.0;
+      dim.frontSetbackFt = 1.33;
+      dim.frontLengthFt = Math.round((dim.lengthFt - 1.33) * 100) / 100;
+      if ($('f_frontSetback')) $('f_frontSetback').value = 1.33;
+      if ($('f_frontLength')) $('f_frontLength').value = dim.frontLengthFt;
       rebuild(); save();
     });
   }
-  if ($('btnStepHalf6')) {
-    $('btnStepHalf6').addEventListener('click', () => {
+  if ($('btnStepFront267')) {
+    $('btnStepFront267').addEventListener('click', () => {
       const dim = state.home.dimensions;
-      dim.frontLengthFt = 50.0;
-      if ($('f_frontLength')) $('f_frontLength').value = 50.0;
+      dim.frontSetbackFt = 2.67;
+      dim.frontLengthFt = Math.round((dim.lengthFt - 2.67) * 100) / 100;
+      if ($('f_frontSetback')) $('f_frontSetback').value = 2.67;
+      if ($('f_frontLength')) $('f_frontLength').value = dim.frontLengthFt;
+      rebuild(); save();
+    });
+  }
+  if ($('btnResetHalves')) {
+    $('btnResetHalves').addEventListener('click', () => {
+      const dim = state.home.dimensions;
+      dim.frontSetbackFt = 0;
+      dim.backSetbackFt = 0;
+      dim.frontLengthFt = null;
+      dim.backLengthFt = null;
+      dim.roofSections = [];
+      if ($('f_frontSetback')) $('f_frontSetback').value = '';
+      if ($('f_backSetback')) $('f_backSetback').value = '';
+      if ($('f_frontLength')) $('f_frontLength').value = '';
+      if ($('f_backLength')) $('f_backLength').value = '';
       rebuild(); save();
     });
   }

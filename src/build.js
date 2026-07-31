@@ -223,8 +223,10 @@ export function roofTopAt(sec, z) {
  */
 export function resolveRoofSections(dim) {
   const L = num(dim.lengthFt, 56);
-  const lenF = num(dim.frontLengthFt, L);
-  const lenB = num(dim.backLengthFt, L);
+  const sbF = num(dim.frontSetbackFt, 0);
+  const sbB = num(dim.backSetbackFt, 0);
+  const lenF = num(dim.frontLengthFt, sbF > 0 ? L - sbF : L);
+  const lenB = num(dim.backLengthFt, sbB > 0 ? L - sbB : L);
   const F = num(dim.floorHeightFt, 0);
 
   const raw = (Array.isArray(dim.roofSections) ? dim.roofSections : [])
