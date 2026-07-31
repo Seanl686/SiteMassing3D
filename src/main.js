@@ -3094,6 +3094,7 @@ const ray = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 let drag = null;
 let dormerDrag = null;  // { index, startX, startPosX }
+let wallDrag = null;    // { wall, bumpId, startPoint, startDim, startBumps }
 
 function setRay(ev) {
   const r = canvas.getBoundingClientRect();
@@ -3110,6 +3111,16 @@ const findDormerIndex = (obj) => {
   for (let o = obj; o; o = o.parent) {
     if (o.userData?.dormerIndex !== undefined) return o.userData.dormerIndex;
   }
+  return null;
+};
+
+const findWallName = (obj) => {
+  for (let o = obj; o; o = o.parent) if (o.userData?.wall) return o.userData.wall;
+  return null;
+};
+
+const findBumpId = (obj) => {
+  for (let o = obj; o; o = o.parent) if (o.userData?.bump) return o.userData.bump;
   return null;
 };
 
@@ -3206,6 +3217,30 @@ function onPick(ev) {
     return beginDrag(o, 'move');
   }
 
+  // Check wall or bump pick for interactive wall/footprint dragging
+  const wallHitObj = hits.find((h) => findWallName(h.object) || findBumpId(h.object));
+  if (wallHitObj && !pendingAdd && !planPick) {
+    const wallName = findWallName(wallHitObj.object);
+    const bumpId = findBumpId(wallHitObj.object);
+    if (wallName || bumpId) {
+      const hitPoint = wallHitObj.point.clone();
+      wallDrag = {
+        wall: wallName,
+        bumpId: bumpId,
+        startClientX: ev.clientX,
+        startClientY: ev.clientY,
+        startDim: { ...state.home.dimensions },
+        startBumps: JSON.parse(JSON.stringify(state.home.bumps || [])),
+        startPoint: hitPoint,
+      };
+      stage.controls.enabled = false;
+      stage.orthoControls.enabled = false;
+      canvas.style.cursor = bumpId ? 'move' : (wallName === 'front' || wallName === 'back' ? 'ns-resize' : 'ew-resize');
+      ev.preventDefault();
+      return;
+    }
+  }
+
   if (selectedIds.size) clearSelection();
 }
 
@@ -3226,6 +3261,61 @@ function beginDrag(o, mode) {
 }
 
 function onMove(ev) {
+  // Wall / footprint drag
+  if (wallDrag) {
+    const dim = state.home.dimensions;
+    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -dim.floorHeightFt);
+    setRay(ev);
+    const target = new THREE.Vector3();
+    if (!ray.ray.intersectPlane(groundPlane, target)) return;
+
+    const dx = target.x - wallDrag.startPoint.x;
+    const dz = target.z - wallDrag.startPoint.z;
+
+    if (wallDrag.bumpId) {
+      const b = (state.home.bumps || []).find((x) => x.id === wallDrag.bumpId);
+      const startB = wallDrag.startBumps.find((x) => x.id === wallDrag.bumpId);
+      if (b && startB) {
+        if (b.wall === 'front') {
+          b.offsetFt = Math.max(0, roundQuarter(startB.offsetFt - dx));
+          const isOut = isProjecting(startB);
+          b.depthFt = roundQuarter(startB.depthFt + (isOut ? -dz : dz));
+        } else if (b.wall === 'back') {
+          b.offsetFt = Math.max(0, roundQuarter(startB.offsetFt + dx));
+          const isOut = isProjecting(startB);
+          b.depthFt = roundQuarter(startB.depthFt + (isOut ? dz : -dz));
+        } else if (b.wall === 'left') {
+          b.offsetFt = Math.max(0, roundQuarter(startB.offsetFt + dz));
+          const isOut = isProjecting(startB);
+          b.depthFt = roundQuarter(startB.depthFt + (isOut ? -dx : dx));
+        } else if (b.wall === 'right') {
+          b.offsetFt = Math.max(0, roundQuarter(startB.offsetFt - dz));
+          const isOut = isProjecting(startB);
+          b.depthFt = roundQuarter(startB.depthFt + (isOut ? dx : -dx));
+        }
+        clampBump(b, dim);
+        renderBumpList();
+        queueRebuild();
+        return;
+      }
+    } else if (wallDrag.wall) {
+      const w = wallDrag.wall;
+      if (w === 'front') {
+        dim.widthFt = Math.max(12, roundQuarter(wallDrag.startDim.widthFt - dz * 2));
+      } else if (w === 'back') {
+        dim.widthFt = Math.max(12, roundQuarter(wallDrag.startDim.widthFt + dz * 2));
+      } else if (w === 'left') {
+        dim.lengthFt = Math.max(16, roundQuarter(wallDrag.startDim.lengthFt - dx * 2));
+      } else if (w === 'right') {
+        dim.lengthFt = Math.max(16, roundQuarter(wallDrag.startDim.lengthFt + dx * 2));
+      }
+      if ($('f_length')) $('f_length').value = dim.lengthFt;
+      if ($('f_width')) $('f_width').value = dim.widthFt;
+      queueRebuild();
+      return;
+    }
+  }
+
   // Dormer drag — project screen-space delta onto the world X axis.
   if (dormerDrag) {
     const dim = state.home.dimensions;
@@ -3280,12 +3370,21 @@ function onMove(ev) {
   }
 
   if (!drag) {
-    if (!selectedId || ev.target !== canvas) return;
+    if (ev.target !== canvas) return;
     setRay(ev);
     const mode = gizmo.pick(ray);
     gizmo.highlight(mode);
-    if (mode) canvas.style.cursor = (mode === 'left' || mode === 'right') ? 'ew-resize' : 'ns-resize';
-    else if (!pendingAdd && !$('sp_dragMode')?.checked) canvas.style.cursor = '';
+    if (mode) {
+      canvas.style.cursor = (mode === 'left' || mode === 'right') ? 'ew-resize' : 'ns-resize';
+    } else if (!pendingAdd && !$('sp_dragMode')?.checked) {
+      const hits = ray.intersectObjects(stage.homeGroup.children, true);
+      const bumpId = hits.map((h) => findBumpId(h.object)).find(Boolean);
+      const wallName = hits.map((h) => findWallName(h.object)).find(Boolean);
+      if (bumpId) canvas.style.cursor = 'move';
+      else if (wallName === 'front' || wallName === 'back') canvas.style.cursor = 'ns-resize';
+      else if (wallName === 'left' || wallName === 'right') canvas.style.cursor = 'ew-resize';
+      else canvas.style.cursor = '';
+    }
     return;
   }
 
@@ -3310,6 +3409,17 @@ function onMove(ev) {
 }
 
 function onUp() {
+  if (wallDrag) {
+    wallDrag = null;
+    stage.controls.enabled = stage.camera !== stage.ortho;
+    stage.orthoControls.enabled = stage.camera === stage.ortho;
+    canvas.style.cursor = '';
+    syncForm();
+    rebuild();
+    save();
+    return;
+  }
+
   if (dormerDrag) {
     dormerDrag = null;
     stage.controls.enabled = stage.camera !== stage.ortho;
