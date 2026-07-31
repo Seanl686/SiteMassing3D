@@ -2,15 +2,21 @@
 
 import * as THREE from 'three';
 import { Stage } from './scene.js';
-import { buildHome, disposeTree, wallFrames, clampOpening, fmtFt, derived, dormerSize } from './build.js';
-import { renderOpeningList, syncOpeningValues, initAccordions } from './ui.js';
+import {
+  buildHome, disposeTree, wallFrames, clampOpening, fmtFt, derived, dormerSize,
+  resolveRoofSections,
+} from './build.js';
+import {
+  renderOpeningList, syncOpeningValues, initAccordions,
+  renderRoofSectionList, syncRoofSectionReadouts,
+} from './ui.js';
 import { updatePlanPlate, nearestWallHit } from './plan.js';
 import { Gizmo, wallPlaneHit, applyDrag } from './gizmo.js';
 import { shoot, contactSheet, renderToCanvas, saveWithPicker } from './capture.js';
 import {
   supportsOutputFolder, chooseOutputFolder, clearOutputFolder, outputFolderName,
 } from './outdir.js';
-import { defaultHome, defaultScene, defaultExport, nextId, OPENING_PRESETS, migrate } from './defaults.js';
+import { defaultHome, defaultScene, defaultExport, nextId, OPENING_PRESETS, migrate, newRoofSection } from './defaults.js';
 import {
   defaultBump, clampBump, BUMP_ROOFS, BUMP_ROOF_LABEL, BUMP_KIND_LABEL, isRecess,
 } from './bumps.js';
@@ -420,6 +426,7 @@ function updateHud() {
     `eave ${fmtFt(dv.eaveY)}   ridge ${fmtFt(dv.ridgeY)}   pitch ${d.roofPitch}/12   floor ${fmtFt(d.floorHeightFt)}`;
   $('ratioHint').textContent =
     `Front wall must read ${ratio}× as long as the gable end is wide. Roof ridge ${fmtFt(dv.ridgeY)} above grade.`;
+  syncRoofSectionReadouts($('roofSectionList'), resolveRoofSections(d), d);
   if ($('ridgeHint')) {
     const parts = [];
     if (dv.split) {
@@ -435,6 +442,33 @@ function updateHud() {
     }
     $('ridgeHint').textContent = parts.join(' ');
   }
+}
+
+/** Rebuild the roof-section editor from the current dimensions. */
+function refreshRoofSections() {
+  const list = $('roofSectionList');
+  if (!list) return;
+  const dim = state.home.dimensions;
+  renderRoofSectionList(list, dim, resolveRoofSections(dim), {
+    onEdit: () => {
+      rebuild();
+      save();
+      // Only the resolved numbers move as you type; the rows stay put so the
+      // caret never jumps out of the field being edited — unless a start offset
+      // has just reordered the sections, which needs the rows rebuilt.
+      if (syncRoofSectionReadouts(list, resolveRoofSections(dim), dim)) refreshRoofSections();
+    },
+    onDelete: (id) => {
+      dim.roofSections = (dim.roofSections || []).filter((s) => s.id !== id);
+      // Whatever survives has to start at the left end, and a lone survivor
+      // keeps its overrides rather than collapsing back to the base roof.
+      const first = dim.roofSections.slice().sort((a, b) => a.startFt - b.startFt)[0];
+      if (first) first.startFt = 0;
+      rebuild();
+      save();
+      refreshRoofSections();
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -505,6 +539,7 @@ function applyReadSpec(result, source) {
   syncForm();
   rebuild();
   refreshList();
+  refreshRoofSections();
   stage.setView('hero-left', state.home.dimensions, state.scene);
   currentViewName = '¾ front-L';
   updateFramingReadout();
@@ -2213,6 +2248,10 @@ function syncForm() {
   if ($('f_cornerTrim')) $('f_cornerTrim').checked = state.home.dimensions.cornerTrim !== false;
   if ($('f_cornerTrimWidth')) $('f_cornerTrimWidth').value = Math.round((state.home.dimensions.cornerTrimWidthFt ?? 0.5) * 12);
   if ($('f_fasciaWidth')) $('f_fasciaWidth').value = Math.round((state.home.dimensions.fasciaWidthFt ?? 0.55) * 12);
+  if ($('f_stepOverhang')) $('f_stepOverhang').value = state.home.dimensions.stepOverhang || 'raised';
+  if ($('f_stepOverhangFt')) $('f_stepOverhangFt').value = state.home.dimensions.stepOverhangFt ?? '';
+  if ($('f_stepRakeFascia')) $('f_stepRakeFascia').checked = state.home.dimensions.stepRakeFascia !== false;
+  if ($('f_endRakeFascia')) $('f_endRakeFascia').checked = !!state.home.dimensions.endRakeFascia;
   if ($('f_ridgeOverhang')) $('f_ridgeOverhang').value = state.home.dimensions.ridgeOverhang || 'raised';
   if ($('f_ridgeOverhangFt')) $('f_ridgeOverhangFt').value = state.home.dimensions.ridgeOverhangFt ?? '';
   syncHeadAlignRows();
@@ -2497,6 +2536,62 @@ function bind() {
       const inch = parseFloat(e.target.value);
       if (Number.isNaN(inch) || inch <= 0) return;
       state.home.dimensions.cornerTrimWidthFt = inch / 12;
+      rebuild(); save();
+    });
+  }
+  if ($('btnAddRoofSection')) {
+    $('btnAddRoofSection').addEventListener('click', () => {
+      const dim = state.home.dimensions;
+      const list = Array.isArray(dim.roofSections) ? dim.roofSections : [];
+      if (!list.length) {
+        // Splitting the single implicit roof gives two halves, both inheriting
+        // everything, so nothing moves until a field is actually changed.
+        dim.roofSections = [
+          newRoofSection(0, 'Left half'),
+          newRoofSection(Math.round(dim.lengthFt / 2 * 4) / 4, 'Right half'),
+        ];
+      } else {
+        const sorted = list.slice().sort((a, b) => a.startFt - b.startFt);
+        const last = sorted[sorted.length - 1].startFt;
+        const start = Math.min(dim.lengthFt - 1, Math.round((last + dim.lengthFt) / 2 * 4) / 4);
+        if (start - last < 1) {
+          alert('No room left for another section — widen the home or move a section start.');
+          return;
+        }
+        dim.roofSections = [...list, newRoofSection(start, `Section ${list.length + 1}`)];
+      }
+      rebuild(); save(); refreshRoofSections();
+    });
+  }
+  if ($('btnResetRoofSections')) {
+    $('btnResetRoofSections').addEventListener('click', () => {
+      state.home.dimensions.roofSections = [];
+      rebuild(); save(); refreshRoofSections();
+    });
+  }
+  if ($('f_stepOverhang')) {
+    $('f_stepOverhang').addEventListener('change', (e) => {
+      state.home.dimensions.stepOverhang = e.target.value;
+      rebuild(); save();
+    });
+  }
+  if ($('f_stepOverhangFt')) {
+    $('f_stepOverhangFt').addEventListener('input', (e) => {
+      const raw = e.target.value.trim();
+      // Blank falls back to the rake overhang, which is not the same as 0.
+      if (raw === '') state.home.dimensions.stepOverhangFt = null;
+      else {
+        const v = parseFloat(raw);
+        if (Number.isNaN(v)) return;
+        state.home.dimensions.stepOverhangFt = v;
+      }
+      rebuild(); save();
+    });
+  }
+  for (const [id, key] of [['f_stepRakeFascia', 'stepRakeFascia'], ['f_endRakeFascia', 'endRakeFascia']]) {
+    if (!$(id)) continue;
+    $(id).addEventListener('change', (e) => {
+      state.home.dimensions[key] = e.target.checked;
       rebuild(); save();
     });
   }
@@ -2850,7 +2945,7 @@ function bind() {
     selectedId = null;
     selectedIds.clear();
     gizmo.clear();
-    syncForm(); rebuild(); refreshList();
+    syncForm(); rebuild(); refreshList(); refreshRoofSections();
     updatePlanPlate(stage, state.home.plan);
     stage.setView('hero-left', state.home.dimensions, state.scene);
   });
@@ -3523,6 +3618,7 @@ syncForm();
 bind();
 rebuild();
 refreshList();
+refreshRoofSections();
 assetsChanged();
 fit();
 convertPhotoPanBasis();

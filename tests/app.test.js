@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { defaultHome, defaultScene, defaultExport, defaultBrief, migrate, WALLS } from '../src/defaults.js';
+import {
+  defaultHome, defaultScene, defaultExport, defaultBrief, migrate, WALLS, newRoofSection,
+} from '../src/defaults.js';
 import { zipStore, crc32, dataUrlToBytes, dataUrlExt } from '../src/zip.js';
 import {
   buildBrief, colorName, sidingLabel, describeLighting, wallSummary, openingSchedule, ACCESSORIES,
@@ -13,7 +15,10 @@ import {
 import {
   HOME_PHOTO_SLOTS, homeSlotByKey, readHomePhotos, filledHomePhotos, unphotographedWalls,
 } from '../src/homephotos.js';
-import { derived, wallFrames, fmtAllUnits, buildHome, getWallHeight, dormerSize, applyHeadAlign } from '../src/build.js';
+import {
+  derived, wallFrames, fmtAllUnits, buildHome, getWallHeight, dormerSize, applyHeadAlign,
+  resolveRoofSections, roofTopAt,
+} from '../src/build.js';
 import {
   readBumps, clampBump, footprintExtents, bumpFootprint, wallBands, isRecess, defaultBump,
 } from '../src/bumps.js';
@@ -2018,4 +2023,152 @@ test('73. Fascia and corner boards take their own colour and width', () => {
   assert.equal(legacy.colors.corner, '#123456', 'Corner boards inherit it too');
   assert.equal(migrate({ colors: { trim: '#123456', fascia: '#000000' } }).colors.fascia, '#000000',
     'An explicit fascia colour survives the load');
+});
+
+/** Two roof sections: a plain left half and a taller, steeper right half. */
+function sectionedHome() {
+  const home = defaultHome();
+  home.dimensions.roofSections = [
+    newRoofSection(0, 'Left half'),
+    { ...newRoofSection(28, 'Right half'), pitch: 9, frontWallHeightFt: 11, backWallHeightFt: 11 },
+  ];
+  return home;
+}
+
+test('74. Roof sections give one part of the home its own pitch and peak', () => {
+  const plain = resolveRoofSections(defaultHome().dimensions);
+  assert.equal(plain.length, 1, 'No sections declared means one roof over the whole length');
+  assert.ok(near(plain[0].x0, -28) && near(plain[0].x1, 28), 'Covering the full length');
+
+  const dim = sectionedHome().dimensions;
+  const secs = resolveRoofSections(dim);
+  assert.equal(secs.length, 2);
+  assert.ok(near(secs[0].x0, -28) && near(secs[0].x1, 0), 'Left section covers the left half');
+  assert.ok(near(secs[1].x0, 0) && near(secs[1].x1, 28), 'Right section covers the right half');
+
+  // Section 0 inherits everything; section 1 overrides pitch and both eaves.
+  assert.ok(near(secs[0].slopeFront, 4 / 12), 'Left half inherits the 4/12 roof');
+  assert.ok(near(secs[0].eaveYFront, 10.5), 'And the 8 ft walls');
+  assert.ok(near(secs[1].slopeFront, 9 / 12), 'Right half runs its own 9/12');
+  assert.ok(near(secs[1].eaveYFront, 13.5), 'On its own 11 ft walls');
+  assert.ok(near(secs[0].topY, 10.5 + 13.5 * (4 / 12)));
+  assert.ok(near(secs[1].topY, 13.5 + 13.5 * (9 / 12)));
+  assert.ok(secs[1].topY > secs[0].topY + 5, 'So the right half stands well above the left');
+
+  // The whole-roof view still reports the tallest section, which is what the
+  // camera and the export framing read.
+  const dv = derived(dim);
+  assert.ok(near(dv.ridgeY, secs[1].topY), 'ridgeY is the tallest section');
+  assert.ok(dv.sectioned, 'and the roof knows it is sectioned');
+  // While the legacy keys keep describing the first section, so everything that
+  // read them before sections existed still reads what it expects.
+  assert.ok(near(dv.slopeFront, secs[0].slopeFront));
+  assert.ok(near(dv.eaveYFront, secs[0].eaveYFront));
+
+  // A section thinner than a foot is a slip of the mouse, not geometry.
+  assert.equal(resolveRoofSections({ ...dim, roofSections: [newRoofSection(0), newRoofSection(0.25)] }).length, 1);
+});
+
+test('75. Walls follow the sections: long walls step, gable ends take their own end', () => {
+  const home = sectionedHome();
+  const dim = home.dimensions;
+  const secs = resolveRoofSections(dim);
+  const root = buildHome(home, defaultScene());
+  root.updateMatrixWorld(true);
+  const wall = (n) => new THREE.Box3().setFromObject(root.children.find((c) => c.name === `wall:${n}`));
+
+  // The long walls rise to the taller section's eave, and the plain home does
+  // not — which is the step.
+  assert.ok(near(wall('front').max.y, 13.5, 1e-3), 'Front wall reaches the raised section eave');
+  const flatRoot = buildHome(defaultHome(), defaultScene());
+  flatRoot.updateMatrixWorld(true);
+  assert.ok(near(new THREE.Box3().setFromObject(
+    flatRoot.children.find((c) => c.name === 'wall:front')).max.y, 10.5, 1e-3),
+    'An unsectioned home keeps one eave line');
+
+  // Each gable end is capped by the section that reaches it, not by the first.
+  assert.ok(near(wall('left').max.y, secs[0].ridgePeakY, 1e-3), 'Left end takes the left section peak');
+  assert.ok(near(wall('right').max.y, secs[1].ridgePeakY, 1e-3), 'Right end takes the right section peak');
+  assert.ok(wall('right').max.y > wall('left').max.y + 5, 'Which are not the same height');
+
+  // Corner boards die into the eave of the section at their own corner.
+  const trim = root.children.find((c) => c.name === 'cornerTrim');
+  const tops = trim.children.map((b) => new THREE.Box3().setFromObject(b).max.y);
+  assert.ok(near(Math.min(...tops), 10.5, 1e-3), 'Boards at the low end stop at 8 ft of wall');
+  assert.ok(near(Math.max(...tops), 13.5, 1e-3), 'Boards at the raised end run to 11 ft');
+});
+
+test('76. A raised section walls in the gap and carries its overhang past the step', () => {
+  const home = sectionedHome();
+  const roofOf = (h) => buildHome(h, defaultScene()).children.find((c) => c.name === 'roof');
+  const roof = roofOf(home);
+
+  assert.ok(roof.children.find((c) => c.name === 'roofSection:0'), 'First section built');
+  assert.ok(roof.children.find((c) => c.name === 'roofSection:1'), 'Second section built');
+  assert.ok(roof.children.find((c) => c.name === 'roofTransition:0'),
+    'Wall built to close the gap where the two roofs disagree');
+
+  const frontPlane = (r, i) => r.children.find((c) => c.name === `roofSection:${i}`)
+    .children.find((c) => c.name === 'roofPlane:front');
+  // The raised section reaches 0.75 ft past the boundary and past its gable
+  // end; the low one only has its gable end to reach past.
+  assert.ok(near(frontPlane(roof, 1).geometry.parameters.width, 28 + 0.75 * 2),
+    'Raised section overhangs both of its ends');
+  assert.ok(near(frontPlane(roof, 0).geometry.parameters.width, 28 + 0.75),
+    'Low section butts against the step');
+
+  const butt = roofOf({ ...home, dimensions: { ...home.dimensions, stepOverhang: 'none' } });
+  assert.ok(near(frontPlane(butt, 1).geometry.parameters.width, 28 + 0.75), 'Switched off, it butts');
+  const both = roofOf({ ...home, dimensions: { ...home.dimensions, stepOverhang: 'both' } });
+  assert.ok(near(frontPlane(both, 0).geometry.parameters.width, 28 + 0.75 * 2),
+    'Both sides of the step overhang when asked');
+
+  // Sections that resolve to the same roof need no wall between them.
+  const same = roofOf({
+    ...home,
+    dimensions: { ...home.dimensions, roofSections: [newRoofSection(0), newRoofSection(28)] },
+  });
+  assert.ok(!same.children.some((c) => c.name?.startsWith('roofTransition')),
+    'No transition wall when the two sections match');
+
+  // An unsectioned home keeps the roof tree it has always had, so anything
+  // that looks a roof part up by name still finds it.
+  const plain = roofOf(defaultHome());
+  assert.ok(!plain.children.some((c) => c.name?.startsWith('roofSection:')),
+    'One section is not nested');
+  assert.ok(plain.children.some((c) => c.name === 'eaveFascia'), 'Its fascia sits directly on the roof');
+});
+
+test('77. Roof sections survive a save and a hand-written file', () => {
+  const migrated = migrate({
+    name: 'Split',
+    dimensions: {
+      lengthFt: 60,
+      // Out of order, with blank and stringy fields, as hand-written JSON arrives.
+      roofSections: [
+        { startFt: 30, pitch: '6', pitchBack: '' },
+        { startFt: 0, label: 'Left' },
+        'nonsense',
+      ],
+    },
+  });
+  const secs = migrated.dimensions.roofSections;
+  assert.equal(secs.length, 2, 'Junk entries dropped');
+  assert.equal(secs[0].startFt, 0, 'Sorted by start offset');
+  assert.ok(secs[0].id && secs[1].id, 'Every section carries an id');
+  assert.equal(secs[1].pitch, 6, 'Numeric strings coerced');
+  assert.equal(secs[1].pitchBack, null, 'Blank means inherit, not zero');
+
+  // A home saved before sections existed still loads as one plain roof.
+  const legacy = migrate({ dimensions: { lengthFt: 50, widthFt: 24, roofPitch: 5 } });
+  assert.deepEqual(legacy.dimensions.roofSections, [], 'Legacy homes carry no sections');
+  assert.equal(resolveRoofSections(legacy.dimensions).length, 1);
+
+  // And a sectioned home round-trips unchanged.
+  const home = sectionedHome();
+  const again = migrate(JSON.parse(JSON.stringify(home)));
+  assert.equal(again.dimensions.roofSections.length, 2);
+  assert.equal(again.dimensions.roofSections[1].pitch, 9);
+  assert.equal(again.dimensions.roofSections[1].frontWallHeightFt, 11);
+  assert.ok(near(resolveRoofSections(again.dimensions)[1].topY, resolveRoofSections(home.dimensions)[1].topY));
 });

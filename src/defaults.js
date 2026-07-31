@@ -51,6 +51,17 @@ export function defaultHome() {
       // would read off the board. Corner boards have their own width already,
       // in `cornerTrimWidthFt` below.
       fasciaWidthFt: 0.55,
+      // Roof sections along the LENGTH. Empty = one roof over the whole home.
+      // Each entry: { id, label, startFt, pitch, pitchBack, ridgeOffsetFt,
+      //   ridgeStepFt, frontWallHeightFt, backWallHeightFt, roofStyle } — every
+      //   field but startFt may be null to inherit the whole-home value.
+      roofSections: [],
+      // Where one section's roof stands above the next it has nothing to butt
+      // against, so it carries its overhang past the boundary.
+      stepOverhang: 'raised',   // 'none' (butt), 'raised' (tall side), 'both'
+      stepOverhangFt: null,     // ft past the boundary; null = rakeOverhangFt
+      stepRakeFascia: true,     // board along a step overhang's raked edge
+      endRakeFascia: false,     // the same board on the outer gable-end rakes
       eaveOverhangFt: 1.0,   // horizontal overhang past the long walls
       rakeOverhangFt: 0.75,  // horizontal overhang past the gable ends
       roofStyle: 'gable',
@@ -197,11 +208,45 @@ function normalizeDormerSizes(raw) {
   });
 }
 
+const SECTION_NUMS = [
+  'startFt', 'pitch', 'pitchBack', 'ridgeOffsetFt', 'ridgeStepFt',
+  'frontWallHeightFt', 'backWallHeightFt',
+];
+
+/** A roof section inheriting everything but where it starts. */
+export function newRoofSection(startFt = 0, label = '') {
+  return {
+    id: nextId('rs'), label, startFt,
+    pitch: null, pitchBack: null, ridgeOffsetFt: null, ridgeStepFt: null,
+    frontWallHeightFt: null, backWallHeightFt: null, roofStyle: null,
+  };
+}
+
+/** Coerce whatever a JSON file offers into well-formed section records. */
+export function normalizeRoofSections(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((s) => s && typeof s === 'object')
+    .map((s) => {
+      const out = { ...newRoofSection(0), ...s, id: s.id || nextId('rs') };
+      for (const k of SECTION_NUMS) {
+        const v = s[k];
+        out[k] = v === null || v === undefined || v === '' || Number.isNaN(+v) ? null : +v;
+      }
+      out.startFt = out.startFt ?? 0;
+      out.roofStyle = s.roofStyle || null;
+      out.label = s.label || '';
+      return out;
+    })
+    .sort((a, b) => a.startFt - b.startFt);
+}
+
 export function migrate(home) {
   const base = defaultHome();
   const dimensions = { ...base.dimensions, ...(home.dimensions || {}) };
   dimensions.dormerSizes = normalizeDormerSizes(dimensions.dormerSizes);
   // A blank, zero or junk rear pitch means "mirror the front", not "flat".
+  dimensions.roofSections = normalizeRoofSections(dimensions.roofSections);
   dimensions.roofPitchBack = Number.isFinite(+dimensions.roofPitchBack) && +dimensions.roofPitchBack > 0
     ? +dimensions.roofPitchBack
     : null;

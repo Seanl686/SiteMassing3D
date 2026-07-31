@@ -68,6 +68,16 @@ presets stop re-fitting your framing on export.
 Every value is also typeable in the sidebar row. `Offset` is measured left→right
 as you face that wall from outside.
 
+**Roof sections** — a spec sheet is not always one roof either. **+ Split
+section** cuts the home into roof sections measured from the left end, and each
+one carries its own pitches, ridge offset, ridge step, front and rear eave
+heights and style — or inherits any of them by leaving the field blank. So one
+part of the house can run a 4/12 over 8&prime; walls while the next runs a 9/12
+over 11&prime;. Where two neighbouring sections disagree the wall closing the gap
+between their roofs is built for you, the long walls step at the boundary, each
+gable end is capped by the section that reaches it, and the raised roof carries
+its overhang past the step instead of being sheared off flush.
+
 **Floor plan plate** — load the spec-sheet PNG, set *Plate width (ft)* so the
 printed footprint matches the blue outline (turn on *Dimension outline on ground*
 to see it), then nudge Offset X/Z and Rotation until it lines up. With *Plan-pick
@@ -221,6 +231,8 @@ Drop a file in `homes/`, add a line to `homes/index.json`, and it shows up in th
     "roofPitch": 4, "roofPitchBack": null,
     "ridgeOffsetFt": 0, "ridgeStepFt": 0,
     "ridgeOverhang": "raised", "ridgeOverhangFt": null,
+    "roofSections": [],
+    "stepOverhang": "raised", "stepOverhangFt": null,
     "eaveOverhangFt": 1, "rakeOverhangFt": 0.75,
     "fasciaWidthFt": 0.55, "cornerTrim": true, "cornerTrimWidthFt": 0.5,
     "roofStyle": "gable"
@@ -265,6 +277,15 @@ Drop a file in `homes/`, add a line to `homes/index.json`, and it shows up in th
   follows `trim`, which is what a file written before them meant.
 - `fasciaWidthFt` / `cornerTrimWidthFt` — the face dimension you would read off
   the board.
+- `roofSections` — roof sections along the **length**, ordered by `startFt`
+  measured in feet from the left end. The first always starts at 0 and the last
+  runs to the far end; anything narrower than a foot is dropped. Each entry may
+  carry `pitch`, `pitchBack`, `ridgeOffsetFt`, `ridgeStepFt`, `frontWallHeightFt`,
+  `backWallHeightFt` and `roofStyle`, and `null` on any of them inherits the
+  whole-home value. `[]` is one roof over the whole home.
+- `stepOverhang` — `raised` (default), `both` or `none`: how far a section's roof
+  reaches past a boundary where it stands above its neighbour. `stepOverhangFt`
+  sets the distance, `null` inherits `rakeOverhangFt`.
 - `bumps` — every place the footprint is not the rectangle. `depthFt` is signed:
   positive projects **out** past the wall, negative cuts a recess **in**.
   `kind` is `porch` (open, posts and railing) or `wall` (enclosed space).
